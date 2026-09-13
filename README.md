@@ -191,6 +191,24 @@ curl -s -X POST http://127.0.0.1:8789/gateway/mcp/docs-mcp/authorize \
   -H 'x-portico-actor-role: reader'
 ```
 
+人类安全审计视图只读。维护者与 Agent 不能读、不能改写。时间线合并目录变更、授权记录、公开审批，以及可选的 Gateway 访问审计。
+
+```sh
+deno task cli -- audit list \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor
+```
+
+```sh
+curl -s http://127.0.0.1:8788/api/audit \
+  -H 'x-portico-actor-id: human:security-auditor' \
+  -H 'x-portico-actor-kind: human' \
+  -H 'x-portico-actor-role: auditor'
+```
+
 ## 质量与验收
 
 一级业务功能必须达到 [`docs/roadmap.md`](docs/roadmap.md) 验收矩阵的覆盖底线：Happy Path E2E、高风险失败路径、权限双角色、写操作失败恢复；新增一级功能必须同步补 E2E 并更新矩阵。

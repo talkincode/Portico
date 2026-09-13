@@ -8,6 +8,8 @@ import type {
   ApprovalDecision,
   ApprovalDecisionInput,
   ApprovalRecord,
+  CatalogChangeAction,
+  CatalogChangeRecord,
   Channel,
   EntryKind,
   EntryRef,
@@ -84,8 +86,7 @@ export class CatalogService {
       createdAt: now,
       updatedAt: now,
     };
-    await this.store.put(record);
-    return structuredClone(record);
+    return await this.#commitChange(record, "register", actor);
   }
 
   async draft(actor: Actor, input: RegisterInput): Promise<AgentSurface> {
@@ -121,8 +122,7 @@ export class CatalogService {
       createdAt: now,
       updatedAt: now,
     };
-    await this.store.put(record);
-    return structuredClone(record);
+    return await this.#commitChange(record, "draft", actor);
   }
 
   async publish(actor: Actor, input: PublishInput): Promise<AgentSurface> {
@@ -157,8 +157,7 @@ export class CatalogService {
         governanceState: "internal",
         updatedAt: now,
       };
-      await this.store.put(record);
-      return structuredClone(record);
+      return await this.#commitChange(record, "publish_internal", actor);
     }
 
     if (
@@ -188,8 +187,7 @@ export class CatalogService {
       },
       updatedAt: now,
     };
-    await this.store.put(record);
-    return structuredClone(record);
+    return await this.#commitChange(record, "publish_public_candidate", actor);
   }
 
   async approve(actor: Actor, input: ApprovalDecisionInput): Promise<AgentSurface> {
@@ -271,6 +269,39 @@ export class CatalogService {
     if (actor.role === "anonymous") return [];
     const records = await this.store.listApprovals();
     return records.map((record) => structuredClone(record));
+  }
+
+  async listChanges(actor: Actor): Promise<CatalogChangeRecord[]> {
+    assertActor(actor);
+    if (actor.kind !== "human" || actor.role !== "auditor") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a human auditor may read catalog change audit",
+      );
+    }
+    const records = await this.store.listChanges();
+    return records.map((record) => structuredClone(record));
+  }
+
+  async #commitChange(
+    record: AgentSurface,
+    action: CatalogChangeAction,
+    actor: Actor,
+  ): Promise<AgentSurface> {
+    const change: CatalogChangeRecord = {
+      id: changeId(record.id, action, record.updatedAt),
+      surfaceId: record.id,
+      action,
+      actor: { id: actor.id, kind: actor.kind, role: actor.role },
+      at: record.updatedAt,
+      governanceState: record.governanceState,
+      visibility: record.visibility,
+      entry: { ...record.entry },
+      version: record.version,
+      name: record.name,
+    };
+    await this.store.commitChange(record, change);
+    return structuredClone(record);
   }
 
   async get(actor: Actor, id: string): Promise<AgentSurface> {
@@ -370,6 +401,10 @@ function parseApprovalInput(input: ApprovalDecisionInput): ApprovalDecisionInput
 
 function approvalId(surfaceId: string, reviewedAt: string): string {
   return `apr-${surfaceId}-${reviewedAt.replaceAll(/[^0-9]/g, "")}`;
+}
+
+function changeId(surfaceId: string, action: CatalogChangeAction, at: string): string {
+  return `chg-${surfaceId}-${action}-${at.replaceAll(/[^0-9]/g, "")}`;
 }
 
 function parsePublishInput(input: PublishInput): PublishInput {

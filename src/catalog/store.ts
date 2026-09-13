@@ -1,11 +1,13 @@
 import { CatalogError, ErrorCode } from "./errors.ts";
-import type { AgentSurface, ApprovalRecord } from "./types.ts";
+import type { AgentSurface, ApprovalRecord, CatalogChangeRecord } from "./types.ts";
 
 export interface CatalogStore {
   list(): Promise<AgentSurface[]>;
   get(id: string): Promise<AgentSurface | undefined>;
   put(record: AgentSurface): Promise<void>;
   listApprovals(): Promise<ApprovalRecord[]>;
+  listChanges(): Promise<CatalogChangeRecord[]>;
+  commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void>;
   commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void>;
 }
 
@@ -17,9 +19,14 @@ function cloneApproval(record: ApprovalRecord): ApprovalRecord {
   return structuredClone(record);
 }
 
+function cloneChange(record: CatalogChangeRecord): CatalogChangeRecord {
+  return structuredClone(record);
+}
+
 export class MemoryCatalogStore implements CatalogStore {
   #records = new Map<string, AgentSurface>();
   #approvals: ApprovalRecord[] = [];
+  #changes: CatalogChangeRecord[] = [];
 
   list(): Promise<AgentSurface[]> {
     return Promise.resolve([...this.#records.values()].map(cloneRecord));
@@ -37,6 +44,24 @@ export class MemoryCatalogStore implements CatalogStore {
 
   listApprovals(): Promise<ApprovalRecord[]> {
     return Promise.resolve(this.#approvals.map(cloneApproval));
+  }
+
+  listChanges(): Promise<CatalogChangeRecord[]> {
+    return Promise.resolve(this.#changes.map(cloneChange));
+  }
+
+  commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    if (this.#changes.some((item) => item.id === change.id)) {
+      return Promise.reject(
+        new CatalogError(
+          ErrorCode.ALREADY_EXISTS,
+          `catalog change '${change.id}' already exists`,
+        ),
+      );
+    }
+    this.#records.set(record.id, cloneRecord(record));
+    this.#changes.push(cloneChange(change));
+    return Promise.resolve();
   }
 
   commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
@@ -57,6 +82,7 @@ export class MemoryCatalogStore implements CatalogStore {
 interface CatalogFile {
   records: AgentSurface[];
   approvals: ApprovalRecord[];
+  changes: CatalogChangeRecord[];
 }
 
 export class FileCatalogStore implements CatalogStore {
@@ -86,6 +112,26 @@ export class FileCatalogStore implements CatalogStore {
     return file.approvals.map(cloneApproval);
   }
 
+  async listChanges(): Promise<CatalogChangeRecord[]> {
+    const file = await this.#load();
+    return file.changes.map(cloneChange);
+  }
+
+  async commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    const file = await this.#load();
+    if (file.changes.some((item) => item.id === change.id)) {
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `catalog change '${change.id}' already exists`,
+      );
+    }
+    const index = file.records.findIndex((item) => item.id === record.id);
+    if (index >= 0) file.records[index] = cloneRecord(record);
+    else file.records.push(cloneRecord(record));
+    file.changes.push(cloneChange(change));
+    await this.#save(file);
+  }
+
   async commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
     const file = await this.#load();
     if (file.approvals.some((item) => item.id === approval.id)) {
@@ -109,13 +155,15 @@ export class FileCatalogStore implements CatalogStore {
         throw new Error(`catalog file is corrupt: ${this.path}`);
       }
       const approvals = Array.isArray(parsed.approvals) ? parsed.approvals : [];
+      const changes = Array.isArray(parsed.changes) ? parsed.changes : [];
       return {
         records: parsed.records.map(cloneRecord),
         approvals: approvals.map(cloneApproval),
+        changes: changes.map(cloneChange),
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { records: [], approvals: [] };
+        return { records: [], approvals: [], changes: [] };
       }
       throw error;
     }
@@ -128,6 +176,7 @@ export class FileCatalogStore implements CatalogStore {
         {
           records: file.records,
           approvals: file.approvals,
+          changes: file.changes,
         },
         null,
         2,

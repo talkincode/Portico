@@ -1,4 +1,5 @@
 import { AccessService, FileIdentityStore, type GrantInput } from "../access/mod.ts";
+import { AuditService } from "../audit/mod.ts";
 import {
   type Actor,
   type ActorKind,
@@ -31,6 +32,7 @@ Commands:
   mcp describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   gateway audit     --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  audit list        --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> [--audit <path>]
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
@@ -72,6 +74,9 @@ export async function runCli(
     }
     if (group === "gateway") {
       return await runGateway(action, flags, env);
+    }
+    if (group === "audit") {
+      return await runAudit(action, flags, env);
     }
     if (group !== "catalog") {
       throw new UsageError(`unknown command '${group}'`);
@@ -198,6 +203,29 @@ async function runGateway(
   }
 
   throw new UsageError(action ? `unknown gateway action '${action}'` : "missing gateway action");
+}
+
+async function runAudit(
+  action: string | undefined,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<CliResult> {
+  if (action !== "list") {
+    throw new UsageError(action ? `unknown audit action '${action}'` : "missing audit action");
+  }
+  const claimed = readActor(flags);
+  const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
+  if (!catalogPath) {
+    throw new UsageError("missing --catalog or PORTICO_CATALOG_PATH");
+  }
+  const actor = await resolveCatalogActor(claimed, flags, env);
+  const catalog = new CatalogService(new FileCatalogStore(catalogPath));
+  const access = new AccessService(new FileIdentityStore(readIdentitiesPath(flags, env)));
+  const auditPath = flags.audit ?? env.PORTICO_GATEWAY_AUDIT_PATH;
+  const gateway = auditPath
+    ? new GatewayService(catalog, new FileGatewayAuditStore(auditPath))
+    : undefined;
+  return ok(await new AuditService(catalog, access, gateway).list(actor));
 }
 
 async function runIdentity(
