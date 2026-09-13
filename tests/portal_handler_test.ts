@@ -317,3 +317,74 @@ Deno.test("anonymous cannot see an internal MCP connection on the portal", async
   assertEquals(described.body.ok, false);
   assertEquals(described.body.error?.code, "NOT_FOUND");
 });
+
+Deno.test("auditor reads the same security audit on portal that catalog mutations produced", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.ok, true);
+  const events = listed.body.data as Array<{
+    kind: string;
+    action: string;
+    subjectId: string;
+  }>;
+  assertEquals(
+    events.some((item) => item.kind === "catalog" && item.action === "register"),
+    true,
+  );
+  assertEquals(
+    events.some((item) => item.kind === "grant" && item.subjectId === "agent:docs-bot"),
+    true,
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+});
+
+Deno.test("portal cannot rewrite audit conclusions", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  const before = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(before.status, 200);
+  const beforeEvents = before.body.data as Array<{ kind: string }>;
+  assertEquals(beforeEvents.some((item) => item.kind === "catalog"), true);
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", {
+        method: "PATCH",
+        headers: { ...actorHeaders(auditor), "content-type": "application/json" },
+        body: JSON.stringify({ conclusion: "cleared" }),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.ok, false);
+
+  const after = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(after.body.data, before.body.data);
+});

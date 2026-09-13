@@ -10,6 +10,8 @@ export type {
   ApprovalDecision,
   ApprovalDecisionInput,
   ApprovalRecord,
+  CatalogChangeAction,
+  CatalogChangeRecord,
   Channel,
   EntryKind,
   EntryRef,

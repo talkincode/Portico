@@ -59,6 +59,25 @@ export interface ApprovalRecord {
   name: string;
 }
 
+export type CatalogChangeAction =
+  | "register"
+  | "draft"
+  | "publish_internal"
+  | "publish_public_candidate";
+
+export interface CatalogChangeRecord {
+  id: string;
+  surfaceId: string;
+  action: CatalogChangeAction;
+  actor: Actor;
+  at: string;
+  governanceState: GovernanceState;
+  visibility: Visibility;
+  entry: EntryRef;
+  version: string;
+  name: string;
+}
+
 export interface McpConnectionInfo {
   id: string;
   name: string;

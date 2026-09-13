@@ -1,4 +1,5 @@
 import { AccessService } from "../access/mod.ts";
+import { AuditService } from "../audit/mod.ts";
 import {
   type Actor,
   type ActorKind,
@@ -7,11 +8,13 @@ import {
   CatalogService,
   ErrorCode,
 } from "../catalog/mod.ts";
+import type { GatewayService } from "../gateway/mod.ts";
 import { dashboardFrom, renderDiscoveryPage } from "./html.ts";
 
 export interface PortalContext {
   catalog: CatalogService;
   access: AccessService;
+  gateway?: GatewayService;
 }
 
 const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
@@ -40,6 +43,10 @@ export async function handlePortalRequest(
     const mcpItem = url.pathname.match(/^\/api\/mcp\/([a-z][a-z0-9-]{1,62})$/);
     if (mcpItem) {
       return jsonOk(await context.catalog.describeMcp(actor, mcpItem[1]));
+    }
+    if (url.pathname === "/api/audit") {
+      const audit = new AuditService(context.catalog, context.access, context.gateway);
+      return jsonOk(await audit.list(actor));
     }
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
