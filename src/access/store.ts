@@ -1,11 +1,19 @@
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
-import type { CredentialRecord, GrantRecord, Identity, SessionRecord } from "./types.ts";
+import type {
+  CredentialRecord,
+  GrantRecord,
+  Identity,
+  RevokeRecord,
+  SessionRecord,
+} from "./types.ts";
 
 export interface IdentityStore {
   list(): Promise<Identity[]>;
   get(id: string): Promise<Identity | undefined>;
   listGrants(): Promise<GrantRecord[]>;
+  listRevokes(): Promise<RevokeRecord[]>;
   commitGrant(identity: Identity, grant: GrantRecord): Promise<void>;
+  commitRevoke(revoke: RevokeRecord): Promise<void>;
 }
 
 function cloneIdentity(record: Identity): Identity {
@@ -16,9 +24,14 @@ function cloneGrant(record: GrantRecord): GrantRecord {
   return structuredClone(record);
 }
 
+function cloneRevoke(record: RevokeRecord): RevokeRecord {
+  return structuredClone(record);
+}
+
 export class MemoryIdentityStore implements IdentityStore {
   #identities = new Map<string, Identity>();
   #grants: GrantRecord[] = [];
+  #revokes: RevokeRecord[] = [];
 
   list(): Promise<Identity[]> {
     return Promise.resolve([...this.#identities.values()].map(cloneIdentity));
@@ -33,6 +46,10 @@ export class MemoryIdentityStore implements IdentityStore {
     return Promise.resolve(this.#grants.map(cloneGrant));
   }
 
+  listRevokes(): Promise<RevokeRecord[]> {
+    return Promise.resolve(this.#revokes.map(cloneRevoke));
+  }
+
   commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
     if (this.#grants.some((item) => item.id === grant.id)) {
       return Promise.reject(
@@ -43,11 +60,31 @@ export class MemoryIdentityStore implements IdentityStore {
     this.#grants.push(cloneGrant(grant));
     return Promise.resolve();
   }
+
+  commitRevoke(revoke: RevokeRecord): Promise<void> {
+    if (this.#revokes.some((item) => item.id === revoke.id)) {
+      return Promise.reject(
+        new CatalogError(ErrorCode.ALREADY_EXISTS, `revoke '${revoke.id}' already exists`),
+      );
+    }
+    if (!this.#identities.has(revoke.subjectId)) {
+      return Promise.reject(
+        new CatalogError(
+          ErrorCode.NOT_FOUND,
+          `identity '${revoke.subjectId}' is not in the roster`,
+        ),
+      );
+    }
+    this.#identities.delete(revoke.subjectId);
+    this.#revokes.push(cloneRevoke(revoke));
+    return Promise.resolve();
+  }
 }
 
 interface IdentityFile {
   identities: Identity[];
   grants: GrantRecord[];
+  revokes: RevokeRecord[];
 }
 
 export class FileIdentityStore implements IdentityStore {
@@ -69,6 +106,11 @@ export class FileIdentityStore implements IdentityStore {
     return file.grants.map(cloneGrant);
   }
 
+  async listRevokes(): Promise<RevokeRecord[]> {
+    const file = await this.#load();
+    return file.revokes.map(cloneRevoke);
+  }
+
   async commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
     const file = await this.#load();
     if (file.grants.some((item) => item.id === grant.id)) {
@@ -81,6 +123,23 @@ export class FileIdentityStore implements IdentityStore {
     await this.#save(file);
   }
 
+  async commitRevoke(revoke: RevokeRecord): Promise<void> {
+    const file = await this.#load();
+    if (file.revokes.some((item) => item.id === revoke.id)) {
+      throw new CatalogError(ErrorCode.ALREADY_EXISTS, `revoke '${revoke.id}' already exists`);
+    }
+    const index = file.identities.findIndex((item) => item.id === revoke.subjectId);
+    if (index < 0) {
+      throw new CatalogError(
+        ErrorCode.NOT_FOUND,
+        `identity '${revoke.subjectId}' is not in the roster`,
+      );
+    }
+    file.identities.splice(index, 1);
+    file.revokes.push(cloneRevoke(revoke));
+    await this.#save(file);
+  }
+
   async #load(): Promise<IdentityFile> {
     try {
       const text = await Deno.readTextFile(this.path);
@@ -89,13 +148,15 @@ export class FileIdentityStore implements IdentityStore {
         throw new Error(`identity file is corrupt: ${this.path}`);
       }
       const grants = Array.isArray(parsed.grants) ? parsed.grants : [];
+      const revokes = Array.isArray(parsed.revokes) ? parsed.revokes : [];
       return {
         identities: parsed.identities.map(cloneIdentity),
         grants: grants.map(cloneGrant),
+        revokes: revokes.map(cloneRevoke),
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { identities: [], grants: [] };
+        return { identities: [], grants: [], revokes: [] };
       }
       throw error;
     }
@@ -104,7 +165,15 @@ export class FileIdentityStore implements IdentityStore {
   async #save(file: IdentityFile): Promise<void> {
     const tmp = `${this.path}.tmp`;
     const json = `${
-      JSON.stringify({ identities: file.identities, grants: file.grants }, null, 2)
+      JSON.stringify(
+        {
+          identities: file.identities,
+          grants: file.grants,
+          revokes: file.revokes,
+        },
+        null,
+        2,
+      )
     }\n`;
     await Deno.writeTextFile(tmp, json);
     await Deno.rename(tmp, this.path);
@@ -114,6 +183,7 @@ export class FileIdentityStore implements IdentityStore {
 export interface SessionStore {
   listCredentials(): Promise<CredentialRecord[]>;
   commitCredential(record: CredentialRecord): Promise<void>;
+  revokeCredential(id: string, revokedAt: string): Promise<void>;
   listSessions(): Promise<SessionRecord[]>;
   commitSession(record: SessionRecord): Promise<void>;
   revokeSession(id: string, revokedAt: string): Promise<void>;
@@ -142,6 +212,15 @@ export class MemorySessionStore implements SessionStore {
       );
     }
     this.#credentials.push(cloneCredential(record));
+    return Promise.resolve();
+  }
+
+  revokeCredential(id: string, revokedAt: string): Promise<void> {
+    const record = this.#credentials.find((item) => item.id === id);
+    if (!record) {
+      return Promise.reject(new CatalogError(ErrorCode.NOT_FOUND, `credential '${id}' not found`));
+    }
+    record.revokedAt = revokedAt;
     return Promise.resolve();
   }
 
@@ -188,6 +267,16 @@ export class FileSessionStore implements SessionStore {
       throw new CatalogError(ErrorCode.ALREADY_EXISTS, `credential '${record.id}' already exists`);
     }
     file.credentials.push(cloneCredential(record));
+    await this.#save(file);
+  }
+
+  async revokeCredential(id: string, revokedAt: string): Promise<void> {
+    const file = await this.#load();
+    const record = file.credentials.find((item) => item.id === id);
+    if (!record) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `credential '${id}' not found`);
+    }
+    record.revokedAt = revokedAt;
     await this.#save(file);
   }
 

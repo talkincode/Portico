@@ -1,4 +1,4 @@
-import { AccessService, type GrantRecord } from "../access/mod.ts";
+import { AccessService, type GrantRecord, type RevokeRecord } from "../access/mod.ts";
 import {
   type Actor,
   type ApprovalRecord,
@@ -29,12 +29,14 @@ export class AuditService {
     }
 
     const grants = await this.access.listGrants(actor);
+    const revokes = await this.access.listRevokes(actor);
     const changes = await this.catalog.listChanges(actor);
     const approvals = await this.catalog.listApprovals(actor);
     const gateway = this.gateway ? await this.gateway.listAudit(actor) : [];
 
     const events = [
       ...grants.map(fromGrant),
+      ...revokes.map(fromRevoke),
       ...changes.map(fromChange),
       ...approvals.map(fromApproval),
       ...gateway.map(fromGateway),
@@ -57,6 +59,18 @@ function fromGrant(record: GrantRecord): AuditEvent {
     action: "grant",
     subjectId: record.subjectId,
     summary: `grant ${record.subjectId} ${record.role}`,
+  };
+}
+
+function fromRevoke(record: RevokeRecord): AuditEvent {
+  return {
+    id: record.id,
+    kind: "revoke",
+    at: record.revokedAt,
+    actor: { id: record.revokedBy.id, kind: record.revokedBy.kind, role: "auditor" },
+    action: "revoke",
+    subjectId: record.subjectId,
+    summary: `revoke ${record.subjectId} ${record.role}`,
   };
 }
 

@@ -12,6 +12,9 @@ import type {
   LoginInput,
   LogoutResult,
   RequestActorInput,
+  RevokeInput,
+  RevokeRecord,
+  RevokeResult,
   SessionRecord,
   SessionView,
 } from "./types.ts";
@@ -28,6 +31,7 @@ const SECRET_KEYS = new Set([
   "credentials",
 ]);
 const ALLOWED_GRANT_KEYS = new Set(["id", "kind", "role"]);
+const ALLOWED_REVOKE_KEYS = new Set(["id"]);
 const ALLOWED_CREDENTIAL_KEYS = new Set(["id"]);
 const ALLOWED_LOGIN_KEYS = new Set(["id", "token", "ttlSeconds"]);
 const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -80,6 +84,55 @@ export class AccessService {
     return await this.#commit(parsed, { id: reviewer.id, kind: reviewer.kind });
   }
 
+  async revoke(actor: Actor, input: RevokeInput): Promise<RevokeResult> {
+    const parsed = parseRevokeInput(input);
+    const reviewer = await this.#requireHumanAuditor(actor);
+    const subject = await this.store.get(parsed.id);
+    if (!subject) {
+      throw new CatalogError(
+        ErrorCode.NOT_FOUND,
+        `identity '${parsed.id}' is not in the roster`,
+      );
+    }
+
+    const roster = await this.store.list();
+    if (subject.role === "auditor") {
+      const remaining = roster.filter((item) => item.role === "auditor" && item.id !== subject.id);
+      if (remaining.length === 0) {
+        throw new CatalogError(
+          ErrorCode.INVALID_STATE,
+          "cannot revoke the last human auditor",
+        );
+      }
+    }
+    if (reviewer.id === parsed.id) {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "an identity cannot revoke itself",
+      );
+    }
+
+    const revokedAt = this.clock().toISOString();
+    const record: RevokeRecord = {
+      id: revokeId(parsed.id, revokedAt),
+      subjectId: subject.id,
+      kind: subject.kind,
+      role: subject.role,
+      revokedBy: { id: reviewer.id, kind: reviewer.kind },
+      revokedAt,
+    };
+    await this.store.commitRevoke(record);
+    await this.#invalidateSubjectAccess(subject.id, revokedAt);
+    return {
+      id: record.id,
+      subjectId: record.subjectId,
+      kind: record.kind,
+      role: record.role,
+      revoked: true,
+      revokedAt: record.revokedAt,
+    };
+  }
+
   async list(actor: Actor): Promise<Identity[]> {
     await this.#requireRosterActor(actor);
     if (actor.role === "anonymous") {
@@ -98,6 +151,12 @@ export class AccessService {
   async listGrants(actor: Actor): Promise<GrantRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listGrants();
+    return records.map((record) => structuredClone(record));
+  }
+
+  async listRevokes(actor: Actor): Promise<RevokeRecord[]> {
+    await this.#requireHumanAuditor(actor);
+    const records = await this.store.listRevokes();
     return records.map((record) => structuredClone(record));
   }
 
@@ -159,7 +218,9 @@ export class AccessService {
     const credentials = await sessions.listCredentials();
     const presented = await sha256Hex(parsed.token);
     const match = credentials.find((item) =>
-      item.subjectId === parsed.id && timingSafeEqual(item.secretHash, presented)
+      item.subjectId === parsed.id &&
+      !item.revokedAt &&
+      timingSafeEqual(item.secretHash, presented)
     );
     if (!subject || !match) {
       throw new CatalogError(ErrorCode.FORBIDDEN, "login failed");
@@ -293,6 +354,22 @@ export class AccessService {
     return records.find((item) => timingSafeEqual(item.tokenHash, presented));
   }
 
+  async #invalidateSubjectAccess(subjectId: string, revokedAt: string): Promise<void> {
+    if (!this.sessions) return;
+    const sessions = await this.sessions.listSessions();
+    for (const session of sessions) {
+      if (session.subjectId === subjectId && !session.revokedAt) {
+        await this.sessions.revokeSession(session.id, revokedAt);
+      }
+    }
+    const credentials = await this.sessions.listCredentials();
+    for (const credential of credentials) {
+      if (credential.subjectId === subjectId && !credential.revokedAt) {
+        await this.sessions.revokeCredential(credential.id, revokedAt);
+      }
+    }
+  }
+
   async #commit(
     parsed: GrantInput,
     grantedBy: { id: string; kind: ActorKind },
@@ -334,6 +411,17 @@ function rejectSecretAndUnknownKeys(
       `unknown or forbidden field '${key}'`,
     );
   }
+}
+
+function parseRevokeInput(input: RevokeInput): RevokeInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "revoke payload must be an object");
+  }
+  rejectSecretAndUnknownKeys(input, ALLOWED_REVOKE_KEYS);
+  if (!nonEmpty(input.id) || input.id.length > 120 || /\s/.test(input.id)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "id is invalid");
+  }
+  return { id: input.id };
 }
 
 function parseGrantInput(input: GrantInput): GrantInput {
@@ -408,7 +496,12 @@ function parseLoginInput(input: LoginInput): { id: string; token: string; ttlSec
 
 function grantId(subjectId: string, grantedAt: string): string {
   const safe = subjectId.replaceAll(/[^a-z0-9-]/gi, "-");
-  return `grn-${safe}-${grantedAt.replaceAll(/[^0-9]/g, "")}`;
+  return `grn-${safe}-${grantedAt.replaceAll(/[^0-9]/g, "")}-${randomHex(4)}`;
+}
+
+function revokeId(subjectId: string, revokedAt: string): string {
+  const safe = subjectId.replaceAll(/[^a-z0-9-]/gi, "-");
+  return `rvk-${safe}-${revokedAt.replaceAll(/[^0-9]/g, "")}-${randomHex(4)}`;
 }
 
 function issuedId(prefix: string, subjectId: string, at: string): string {
