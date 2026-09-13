@@ -1,4 +1,4 @@
-import { AccessService, FileIdentityStore } from "../access/mod.ts";
+import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { handleGatewayRequest } from "./handler.ts";
 import { FileGatewayAuditStore } from "./store.ts";
@@ -8,6 +8,7 @@ export interface GatewayListenOptions {
   catalogPath: string;
   identitiesPath: string;
   auditPath: string;
+  sessionsPath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -16,7 +17,10 @@ export interface GatewayListenOptions {
 
 export function listenGateway(options: GatewayListenOptions): Deno.HttpServer {
   const catalog = new CatalogService(new FileCatalogStore(options.catalogPath));
-  const access = new AccessService(new FileIdentityStore(options.identitiesPath));
+  const access = new AccessService(
+    new FileIdentityStore(options.identitiesPath),
+    options.sessionsPath ? new FileSessionStore(options.sessionsPath) : undefined,
+  );
   const gateway = new GatewayService(catalog, new FileGatewayAuditStore(options.auditPath));
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",

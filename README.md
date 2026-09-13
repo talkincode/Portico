@@ -43,6 +43,30 @@ deno task cli -- identity grant \
   --role maintainer
 ```
 
+登录会话用一次性下发的凭证，只存哈希，不落明文口令。`--session` 可代替 `--actor-*`；Portal / Gateway 用 `Authorization: Bearer` 或 `X-Portico-Session`。
+
+```sh
+deno task cli -- identity credential issue \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id human:reader
+
+deno task cli -- identity login \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --id human:reader \
+  --token pct1_…
+
+deno task cli -- catalog list \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --session pst1_…
+```
+
 内部登记一条 CLI 表面并查询（stdout 为 JSON）：
 
 ```sh
@@ -152,7 +176,7 @@ deno task cli -- gateway audit \
   --actor-role auditor
 ```
 
-只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp` 与 `GET /api/page`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。页面文件可选：`PORTICO_PAGE_PATH`。
+只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp` 与 `GET /api/page`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头或会话视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。已登录时用 `Authorization: Bearer` 或 `X-Portico-Session`（`PORTICO_SESSIONS_PATH`）。页面文件可选：`PORTICO_PAGE_PATH`。
 
 ```sh
 deno task portal

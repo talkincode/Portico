@@ -1,4 +1,4 @@
-import { AccessService, FileIdentityStore } from "../access/mod.ts";
+import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
 import { AuditService } from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
@@ -7,6 +7,7 @@ import { handlePortalRequest } from "./handler.ts";
 export interface PortalListenOptions {
   catalogPath: string;
   identitiesPath: string;
+  sessionsPath?: string;
   pagePath?: string;
   hostname?: string;
   port?: number;
@@ -16,7 +17,10 @@ export interface PortalListenOptions {
 
 export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
   const catalog = new CatalogService(new FileCatalogStore(options.catalogPath));
-  const access = new AccessService(new FileIdentityStore(options.identitiesPath));
+  const access = new AccessService(
+    new FileIdentityStore(options.identitiesPath),
+    options.sessionsPath ? new FileSessionStore(options.sessionsPath) : undefined,
+  );
   const pages = options.pagePath
     ? new PageService(
       new FilePageStore(options.pagePath),

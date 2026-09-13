@@ -57,12 +57,34 @@ function isToolExecution(request: Request, pathname: string): boolean {
 }
 
 async function resolveActor(request: Request, access: AccessService): Promise<Actor> {
+  return await access.resolveRequestActor({
+    sessionToken: readSessionToken(request),
+    claimed: readClaimedActor(request),
+  });
+}
+
+function readSessionToken(request: Request): string | null {
+  const named = request.headers.get("x-portico-session");
+  const auth = request.headers.get("authorization");
+  let bearer: string | null = null;
+  if (auth) {
+    const match = /^Bearer\s+(\S+)$/i.exec(auth.trim());
+    if (!match) {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "authorization must be a Bearer token");
+    }
+    bearer = match[1];
+  }
+  if (named && bearer && named !== bearer) {
+    throw new CatalogError(ErrorCode.FORBIDDEN, "session headers do not match");
+  }
+  return named ?? bearer;
+}
+
+function readClaimedActor(request: Request): Actor | null {
   const id = request.headers.get("x-portico-actor-id");
   const kind = request.headers.get("x-portico-actor-kind");
   const role = request.headers.get("x-portico-actor-role");
-  if (!id && !kind && !role) {
-    return { id: "anonymous", kind: "human", role: "anonymous" };
-  }
+  if (!id && !kind && !role) return null;
   if (!id || !kind || !role) {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
@@ -72,13 +94,11 @@ async function resolveActor(request: Request, access: AccessService): Promise<Ac
   if (!ACTOR_KINDS.has(kind as ActorKind) || !ACTOR_ROLES.has(role as ActorRole)) {
     throw new CatalogError(ErrorCode.INVALID_INPUT, "actor kind or role is invalid");
   }
-  const claimed: Actor = {
+  return {
     id,
     kind: kind as ActorKind,
     role: role as ActorRole,
   };
-  if (claimed.role === "anonymous") return claimed;
-  return await access.resolve(claimed);
 }
 
 function jsonOk(data: unknown): Response {
