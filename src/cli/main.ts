@@ -1,3 +1,4 @@
+import { AccessService, FileIdentityStore, type GrantInput } from "../access/mod.ts";
 import {
   type Actor,
   type ActorKind,
@@ -14,17 +15,22 @@ import {
 const USAGE = `portico <command>
 
 Commands:
-  catalog register  --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog draft     --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog publish   --id <id> --visibility <internal|public> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog approve   --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog reject    --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog approvals --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog list      --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog get       --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  identity grant    --identities <path> --id <id> --kind <human|agent> --role <reader|maintainer|auditor> [--actor-id <id> --actor-kind <human|agent> --actor-role <role>]
+  identity list     --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  identity grants   --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog register  --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  catalog draft     --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog approve   --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog reject    --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog approvals --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog list      --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog get       --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
-Actor identity is a trusted CLI flag until Access Control lands.
+Identity path may also be set with PORTICO_IDENTITIES_PATH.
+Non-anonymous catalog commands resolve --actor-* against the identity roster.
+The first identity grant may omit --actor-* and must be a human auditor.
 The identity that submitted public cannot approve or reject the same request.
 Output is always JSON.`;
 
@@ -52,16 +58,20 @@ export async function runCli(
     }
 
     const [group, action] = positionals;
+    if (group === "identity") {
+      return await runIdentity(action, flags, env);
+    }
     if (group !== "catalog") {
       throw new UsageError(`unknown command '${group}'`);
     }
 
-    const actor = readActor(flags);
+    const claimed = readActor(flags);
     const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
     if (!catalogPath) {
       throw new UsageError("missing --catalog or PORTICO_CATALOG_PATH");
     }
 
+    const actor = await resolveCatalogActor(claimed, flags, env);
     const service = new CatalogService(new FileCatalogStore(catalogPath));
 
     if (action === "register" || action === "draft") {
@@ -116,6 +126,66 @@ export async function runCli(
   } catch (error) {
     return fail(error);
   }
+}
+
+async function runIdentity(
+  action: string | undefined,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<CliResult> {
+  const identitiesPath = readIdentitiesPath(flags, env);
+  const service = new AccessService(new FileIdentityStore(identitiesPath));
+
+  if (action === "grant") {
+    if (!flags.id) throw new UsageError("missing --id");
+    if (!flags.kind) throw new UsageError("missing --kind");
+    if (!flags.role) throw new UsageError("missing --role");
+    const payload: GrantInput = {
+      id: flags.id,
+      kind: flags.kind as GrantInput["kind"],
+      role: flags.role as GrantInput["role"],
+    };
+    return ok(await service.grant(tryReadActor(flags), payload));
+  }
+
+  const actor = readActor(flags);
+  if (action === "list") {
+    return ok(await service.list(actor));
+  }
+  if (action === "grants") {
+    return ok(await service.listGrants(actor));
+  }
+
+  throw new UsageError(action ? `unknown identity action '${action}'` : "missing identity action");
+}
+
+async function resolveCatalogActor(
+  claimed: Actor,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<Actor> {
+  if (claimed.role === "anonymous") return claimed;
+  const identitiesPath = readIdentitiesPath(flags, env);
+  const access = new AccessService(new FileIdentityStore(identitiesPath));
+  return await access.resolve(claimed);
+}
+
+function readIdentitiesPath(
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): string {
+  const path = flags.identities ?? env.PORTICO_IDENTITIES_PATH;
+  if (!path) {
+    throw new UsageError("missing --identities or PORTICO_IDENTITIES_PATH");
+  }
+  return path;
+}
+
+function tryReadActor(flags: Record<string, string>): Actor | null {
+  if (!flags["actor-id"] && !flags["actor-kind"] && !flags["actor-role"]) {
+    return null;
+  }
+  return readActor(flags);
 }
 
 function parseArgs(args: string[]): {

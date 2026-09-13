@@ -1,72 +1,11 @@
 import { assertEquals } from "../assert.ts";
+import { actor, bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
 
-const ROOT = new URL("../../", import.meta.url).pathname;
-const CLI = `${ROOT}src/cli/main.ts`;
-
-interface CliResult {
-  code: number;
-  stdout: unknown;
-  raw: string;
-  stderr: string;
-}
-
-async function runCli(
-  args: string[],
-  env: Record<string, string> = {},
-): Promise<CliResult> {
-  const command = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "--allow-read",
-      "--allow-write",
-      "--allow-env",
-      CLI,
-      ...args,
-    ],
-    cwd: ROOT,
-    env: { ...Deno.env.toObject(), ...env },
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const output = await command.output();
-  const raw = new TextDecoder().decode(output.stdout).trim();
-  const stderr = new TextDecoder().decode(output.stderr);
-  let stdout: unknown = null;
-  if (raw) {
-    try {
-      stdout = JSON.parse(raw);
-    } catch {
-      stdout = raw;
-    }
-  }
-  return { code: output.code, stdout, raw, stderr };
-}
-
-function sampleRecord() {
-  return {
-    id: "docs-writer",
-    name: "Docs Writer",
-    description: "Drafts internal documentation.",
-    channels: ["cli"],
-    version: "1.0.0",
-    visibility: "internal",
-    entry: { kind: "package", value: "jsr:@example/docs-writer" },
-    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
-  };
-}
-
-function actor(role: string, id = "agent:docs-bot", kind = "agent") {
-  return [
-    "--actor-id",
-    id,
-    "--actor-kind",
-    kind,
-    "--actor-role",
-    role,
-  ];
-}
-
-async function registerAndSubmitPublic(catalog: string, input: string): Promise<void> {
+async function registerAndSubmitPublic(
+  catalog: string,
+  input: string,
+  env: Record<string, string>,
+): Promise<void> {
   const registered = await runCli([
     "catalog",
     "register",
@@ -75,7 +14,7 @@ async function registerAndSubmitPublic(catalog: string, input: string): Promise<
     ...actor("maintainer"),
     "--input",
     input,
-  ]);
+  ], env);
   assertEquals(registered.code, 0, registered.raw || registered.stderr);
 
   const published = await runCli([
@@ -88,7 +27,7 @@ async function registerAndSubmitPublic(catalog: string, input: string): Promise<
     "docs-writer",
     "--visibility",
     "public",
-  ]);
+  ], env);
   assertEquals(published.code, 0, published.raw || published.stderr);
 }
 
@@ -96,8 +35,9 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
   const dir = await Deno.makeTempDir({ prefix: "portico-approval-e2e-" });
   const catalog = `${dir}/catalog.json`;
   const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
   await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
-  await registerAndSubmitPublic(catalog, input);
+  await registerAndSubmitPublic(catalog, input, env);
 
   const approved = await runCli([
     "catalog",
@@ -107,7 +47,7 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
     ...actor("auditor", "human:security-auditor", "human"),
     "--id",
     "docs-writer",
-  ]);
+  ], env);
   assertEquals(approved.code, 0, approved.raw || approved.stderr);
   const approvedBody = approved.stdout as {
     ok: boolean;
@@ -140,7 +80,7 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
     "--catalog",
     catalog,
     ...actor("auditor", "human:security-auditor", "human"),
-  ]);
+  ], env);
   assertEquals(approvals.code, 0, approvals.raw || approvals.stderr);
   const approvalBody = approvals.stdout as {
     ok: boolean;
@@ -166,6 +106,7 @@ Deno.test("CLI self-approval fails; anonymous still sees nothing and catalog sta
   const input = `${dir}/record.json`;
   const record = sampleRecord();
   record.maintainers = [{ id: "human:docs-owner", kind: "human" }];
+  const env = await bootstrapRoster(`${dir}/identities.json`);
   await Deno.writeTextFile(input, `${JSON.stringify(record)}\n`);
 
   const registered = await runCli([
@@ -176,7 +117,7 @@ Deno.test("CLI self-approval fails; anonymous still sees nothing and catalog sta
     ...actor("maintainer", "human:docs-owner", "human"),
     "--input",
     input,
-  ]);
+  ], env);
   assertEquals(registered.code, 0, registered.raw || registered.stderr);
 
   const published = await runCli([
@@ -189,8 +130,23 @@ Deno.test("CLI self-approval fails; anonymous still sees nothing and catalog sta
     "docs-writer",
     "--visibility",
     "public",
-  ]);
+  ], env);
   assertEquals(published.code, 0, published.raw || published.stderr);
+
+  const promoted = await runCli([
+    "identity",
+    "grant",
+    "--identities",
+    `${dir}/identities.json`,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "human:docs-owner",
+    "--kind",
+    "human",
+    "--role",
+    "auditor",
+  ]);
+  assertEquals(promoted.code, 0, promoted.raw || promoted.stderr);
 
   const result = await runCli([
     "catalog",
@@ -200,7 +156,7 @@ Deno.test("CLI self-approval fails; anonymous still sees nothing and catalog sta
     ...actor("auditor", "human:docs-owner", "human"),
     "--id",
     "docs-writer",
-  ]);
+  ], env);
   assertEquals(result.code, 1);
   const body = result.stdout as { ok: boolean; error: { code: string } };
   assertEquals(body.ok, false);
@@ -229,8 +185,9 @@ Deno.test("CLI maintainer cannot approve; catalog is not dirtied", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-approval-e2e-" });
   const catalog = `${dir}/catalog.json`;
   const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
   await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord())}\n`);
-  await registerAndSubmitPublic(catalog, input);
+  await registerAndSubmitPublic(catalog, input, env);
 
   const result = await runCli([
     "catalog",
@@ -240,7 +197,7 @@ Deno.test("CLI maintainer cannot approve; catalog is not dirtied", async () => {
     ...actor("maintainer"),
     "--id",
     "docs-writer",
-  ]);
+  ], env);
   assertEquals(result.code, 1);
   const body = result.stdout as { ok: boolean; error: { code: string } };
   assertEquals(body.ok, false);
@@ -258,8 +215,9 @@ Deno.test("CLI reject keeps anonymous empty; reader sees rejected", async () => 
   const dir = await Deno.makeTempDir({ prefix: "portico-approval-e2e-" });
   const catalog = `${dir}/catalog.json`;
   const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
   await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord())}\n`);
-  await registerAndSubmitPublic(catalog, input);
+  await registerAndSubmitPublic(catalog, input, env);
 
   const rejected = await runCli([
     "catalog",
@@ -269,7 +227,7 @@ Deno.test("CLI reject keeps anonymous empty; reader sees rejected", async () => 
     ...actor("auditor", "human:security-auditor", "human"),
     "--id",
     "docs-writer",
-  ]);
+  ], env);
   assertEquals(rejected.code, 0, rejected.raw || rejected.stderr);
   const rejectedBody = rejected.stdout as {
     ok: boolean;
@@ -297,7 +255,7 @@ Deno.test("CLI reject keeps anonymous empty; reader sees rejected", async () => 
     "--catalog",
     catalog,
     ...actor("reader", "human:reader", "human"),
-  ]);
+  ], env);
   assertEquals(readerGot.code, 0, readerGot.raw || readerGot.stderr);
   const gotBody = readerGot.stdout as {
     ok: boolean;
