@@ -12,6 +12,7 @@ import type {
   EntryKind,
   EntryRef,
   MaintainerRef,
+  McpConnectionInfo,
   PublishInput,
   RegisterInput,
   Visibility,
@@ -291,6 +292,19 @@ export class CatalogService {
       structuredClone(record)
     );
   }
+
+  async listMcp(actor: Actor): Promise<McpConnectionInfo[]> {
+    const records = await this.list(actor);
+    return records.filter(isMcpSurface).map(toMcpConnection);
+  }
+
+  async describeMcp(actor: Actor, id: string): Promise<McpConnectionInfo> {
+    const record = await this.get(actor, id);
+    if (!isMcpSurface(record)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+    return toMcpConnection(record);
+  }
 }
 
 function canSee(actor: Actor, record: AgentSurface): boolean {
@@ -433,6 +447,7 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
 
   const channels = parseChannels(input.channels);
   const entry = parseEntry(input.entry);
+  assertMcpChannelEntry(channels, entry);
   const maintainers = parseMaintainers(input.maintainers);
 
   return {
@@ -459,6 +474,75 @@ function parseChannels(value: unknown): Channel[] {
     if (!channels.includes(item as Channel)) channels.push(item as Channel);
   }
   return channels;
+}
+
+function isMcpSurface(record: AgentSurface): boolean {
+  return record.channels.length === 1 && record.channels[0] === "mcp" &&
+    record.entry.kind === "mcp_endpoint";
+}
+
+function toMcpConnection(record: AgentSurface): McpConnectionInfo {
+  return {
+    id: record.id,
+    name: record.name,
+    description: record.description,
+    version: record.version,
+    visibility: record.visibility,
+    governanceState: record.governanceState,
+    endpoint: { ...record.entry },
+    connect: { mode: "direct" },
+  };
+}
+
+function assertMcpChannelEntry(channels: Channel[], entry: EntryRef): void {
+  const hasMcp = channels.includes("mcp");
+  if (hasMcp && (channels.length !== 1 || entry.kind !== "mcp_endpoint")) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mcp channel requires a single mcp_endpoint entry",
+    );
+  }
+  if (entry.kind === "mcp_endpoint" && !hasMcp) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mcp_endpoint requires the mcp channel",
+    );
+  }
+  if (entry.kind === "mcp_endpoint") {
+    parseMcpEndpoint(entry.value);
+  }
+}
+
+function parseMcpEndpoint(value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mcp_endpoint must be an absolute http(s) URL",
+    );
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mcp_endpoint must be an http(s) URL, not a command or other scheme",
+    );
+  }
+  if (url.username || url.password) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mcp_endpoint must not include userinfo; store a secret reference instead",
+    );
+  }
+  for (const key of url.searchParams.keys()) {
+    if (SECRET_KEYS.has(key) || SECRET_KEYS.has(key.toLowerCase())) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "plaintext secret fields are not allowed; store a reference instead",
+      );
+    }
+  }
 }
 
 function parseEntry(value: unknown): EntryRef {

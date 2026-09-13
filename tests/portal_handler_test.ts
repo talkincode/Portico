@@ -39,6 +39,19 @@ function internalCli(): RegisterInput {
   };
 }
 
+function internalMcp(): RegisterInput {
+  return {
+    id: "docs-mcp",
+    name: "Docs MCP",
+    description: "External documentation MCP server.",
+    channels: ["mcp"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "mcp_endpoint", value: "https://mcp.example.test/servers/docs" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  };
+}
+
 async function seededContext() {
   const identities = new MemoryIdentityStore();
   const access = new AccessService(identities);
@@ -251,4 +264,56 @@ Deno.test("claimed role that does not match the roster is forbidden", async () =
   assertEquals(status, 403);
   assertEquals(body.ok, false);
   assertEquals(body.error?.code, "FORBIDDEN");
+});
+
+Deno.test("reader sees the same MCP connection on portal that catalog registered", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalMcp());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/mcp", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.ok, true);
+  const data = listed.body.data as Array<{
+    id: string;
+    endpoint: { value: string };
+    connect: { mode: string };
+  }>;
+  assertEquals(data.length, 1);
+  assertEquals(data[0].id, "docs-mcp");
+  assertEquals(data[0].endpoint.value, "https://mcp.example.test/servers/docs");
+  assertEquals(data[0].connect.mode, "direct");
+
+  const described = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/mcp/docs-mcp", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(described.status, 200);
+  const record = described.body.data as { id: string; connect: { mode: string } };
+  assertEquals(record.id, "docs-mcp");
+  assertEquals(record.connect.mode, "direct");
+});
+
+Deno.test("anonymous cannot see an internal MCP connection on the portal", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalMcp());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/mcp"), context),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.data, []);
+
+  const described = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/mcp/docs-mcp"), context),
+  );
+  assertEquals(described.status, 404);
+  assertEquals(described.body.ok, false);
+  assertEquals(described.body.error?.code, "NOT_FOUND");
 });

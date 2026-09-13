@@ -15,6 +15,7 @@ export type {
   EntryRef,
   GovernanceState,
   MaintainerRef,
+  McpConnectionInfo,
   PublicSubmission,
   PublishInput,
   RegisterInput,
