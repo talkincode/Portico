@@ -2,6 +2,7 @@ import {
   type Actor,
   type ActorKind,
   type ActorRole,
+  type ApprovalDecisionInput,
   CatalogError,
   CatalogService,
   ErrorCode,
@@ -13,14 +14,18 @@ import {
 const USAGE = `portico <command>
 
 Commands:
-  catalog register --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog draft    --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog publish  --id <id> --visibility <internal|public> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog list     --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog get      --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog register  --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  catalog draft     --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  catalog publish   --id <id> --visibility <internal|public> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog approve   --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog reject    --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog approvals --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog list      --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog get       --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
 Actor identity is a trusted CLI flag until Access Control lands.
+The identity that submitted public cannot approve or reject the same request.
 Output is always JSON.`;
 
 interface CliResult {
@@ -82,6 +87,20 @@ export async function runCli(
         visibility: flags.visibility as PublishInput["visibility"],
       };
       return ok(await service.publish(actor, payload));
+    }
+
+    if (action === "approve" || action === "reject") {
+      if (!flags.id) throw new UsageError("missing --id");
+      const payload: ApprovalDecisionInput = { id: flags.id };
+      return ok(
+        action === "approve"
+          ? await service.approve(actor, payload)
+          : await service.reject(actor, payload),
+      );
+    }
+
+    if (action === "approvals") {
+      return ok(await service.listApprovals(actor));
     }
 
     if (action === "list") {

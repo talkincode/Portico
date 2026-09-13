@@ -60,7 +60,25 @@ deno task cli -- catalog publish \
   --visibility internal
 ```
 
-`--visibility public` 只产生 `pending_public` 候选，匿名渠道仍不可见。`--actor-*` 在 Access Control 落地前是受信任输入，不能当成生产鉴权。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
+`--visibility public` 只产生 `pending_public` 候选，匿名渠道仍不可见。独立人类审计者才能批准或拒绝：
+
+```sh
+deno task cli -- catalog approve \
+  --catalog ./data/catalog.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id docs-writer
+
+deno task cli -- catalog reject \
+  --catalog ./data/catalog.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id docs-writer
+```
+
+提交同一请求的身份不能自批。维护者与 Agent 不能审。`--actor-*` 在 Access Control 落地前是受信任输入，不能当成生产鉴权。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
 
 ## 质量与验收
 

@@ -7,7 +7,8 @@ export type GovernanceState =
   | "approved_public"
   | "rejected";
 export type ActorKind = "human" | "agent";
-export type ActorRole = "reader" | "maintainer" | "anonymous";
+export type ActorRole = "reader" | "maintainer" | "auditor" | "anonymous";
+export type ApprovalDecision = "approved" | "rejected";
 export type EntryKind = "url" | "package" | "mcp_endpoint";
 
 export interface Actor {
@@ -26,6 +27,11 @@ export interface MaintainerRef {
   kind: ActorKind;
 }
 
+export interface PublicSubmission {
+  submittedBy: MaintainerRef;
+  submittedAt: string;
+}
+
 export interface AgentSurface {
   id: string;
   name: string;
@@ -36,8 +42,21 @@ export interface AgentSurface {
   entry: EntryRef;
   maintainers: MaintainerRef[];
   governanceState: GovernanceState;
+  publicSubmission?: PublicSubmission;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApprovalRecord {
+  id: string;
+  surfaceId: string;
+  decision: ApprovalDecision;
+  submittedBy: MaintainerRef;
+  reviewedBy: MaintainerRef;
+  reviewedAt: string;
+  entry: EntryRef;
+  version: string;
+  name: string;
 }
 
 export interface RegisterInput {
@@ -54,4 +73,8 @@ export interface RegisterInput {
 export interface PublishInput {
   id: string;
   visibility: Visibility;
+}
+
+export interface ApprovalDecisionInput {
+  id: string;
 }
