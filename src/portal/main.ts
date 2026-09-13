@@ -35,6 +35,7 @@ if (import.meta.main) {
     const server = listenPortal({
       catalogPath: readPath("PORTICO_CATALOG_PATH", env),
       identitiesPath: readPath("PORTICO_IDENTITIES_PATH", env),
+      pagePath: env.PORTICO_PAGE_PATH,
       hostname,
       port,
       onListen: () => {

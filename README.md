@@ -152,7 +152,7 @@ deno task cli -- gateway audit \
   --actor-role auditor
 ```
 
-只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。
+只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp` 与 `GET /api/page`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。页面文件可选：`PORTICO_PAGE_PATH`。
 
 ```sh
 deno task portal
@@ -186,6 +186,34 @@ deno task gateway
 
 ```sh
 curl -s -X POST http://127.0.0.1:8789/gateway/mcp/docs-mcp/authorize \
+  -H 'x-portico-actor-id: human:reader' \
+  -H 'x-portico-actor-kind: human' \
+  -H 'x-portico-actor-role: reader'
+```
+
+受约束的门户组件盒不是 CMS。维护者只能组合固定种类：`catalog_card`、`catalog_detail`、`permission_hint`、`approval_status`、`audit_snippet`。页面引用不能让未审批对象公开可达。
+
+```sh
+deno task cli -- page set \
+  --page ./data/page.json \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --input ./page.json
+
+deno task cli -- page get \
+  --page ./data/page.json \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:reader \
+  --actor-kind human \
+  --actor-role reader
+```
+
+```sh
+curl -s http://127.0.0.1:8788/api/page \
   -H 'x-portico-actor-id: human:reader' \
   -H 'x-portico-actor-kind: human' \
   -H 'x-portico-actor-role: reader'
