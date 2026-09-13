@@ -23,6 +23,28 @@ export interface GrantRecord {
   grantedAt: string;
 }
 
+export interface RevokeInput {
+  id: string;
+}
+
+export interface RevokeRecord {
+  id: string;
+  subjectId: string;
+  kind: ActorKind;
+  role: GrantRole;
+  revokedBy: MaintainerRef;
+  revokedAt: string;
+}
+
+export interface RevokeResult {
+  id: string;
+  subjectId: string;
+  kind: ActorKind;
+  role: GrantRole;
+  revoked: true;
+  revokedAt: string;
+}
+
 export interface IssueCredentialInput {
   id: string;
 }
@@ -65,6 +87,7 @@ export interface CredentialRecord {
   secretHash: string;
   issuedBy: MaintainerRef;
   issuedAt: string;
+  revokedAt?: string;
 }
 
 export interface SessionRecord {

@@ -17,6 +17,9 @@ export type {
   LoginInput,
   LogoutResult,
   RequestActorInput,
+  RevokeInput,
+  RevokeRecord,
+  RevokeResult,
   SessionRecord,
   SessionView,
 } from "./types.ts";

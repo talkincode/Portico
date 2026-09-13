@@ -43,6 +43,17 @@ deno task cli -- identity grant \
   --role maintainer
 ```
 
+撤回名册主体只属于人类审计者。被撤身份立即不能再写目录；留下的登记仍在。不能自撤，也不能撤走最后一位人类审计者。失败不改名册、不作废他人会话。
+
+```sh
+deno task cli -- identity revoke \
+  --identities ./data/identities.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id agent:docs-bot
+```
+
 登录会话用一次性下发的凭证，只存哈希，不落明文口令。`--session` 可代替 `--actor-*`；Portal / Gateway 用 `Authorization: Bearer` 或 `X-Portico-Session`。
 
 ```sh

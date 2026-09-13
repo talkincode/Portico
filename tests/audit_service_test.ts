@@ -196,3 +196,21 @@ Deno.test("reading audit does not rewrite grant or approval conclusions", async 
   assertEquals(after, before);
   assertEquals(grants.length > 0, true);
 });
+
+Deno.test("auditor timeline includes identity revoke; failed revoke does not appear", async () => {
+  const { access, catalog, audit } = await seeded();
+  await catalog.register(maintainer, surface());
+
+  const revoked = await access.revoke(auditor, { id: maintainer.id });
+  assertEquals(revoked.revoked, true);
+
+  const events = await audit.list(auditor);
+  const revokeEvent = events.find((item) => item.kind === "revoke");
+  assertEquals(revokeEvent?.action, "revoke");
+  assertEquals(revokeEvent?.subjectId, maintainer.id);
+  assertEquals(revokeEvent?.actor.id, auditor.id);
+
+  await assertRejectsCode(() => access.revoke(reader, { id: reader.id }), "FORBIDDEN");
+  const again = await audit.list(auditor);
+  assertEquals(again.filter((item) => item.kind === "revoke").length, 1);
+});

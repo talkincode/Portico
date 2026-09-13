@@ -24,6 +24,7 @@ const USAGE = `portico <command>
 
 Commands:
   identity grant    --identities <path> --id <id> --kind <human|agent> --role <reader|maintainer|auditor> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
+  identity revoke   --identities <path> --id <id> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
   identity list     --identities <path> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
   identity grants   --identities <path> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
   identity credential issue --identities <path> --sessions <path> --id <subject> [--actor-* | --session <token>]
@@ -56,6 +57,7 @@ Non-anonymous catalog commands resolve --actor-* against the identity roster.
 --session / PORTICO_SESSION may replace --actor-* after login; do not mix them.
 Issued credential and session tokens are printed once and stored as hashes.
 The first identity grant may omit --actor-* and must be a human auditor.
+An identity cannot revoke itself; the last human auditor cannot be revoked.
 The identity that submitted public cannot approve or reject the same request.
 Withdrawing an approved public surface is reserved for a human auditor.
 Output is always JSON.`;
@@ -313,6 +315,12 @@ async function runIdentity(
       role: flags.role as GrantInput["role"],
     };
     return ok(await service.grant(await tryResolveActor(flags, env), payload));
+  }
+
+  if (action === "revoke") {
+    if (!flags.id) throw new UsageError("missing --id");
+    const actor = await resolveFlagsActor(flags, env);
+    return ok(await service.revoke(actor, { id: flags.id }));
   }
 
   if (action === "credential") {
