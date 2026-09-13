@@ -15,7 +15,7 @@
   },
   "tasks": {
     "test": "deno test --allow-read --allow-write --allow-env --allow-run tests/",
-    "check": "deno check src/cli/main.ts src/catalog/mod.ts",
+    "check": "deno check src/cli/main.ts src/catalog/mod.ts src/access/mod.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
     "cli": "deno run --allow-read --allow-write --allow-env src/cli/main.ts"

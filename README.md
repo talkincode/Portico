@@ -24,11 +24,31 @@ deno task check
 deno task test
 ```
 
+角色来自身份名册，不能靠 `--actor-role` 自封。空名册只能引导第一位人类审计者；之后由审计者授予 reader / maintainer / auditor。Agent 不能被授予 auditor。非匿名 catalog 命令会对照名册校验 `--actor-*`。
+
+```sh
+deno task cli -- identity grant \
+  --identities ./data/identities.json \
+  --id human:security-auditor \
+  --kind human \
+  --role auditor
+
+deno task cli -- identity grant \
+  --identities ./data/identities.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id agent:docs-bot \
+  --kind agent \
+  --role maintainer
+```
+
 内部登记一条 CLI 表面并查询（stdout 为 JSON）：
 
 ```sh
 deno task cli -- catalog register \
   --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
   --actor-id agent:docs-bot \
   --actor-kind agent \
   --actor-role maintainer \
@@ -36,7 +56,8 @@ deno task cli -- catalog register \
 
 deno task cli -- catalog list \
   --catalog ./data/catalog.json \
-  --actor-id human:auditor \
+  --identities ./data/identities.json \
+  --actor-id human:reader \
   --actor-kind human \
   --actor-role reader
 ```
@@ -46,6 +67,7 @@ deno task cli -- catalog list \
 ```sh
 deno task cli -- catalog draft \
   --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
   --actor-id agent:docs-bot \
   --actor-kind agent \
   --actor-role maintainer \
@@ -53,6 +75,7 @@ deno task cli -- catalog draft \
 
 deno task cli -- catalog publish \
   --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
   --actor-id agent:docs-bot \
   --actor-kind agent \
   --actor-role maintainer \
@@ -65,6 +88,7 @@ deno task cli -- catalog publish \
 ```sh
 deno task cli -- catalog approve \
   --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
   --actor-id human:security-auditor \
   --actor-kind human \
   --actor-role auditor \
@@ -72,13 +96,14 @@ deno task cli -- catalog approve \
 
 deno task cli -- catalog reject \
   --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
   --actor-id human:security-auditor \
   --actor-kind human \
   --actor-role auditor \
   --id docs-writer
 ```
 
-提交同一请求的身份不能自批。维护者与 Agent 不能审。`--actor-*` 在 Access Control 落地前是受信任输入，不能当成生产鉴权。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
+提交同一请求的身份不能自批。维护者与 Agent 不能审。`--actor-*` 必须与身份名册一致；名册文件仍是本地信任根，不是登录会话或外部 IdP。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
 
 ## 质量与验收
 

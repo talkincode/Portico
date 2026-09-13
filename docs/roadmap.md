@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选，以及可机读 CLI 登记/草稿/发布/查询；未实现的模块仍是产品意图，不是现存实现。
+> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册，以及可机读 CLI 登记/草稿/发布/审批/授权/查询；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -77,7 +77,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - CLI 目录登记、草稿、发布与查询
 
-`src/cli/main.ts`：`catalog register|draft|publish|list|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。身份目前是受信任的 CLI 标志（`--actor-*`），不是 Access Control。登录与审批查询尚未实现。
+`src/cli/main.ts`：`identity grant|list|grants` 与 `catalog register|draft|publish|approve|reject|list|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名 catalog 命令对照身份名册解析 `--actor-*`。登录会话与外部 IdP 尚未实现。
 
 - Publisher 内部发布与公开候选
 
@@ -85,11 +85,15 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - Approval 公开发布审批
 
-独立人类审计者可 `approve` / `reject` 公开候选。提交同一请求的身份不能自批（`SELF_APPROVAL`）；维护者与 Agent 不能审。通过后匿名可见 `approved_public`；拒绝后公开面仍不可达。审批记录与目录记录分开追加，维护者不能改写。身份目前仍是受信任的 CLI 标志，不是 Access Control。
+独立人类审计者可 `approve` / `reject` 公开候选。提交同一请求的身份不能自批（`SELF_APPROVAL`）；维护者与 Agent 不能审。通过后匿名可见 `approved_public`；拒绝后公开面仍不可达。审批记录与目录记录分开追加，维护者不能改写。审批者必须已在身份名册中被授予 human auditor，不能靠 `--actor-role` 自封。
+
+- Access Control 身份名册
+
+`src/access/` 保存身份与追加式授权记录。空名册只能引导第一位人类审计者；之后仅人类审计者可 grant。Agent 不能被授予 auditor；主体不能给自己提权。失败不写名册。catalog CLI 用名册解析角色。名册文件仍是本地信任根，不是登录、口令或外部 IdP。
 
 - 尚未实现
 
-Portal、Access Control、MCP 渠道/Gateway、UI Components、人类安全审计视图。标为待核验以外的“已有能力”一律不应被写出。
+Portal、MCP 渠道/Gateway、UI Components、人类安全审计视图、登录会话。标为待核验以外的“已有能力”一律不应被写出。
 
 ## 目标功能清单
 
@@ -202,7 +206,7 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝，以及 CLI 对应命令已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行不含登录；`--actor-*` 在 Access Control 落地前是受信任输入。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、Access Control 身份名册，以及 CLI 对应命令已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行不含登录会话；非匿名 `--actor-*` 必须与身份名册一致。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -210,8 +214,8 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | Publisher 内部发布 | 高 | ✅ 草稿对只读隐藏；`publish --visibility internal` 后只读者可见同一条 | ✅ 无权 draft/publish 被拒；偷写 `approved_public`/明文密钥被拒；不能把 pending_public 降回 internal | ✅ 维护者 vs 只读；匿名看不到公开候选 | ✅ 失败不写/不改目录；公开候选对匿名仍不可达 | `tests/catalog_publisher_test.ts`；`tests/e2e/cli_publish_e2e_test.ts` |
 | Approval 公开发布审批 | 高 | ✅ 独立人类审计者 approve 后匿名 list/get 同一条 `approved_public` | ✅ 自批 SELF_APPROVAL；维护者/Agent/只读 FORBIDDEN；拒绝后匿名仍不可见；密钥字段被拒 | ✅ 提交者 vs 人类审计者；维护者不能审 | ✅ 失败不写审批记录、不改公开面；已拒绝不能再 reject 改写 | `tests/catalog_approval_test.ts`；`tests/e2e/cli_approval_e2e_test.ts` |
 | Portal 发现与仪表盘 | 中 | ❌ 缺口 | ❌ 缺口 | 有权 vs 无权 | 不适用：默认只读发现，不改治理状态 | ❌ 缺口 |
-| Access Control 分级权限 | 高 | ❌ 缺口 | ❌ 缺口 | 人类审计 vs Agent 维护 | ❌ 缺口 | ❌ 缺口 |
-| CLI 发布与查询 | 高 | ✅ `catalog register` 后 reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败 | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件与 approvals | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts` |
+| Access Control 分级权限 | 高 | ✅ 审计者授予 Agent 维护者后，维护者 register、只读者 list 同一条 | ✅ 维护者自封 auditor FORBIDDEN；Agent 不能被授予 auditor；未知身份不能 register | ✅ 人类审计者 vs Agent 维护者；只读者不能 list 名册 | ✅ 失败 grant 不改 identities/grants；失败 approve 不改公开面 | `tests/access_service_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
+| CLI 发布与查询 | 高 | ✅ `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败；未授权身份 FORBIDDEN | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件、approvals 与 identities | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | MCP 渠道登记与访问 | 高 | ❌ 缺口 | ❌ 缺口 | 已授权 vs 未授权 | ❌ 缺口 | ❌ 缺口 |
 | MCP Gateway 鉴权与路由 | 高 | ❌ 缺口 | ❌ 缺口 | 已授权 vs 未授权 | ❌ 缺口 | ❌ 缺口 |
 | UI Components 门户页维护 | 中 | ❌ 缺口 | ❌ 缺口 | 维护者 vs 只读 | ❌ 缺口 | ❌ 缺口 |
