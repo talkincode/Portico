@@ -5,6 +5,9 @@ import type {
   ActorKind,
   ActorRole,
   AgentSurface,
+  ApprovalDecision,
+  ApprovalDecisionInput,
+  ApprovalRecord,
   Channel,
   EntryKind,
   EntryRef,
@@ -26,6 +29,7 @@ const ALLOWED_REGISTER_KEYS = new Set([
   "maintainers",
 ]);
 const ALLOWED_PUBLISH_KEYS = new Set(["id", "visibility"]);
+const ALLOWED_APPROVAL_KEYS = new Set(["id"]);
 const SECRET_KEYS = new Set([
   "token",
   "password",
@@ -41,7 +45,7 @@ const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
 const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
-const ACTOR_ROLES = new Set<ActorRole>(["reader", "maintainer", "anonymous"]);
+const ACTOR_ROLES = new Set<ActorRole>(["reader", "maintainer", "auditor", "anonymous"]);
 
 export class CatalogService {
   constructor(private readonly store: CatalogStore) {}
@@ -177,10 +181,95 @@ export class CatalogService {
       ...existing,
       visibility: "public",
       governanceState: "pending_public",
+      publicSubmission: {
+        submittedBy: { id: actor.id, kind: actor.kind },
+        submittedAt: now,
+      },
       updatedAt: now,
     };
     await this.store.put(record);
     return structuredClone(record);
+  }
+
+  async approve(actor: Actor, input: ApprovalDecisionInput): Promise<AgentSurface> {
+    return await this.#decidePublic(actor, input, "approved");
+  }
+
+  async reject(actor: Actor, input: ApprovalDecisionInput): Promise<AgentSurface> {
+    return await this.#decidePublic(actor, input, "rejected");
+  }
+
+  async #decidePublic(
+    actor: Actor,
+    input: ApprovalDecisionInput,
+    decision: ApprovalDecision,
+  ): Promise<AgentSurface> {
+    assertActor(actor);
+    if (actor.role !== "auditor") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a human auditor may decide public visibility",
+      );
+    }
+    if (actor.kind !== "human") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a human auditor may decide public visibility",
+      );
+    }
+
+    const parsed = parseApprovalInput(input);
+    const existing = await this.store.get(parsed.id);
+    if (!existing) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
+    }
+    if (existing.governanceState !== "pending_public") {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "only a pending public candidate can be approved or rejected",
+      );
+    }
+    const submittedBy = existing.publicSubmission?.submittedBy;
+    if (!submittedBy) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "pending public candidate is missing a submitter",
+      );
+    }
+    if (actor.id === submittedBy.id) {
+      throw new CatalogError(
+        ErrorCode.SELF_APPROVAL,
+        "the identity that submitted public cannot decide the same request",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const record: AgentSurface = {
+      ...existing,
+      visibility: "public",
+      governanceState: decision === "approved" ? "approved_public" : "rejected",
+      updatedAt: now,
+    };
+    const approval: ApprovalRecord = {
+      id: approvalId(record.id, now),
+      surfaceId: record.id,
+      decision,
+      submittedBy: { ...submittedBy },
+      reviewedBy: { id: actor.id, kind: actor.kind },
+      reviewedAt: now,
+      entry: { ...record.entry },
+      version: record.version,
+      name: record.name,
+    };
+    await this.store.commitApproval(record, approval);
+    return structuredClone(record);
+  }
+
+  async listApprovals(actor: Actor): Promise<ApprovalRecord[]> {
+    assertActor(actor);
+    if (actor.role === "anonymous") return [];
+    const records = await this.store.listApprovals();
+    return records.map((record) => structuredClone(record));
   }
 
   async get(actor: Actor, id: string): Promise<AgentSurface> {
@@ -215,7 +304,8 @@ function canSee(actor: Actor, record: AgentSurface): boolean {
     return true;
   }
   if (actor.role === "anonymous") return false;
-  return actor.role === "reader" || actor.role === "maintainer";
+  return actor.role === "reader" || actor.role === "maintainer" ||
+    actor.role === "auditor";
 }
 
 function assertActor(actor: Actor): void {
@@ -231,6 +321,41 @@ function assertActor(actor: Actor): void {
   if (!ACTOR_ROLES.has(actor.role)) {
     throw new CatalogError(ErrorCode.INVALID_INPUT, "actor.role is invalid");
   }
+}
+
+function parseApprovalInput(input: ApprovalDecisionInput): ApprovalDecisionInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "approval payload must be an object");
+  }
+
+  const keys = Object.keys(input);
+  for (const key of keys) {
+    if (SECRET_KEYS.has(key)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "plaintext secret fields are not allowed; store a reference instead",
+      );
+    }
+    if (!ALLOWED_APPROVAL_KEYS.has(key)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `unknown or forbidden field '${key}'`,
+      );
+    }
+  }
+
+  if (!ID_PATTERN.test(input.id ?? "")) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "id must be 2-63 chars of lowercase kebab-case",
+    );
+  }
+
+  return { id: input.id };
+}
+
+function approvalId(surfaceId: string, reviewedAt: string): string {
+  return `apr-${surfaceId}-${reviewedAt.replaceAll(/[^0-9]/g, "")}`;
 }
 
 function parsePublishInput(input: PublishInput): PublishInput {
