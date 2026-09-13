@@ -26,6 +26,8 @@ Commands:
   catalog approvals --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog list      --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog get       --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  mcp list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  mcp describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
@@ -60,6 +62,9 @@ export async function runCli(
     const [group, action] = positionals;
     if (group === "identity") {
       return await runIdentity(action, flags, env);
+    }
+    if (group === "mcp") {
+      return await runMcp(action, flags, env);
     }
     if (group !== "catalog") {
       throw new UsageError(`unknown command '${group}'`);
@@ -126,6 +131,29 @@ export async function runCli(
   } catch (error) {
     return fail(error);
   }
+}
+
+async function runMcp(
+  action: string | undefined,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<CliResult> {
+  const claimed = readActor(flags);
+  const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
+  if (!catalogPath) {
+    throw new UsageError("missing --catalog or PORTICO_CATALOG_PATH");
+  }
+  const actor = await resolveCatalogActor(claimed, flags, env);
+  const service = new CatalogService(new FileCatalogStore(catalogPath));
+
+  if (action === "list") {
+    return ok(await service.listMcp(actor));
+  }
+  if (action === "describe") {
+    if (!flags.id) throw new UsageError("missing --id");
+    return ok(await service.describeMcp(actor, flags.id));
+  }
+  throw new UsageError(action ? `unknown mcp action '${action}'` : "missing mcp action");
 }
 
 async function runIdentity(

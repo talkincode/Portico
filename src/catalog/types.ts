@@ -59,6 +59,17 @@ export interface ApprovalRecord {
   name: string;
 }
 
+export interface McpConnectionInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  visibility: Visibility;
+  governanceState: GovernanceState;
+  endpoint: EntryRef;
+  connect: { mode: "direct" };
+}
+
 export interface RegisterInput {
   id: string;
   name: string;

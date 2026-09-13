@@ -66,6 +66,19 @@ export function sampleRecord() {
   };
 }
 
+export function sampleMcpRecord() {
+  return {
+    id: "docs-mcp",
+    name: "Docs MCP",
+    description: "External documentation MCP server.",
+    channels: ["mcp"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "mcp_endpoint", value: "https://mcp.example.test/servers/docs" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  };
+}
+
 export async function bootstrapRoster(identities: string): Promise<Record<string, string>> {
   const first = await runCli([
     "identity",

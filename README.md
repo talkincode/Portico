@@ -105,7 +105,34 @@ deno task cli -- catalog reject \
 
 提交同一请求的身份不能自批。维护者与 Agent 不能审。`--actor-*` 必须与身份名册一致；名册文件仍是本地信任根，不是登录会话或外部 IdP。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
 
-只读 Portal 与 CLI 呈现同一治理状态。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。
+MCP 渠道登记外部 MCP Server。`mcp list` / `mcp describe` 只返回已授权连接信息，不执行工具、不代理流量。端点必须是 http(s) URL，不能带密钥或命令。
+
+```sh
+deno task cli -- catalog register \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --input ./mcp-record.json
+
+deno task cli -- mcp list \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:reader \
+  --actor-kind human \
+  --actor-role reader
+
+deno task cli -- mcp describe \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:reader \
+  --actor-kind human \
+  --actor-role reader \
+  --id docs-mcp
+```
+
+只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。
 
 ```sh
 deno task portal

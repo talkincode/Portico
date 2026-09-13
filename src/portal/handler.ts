@@ -34,6 +34,13 @@ export async function handlePortalRequest(
     if (catalogItem) {
       return jsonOk(await context.catalog.get(actor, catalogItem[1]));
     }
+    if (url.pathname === "/api/mcp") {
+      return jsonOk(await context.catalog.listMcp(actor));
+    }
+    const mcpItem = url.pathname.match(/^\/api\/mcp\/([a-z][a-z0-9-]{1,62})$/);
+    if (mcpItem) {
+      return jsonOk(await context.catalog.describeMcp(actor, mcpItem[1]));
+    }
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
       return jsonOk(dashboardFrom(surfaces));
