@@ -11,6 +11,7 @@ import {
   type PublishInput,
   type RegisterInput,
 } from "../catalog/mod.ts";
+import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 
 const USAGE = `portico <command>
 
@@ -28,9 +29,12 @@ Commands:
   catalog get       --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   mcp list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   mcp describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  gateway audit     --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
+Gateway audit path may also be set with PORTICO_GATEWAY_AUDIT_PATH.
 Non-anonymous catalog commands resolve --actor-* against the identity roster.
 The first identity grant may omit --actor-* and must be a human auditor.
 The identity that submitted public cannot approve or reject the same request.
@@ -65,6 +69,9 @@ export async function runCli(
     }
     if (group === "mcp") {
       return await runMcp(action, flags, env);
+    }
+    if (group === "gateway") {
+      return await runGateway(action, flags, env);
     }
     if (group !== "catalog") {
       throw new UsageError(`unknown command '${group}'`);
@@ -154,6 +161,43 @@ async function runMcp(
     return ok(await service.describeMcp(actor, flags.id));
   }
   throw new UsageError(action ? `unknown mcp action '${action}'` : "missing mcp action");
+}
+
+async function runGateway(
+  action: string | undefined,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<CliResult> {
+  const claimed = readActor(flags);
+  const auditPath = flags.audit ?? env.PORTICO_GATEWAY_AUDIT_PATH;
+  if (!auditPath) {
+    throw new UsageError("missing --audit or PORTICO_GATEWAY_AUDIT_PATH");
+  }
+
+  if (action === "audit") {
+    const actor = await resolveCatalogActor(claimed, flags, env);
+    const gateway = new GatewayService(
+      new CatalogService(new FileCatalogStore("")),
+      new FileGatewayAuditStore(auditPath),
+    );
+    return ok(await gateway.listAudit(actor));
+  }
+
+  if (action === "authorize") {
+    if (!flags.id) throw new UsageError("missing --id");
+    const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
+    if (!catalogPath) {
+      throw new UsageError("missing --catalog or PORTICO_CATALOG_PATH");
+    }
+    const actor = await resolveCatalogActor(claimed, flags, env);
+    const gateway = new GatewayService(
+      new CatalogService(new FileCatalogStore(catalogPath)),
+      new FileGatewayAuditStore(auditPath),
+    );
+    return ok(await gateway.authorize(actor, flags.id));
+  }
+
+  throw new UsageError(action ? `unknown gateway action '${action}'` : "missing gateway action");
 }
 
 async function runIdentity(

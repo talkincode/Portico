@@ -132,6 +132,26 @@ deno task cli -- mcp describe \
   --id docs-mcp
 ```
 
+MCP Gateway 只做门卫：按身份发出已授权的直连路由并追加访问审计，不执行工具、不代理 JSON-RPC。
+
+```sh
+deno task cli -- gateway authorize \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --audit ./data/gateway-audit.json \
+  --actor-id human:reader \
+  --actor-kind human \
+  --actor-role reader \
+  --id docs-mcp
+
+deno task cli -- gateway audit \
+  --identities ./data/identities.json \
+  --audit ./data/gateway-audit.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor
+```
+
 只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。
 
 ```sh
@@ -148,6 +168,24 @@ deno task portal
 
 ```sh
 curl -s http://127.0.0.1:8788/api/catalog \
+  -H 'x-portico-actor-id: human:reader' \
+  -H 'x-portico-actor-kind: human' \
+  -H 'x-portico-actor-role: reader'
+```
+
+Gateway HTTP 默认 `127.0.0.1:8789`，需要审计文件写权限，仍不执行工具。
+
+```sh
+PORTICO_CATALOG_PATH=./data/catalog.json \
+PORTICO_IDENTITIES_PATH=./data/identities.json \
+PORTICO_GATEWAY_AUDIT_PATH=./data/gateway-audit.json \
+PORTICO_BIND=127.0.0.1 \
+PORTICO_PORT=8789 \
+deno task gateway
+```
+
+```sh
+curl -s -X POST http://127.0.0.1:8789/gateway/mcp/docs-mcp/authorize \
   -H 'x-portico-actor-id: human:reader' \
   -H 'x-portico-actor-kind: human' \
   -H 'x-portico-actor-role: reader'

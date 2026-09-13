@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现，以及 MCP 渠道登记与授权连接信息（客户端直连，不执行工具）；未实现的模块仍是产品意图，不是现存实现。
+> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息，以及 MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -69,7 +69,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 运行时骨架（Deno L0）
 
-`deno.json` + `.github/workflows/ci.yml`。检查与测试走 `deno lint` / `deno check` / `deno test`。产品命令不使用 `--allow-all`，CLI 仅 `--allow-read --allow-write --allow-env`，Portal 仅 `--allow-read --allow-env --allow-net=127.0.0.1`（无 `--allow-write`）。无 `package.json`、无 Node/Bun 锁文件。
+`deno.json` + `.github/workflows/ci.yml`。检查与测试走 `deno lint` / `deno check` / `deno test`。产品命令不使用 `--allow-all`，CLI 仅 `--allow-read --allow-write --allow-env`，Portal 仅 `--allow-read --allow-env --allow-net=127.0.0.1`（无 `--allow-write`），Gateway 仅 `--allow-read --allow-write --allow-env --allow-net=127.0.0.1`（写权限只为访问审计文件）。无 `package.json`、无 Node/Bun 锁文件。
 
 - Registry 内部目录
 
@@ -99,9 +99,13 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 维护者可登记 `channels=["mcp"]` 且 `entry.kind=mcp_endpoint` 的外部 MCP Server。端点必须是绝对 http(s) URL，禁止 userinfo、查询串密钥和命令式入口。`mcp list` / `mcp describe` 与 Portal `GET /api/mcp` 对同一身份返回连接信息 `{endpoint, connect:{mode:"direct"}}`，由客户端直连；Portico 不执行工具、不代理流量。可见性与目录相同：内部对匿名不可见，公开须审批。CLI 表面不会出现在 MCP 列表。失败登记不写目录。
 
+- MCP Gateway 鉴权与路由（门卫）
+
+`src/gateway/` 对已登记 MCP 做身份、可见性与访问审计，再发出直连路由。`gateway authorize` 与 `POST /gateway/mcp/:id/authorize` 对同一身份返回 `{endpoint, connect:{mode:"direct"}}`；不转发 JSON-RPC、不执行工具、不代理流量。未授权或未审批公开得到 `NOT_FOUND`，响应不泄漏端点。允许与拒绝都追加到独立审计文件；人类审计者可 `gateway audit` / `GET /gateway/audit`，维护者不能读、也不能改写。工具调用类 POST 返回 405。默认绑定 `127.0.0.1`。失败授权不改目录。
+
 - 尚未实现
 
-MCP Gateway 鉴权路由、UI Components、人类安全审计视图、登录会话。标为待核验以外的“已有能力”一律不应被写出。
+UI Components、人类安全审计视图、登录会话。标为待核验以外的“已有能力”一律不应被写出。
 
 ## 目标功能清单
 
@@ -214,7 +218,7 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、Access Control 身份名册、Portal 发现/仪表盘、MCP 渠道登记/连接信息，以及 CLI 对应命令已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行不含登录会话；非匿名 `--actor-*` 与 Portal `X-Portico-Actor-*` 必须与身份名册一致。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、Access Control 身份名册、Portal 发现/仪表盘、MCP 渠道登记/连接信息、MCP Gateway 鉴权路由，以及 CLI 对应命令已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行不含登录会话；非匿名 `--actor-*` 与 Portal / Gateway `X-Portico-Actor-*` 必须与身份名册一致。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -225,7 +229,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | Access Control 分级权限 | 高 | ✅ 审计者授予 Agent 维护者后，维护者 register、只读者 list 同一条 | ✅ 维护者自封 auditor FORBIDDEN；Agent 不能被授予 auditor；未知身份不能 register | ✅ 人类审计者 vs Agent 维护者；只读者不能 list 名册 | ✅ 失败 grant 不改 identities/grants；失败 approve 不改公开面 | `tests/access_service_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | CLI 发布与查询 | 高 | ✅ `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败；未授权身份 FORBIDDEN | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件、approvals 与 identities | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | MCP 渠道登记与访问 | 高 | ✅ 维护者登记 mcp_endpoint；只读者 `mcp list`/`describe` 与 Portal `/api/mcp` 同一连接信息 | ✅ 密钥查询/userinfo/命令式入口被拒；CLI 表面不出现在 MCP 列表；匿名看不到内部 MCP；未审批公开 MCP 对匿名不可达 | ✅ 只读 vs 匿名；维护者可登记、只读者可描述 | ✅ 失败登记不写 catalog 文件；Portal POST `/api/mcp` 不改目录 | `tests/mcp_channel_test.ts`；`tests/e2e/cli_mcp_e2e_test.ts`；`tests/e2e/portal_mcp_e2e_test.ts`；`tests/portal_handler_test.ts` |
-| MCP Gateway 鉴权与路由 | 高 | ❌ 缺口 | ❌ 缺口 | 已授权 vs 未授权 | ❌ 缺口 | ❌ 缺口 |
+| MCP Gateway 鉴权与路由 | 高 | ✅ 维护者登记 MCP 后，只读者 `gateway authorize` 与 HTTP `POST /gateway/mcp/:id/authorize` 得到同一 `connect.mode=direct` 路由；审计者可读到 allowed 记录 | ✅ 匿名内部/待审公开 NOT_FOUND 且不泄漏端点；CLI 表面不可授权；`tools/call` 返回 405 且不执行 | ✅ 已授权 reader vs 匿名；维护者不能读审计 | ✅ 失败授权不改 catalog 文件；拒绝工具调用不脏写目录 | `tests/gateway_service_test.ts`；`tests/gateway_handler_test.ts`；`tests/e2e/cli_gateway_e2e_test.ts`；`tests/e2e/gateway_http_e2e_test.ts` |
 | UI Components 门户页维护 | 中 | ❌ 缺口 | ❌ 缺口 | 维护者 vs 只读 | ❌ 缺口 | ❌ 缺口 |
 | Agent 维护与人类安全审计 | 高 | ❌ 缺口 | ❌ 缺口 | 维护 Agent vs 人类审计 | ❌ 缺口 | ❌ 缺口 |
 
