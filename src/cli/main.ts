@@ -6,6 +6,7 @@ import {
   CatalogService,
   ErrorCode,
   FileCatalogStore,
+  type PublishInput,
   type RegisterInput,
 } from "../catalog/mod.ts";
 
@@ -13,6 +14,8 @@ const USAGE = `portico <command>
 
 Commands:
   catalog register --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  catalog draft    --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  catalog publish  --id <id> --visibility <internal|public> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog list     --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog get      --id <id> --catalog <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
 
@@ -56,7 +59,7 @@ export async function runCli(
 
     const service = new CatalogService(new FileCatalogStore(catalogPath));
 
-    if (action === "register") {
+    if (action === "register" || action === "draft") {
       if (!flags.input) throw new UsageError("missing --input");
       const raw = await Deno.readTextFile(flags.input);
       let payload: unknown;
@@ -65,8 +68,20 @@ export async function runCli(
       } catch {
         throw new CatalogError(ErrorCode.INVALID_INPUT, "input file is not valid JSON");
       }
-      const record = await service.register(actor, payload as RegisterInput);
+      const record = action === "draft"
+        ? await service.draft(actor, payload as RegisterInput)
+        : await service.register(actor, payload as RegisterInput);
       return ok(record);
+    }
+
+    if (action === "publish") {
+      if (!flags.id) throw new UsageError("missing --id");
+      if (!flags.visibility) throw new UsageError("missing --visibility");
+      const payload: PublishInput = {
+        id: flags.id,
+        visibility: flags.visibility as PublishInput["visibility"],
+      };
+      return ok(await service.publish(actor, payload));
     }
 
     if (action === "list") {

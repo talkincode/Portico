@@ -50,3 +50,8 @@ export interface RegisterInput {
   entry: EntryRef;
   maintainers: MaintainerRef[];
 }
+
+export interface PublishInput {
+  id: string;
+  visibility: Visibility;
+}
