@@ -7,6 +7,8 @@ Agent 在这里被发布、发现、授权和访问。
 
 Portico 是组织的门廊：CLI、MCP、Web 都是入口，内部 / 公开 / 审批 / 分级权限是治理。日常维护委派给 Agent，人类只做安全审计。
 
+运行时锁定为 **Deno + TypeScript（L0）**：不用 Node，不以 Bun 作为产品运行时。权限默认拒绝。见 [`docs/roadmap.md`](docs/roadmap.md) 的运行时边界。
+
 ## 文档
 
 - 项目画像、功能清单与方向：[`docs/roadmap.md`](docs/roadmap.md)

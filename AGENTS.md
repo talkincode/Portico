@@ -20,6 +20,17 @@ Portico 是 Agent 的治理门户，不是 Agent 运行时。Agent 在别处运�
 - Portal、CLI、MCP 必须呈现同一治理状态。
 - 不引入通用 CMS、建站器、计费商店或 Agent 工作流引擎。
 - 密钥只引用，不落明文。
+- 运行时是 Deno + TypeScript（L0）。不使用 Node，不以 Bun 作为产品运行时，不引入第二运行时或第二套锁文件。
+
+## 运行时（硬性规定）
+
+完整表述见 [`docs/roadmap.md`](docs/roadmap.md)「运行时边界（L0）」。下列为 MUST：
+
+- 只在 Deno 上实现 Portal / API / CLI / MCP Gateway / 检查 / 测试。
+- 禁止把 Node 或 Bun 加进产品依赖、CI 运行器或发布产物。
+- 权限默认拒绝；白名单写进 Deno 配置。禁止 `--allow-all` 或等价全开。
+- `npm:` 只作适配。SDK 不适配时隔离适配层，不切换运行时。
+- CLI 启动不得依赖 `node` 可执行文件。
 
 ## 验收矩阵（硬性规定）
 
@@ -40,6 +51,7 @@ Portico 是 Agent 的治理门户，不是 Agent 运行时。Agent 在别处运�
 - 优先可机读的 CLI / API / MCP 契约，再补 Portal。
 - 安全相关行为必须可自动验证：未审批不可公开、越权拒绝、自批失败、失败后无脏写。
 - 不要为“以后可能运行 Agent”预留运行时抽象。
+- 不要为“这个 npm 包更熟”引入 Node 或 Bun。先核对 L0。
 
 ## 安全审计时人类看什么
 
@@ -47,3 +59,4 @@ Portico 是 Agent 的治理门户，不是 Agent 运行时。Agent 在别处运�
 - 权限变更是否留下不可改写记录。
 - Gateway 是否越权变成执行器。
 - 变更是否把密钥、内部 URL、未公开 Agent 泄漏到公开面。
+- 是否出现 Node/Bun 依赖、第二套锁文件，或把 Deno 权限全开。
