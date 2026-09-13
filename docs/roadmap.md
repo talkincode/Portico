@@ -69,7 +69,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 运行时骨架（Deno L0）
 
-`deno.json` + `.github/workflows/ci.yml`。检查与测试走 `deno lint` / `deno check` / `deno test`。产品命令不使用 `--allow-all`，CLI 仅 `--allow-read --allow-write --allow-env`。无 `package.json`、无 Node/Bun 锁文件。
+`deno.json` + `.github/workflows/ci.yml`。检查与测试走 `deno lint` / `deno check` / `deno test`。产品命令不使用 `--allow-all`，CLI 仅 `--allow-read --allow-write --allow-env`，Portal 仅 `--allow-read --allow-env --allow-net=127.0.0.1`（无 `--allow-write`）。无 `package.json`、无 Node/Bun 锁文件。
 
 - Registry 内部目录
 
@@ -91,9 +91,13 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 `src/access/` 保存身份与追加式授权记录。空名册只能引导第一位人类审计者；之后仅人类审计者可 grant。Agent 不能被授予 auditor；主体不能给自己提权。失败不写名册。catalog CLI 用名册解析角色。名册文件仍是本地信任根，不是登录、口令或外部 IdP。
 
+- Portal 发现与治理仪表盘
+
+`src/portal/` 是只读 HTTP 入口，消费同一 `CatalogService`。`GET /api/catalog`、`GET /api/catalog/:id`、`GET /api/dashboard` 与 `GET /`（HTML）对同一身份呈现与 CLI 相同的可见性。无 actor 头为匿名；`X-Portico-Actor-*` 对照身份名册解析，不能自封角色。默认绑定 `127.0.0.1`。POST/PUT/PATCH/DELETE 返回 405，不写目录。登录会话尚未实现。
+
 - 尚未实现
 
-Portal、MCP 渠道/Gateway、UI Components、人类安全审计视图、登录会话。标为待核验以外的“已有能力”一律不应被写出。
+MCP 渠道/Gateway、UI Components、人类安全审计视图、登录会话。标为待核验以外的“已有能力”一律不应被写出。
 
 ## 目标功能清单
 
@@ -206,14 +210,14 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、Access Control 身份名册，以及 CLI 对应命令已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行不含登录会话；非匿名 `--actor-*` 必须与身份名册一致。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、Access Control 身份名册、Portal 发现/仪表盘，以及 CLI 对应命令已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行不含登录会话；非匿名 `--actor-*` 与 Portal `X-Portico-Actor-*` 必须与身份名册一致。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
 | Registry 登记与目录 | 高 | ✅ 维护者登记内部表面，只读者 list/get 同一条 | ✅ 公开可见性被拒；偷写 `approved_public` 被拒；非法 id / 明文密钥字段被拒 | ✅ 只读 vs 维护者；匿名看不到内部记录 | ✅ 失败不写 Memory/File 目录 | `tests/catalog_service_test.ts`；`tests/e2e/cli_catalog_e2e_test.ts` |
 | Publisher 内部发布 | 高 | ✅ 草稿对只读隐藏；`publish --visibility internal` 后只读者可见同一条 | ✅ 无权 draft/publish 被拒；偷写 `approved_public`/明文密钥被拒；不能把 pending_public 降回 internal | ✅ 维护者 vs 只读；匿名看不到公开候选 | ✅ 失败不写/不改目录；公开候选对匿名仍不可达 | `tests/catalog_publisher_test.ts`；`tests/e2e/cli_publish_e2e_test.ts` |
 | Approval 公开发布审批 | 高 | ✅ 独立人类审计者 approve 后匿名 list/get 同一条 `approved_public` | ✅ 自批 SELF_APPROVAL；维护者/Agent/只读 FORBIDDEN；拒绝后匿名仍不可见；密钥字段被拒 | ✅ 提交者 vs 人类审计者；维护者不能审 | ✅ 失败不写审批记录、不改公开面；已拒绝不能再 reject 改写 | `tests/catalog_approval_test.ts`；`tests/e2e/cli_approval_e2e_test.ts` |
-| Portal 发现与仪表盘 | 中 | ❌ 缺口 | ❌ 缺口 | 有权 vs 无权 | 不适用：默认只读发现，不改治理状态 | ❌ 缺口 |
+| Portal 发现与仪表盘 | 中 | ✅ CLI register 后 reader 在 Portal list/HTML 看到同一条；approve 后匿名 Portal 与 CLI 同一条 `approved_public` | ✅ 内部与 pending_public 对匿名不可见；POST 405；冒充 auditor FORBIDDEN；HTML 转义名称 | ✅ reader vs 匿名 | ✅ 失败写不改 catalog 文件；只读入口无 `--allow-write` | `tests/portal_handler_test.ts`；`tests/e2e/portal_discovery_e2e_test.ts` |
 | Access Control 分级权限 | 高 | ✅ 审计者授予 Agent 维护者后，维护者 register、只读者 list 同一条 | ✅ 维护者自封 auditor FORBIDDEN；Agent 不能被授予 auditor；未知身份不能 register | ✅ 人类审计者 vs Agent 维护者；只读者不能 list 名册 | ✅ 失败 grant 不改 identities/grants；失败 approve 不改公开面 | `tests/access_service_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | CLI 发布与查询 | 高 | ✅ `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败；未授权身份 FORBIDDEN | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件、approvals 与 identities | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | MCP 渠道登记与访问 | 高 | ❌ 缺口 | ❌ 缺口 | 已授权 vs 未授权 | ❌ 缺口 | ❌ 缺口 |

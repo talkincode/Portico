@@ -105,6 +105,27 @@ deno task cli -- catalog reject \
 
 提交同一请求的身份不能自批。维护者与 Agent 不能审。`--actor-*` 必须与身份名册一致；名册文件仍是本地信任根，不是登录会话或外部 IdP。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
 
+只读 Portal 与 CLI 呈现同一治理状态。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。
+
+```sh
+deno task portal
+```
+
+```sh
+PORTICO_CATALOG_PATH=./data/catalog.json \
+PORTICO_IDENTITIES_PATH=./data/identities.json \
+PORTICO_BIND=127.0.0.1 \
+PORTICO_PORT=8788 \
+deno task portal
+```
+
+```sh
+curl -s http://127.0.0.1:8788/api/catalog \
+  -H 'x-portico-actor-id: human:reader' \
+  -H 'x-portico-actor-kind: human' \
+  -H 'x-portico-actor-role: reader'
+```
+
 ## 质量与验收
 
 一级业务功能必须达到 [`docs/roadmap.md`](docs/roadmap.md) 验收矩阵的覆盖底线：Happy Path E2E、高风险失败路径、权限双角色、写操作失败恢复；新增一级功能必须同步补 E2E 并更新矩阵。
