@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.9.6"
+      - name: lint
+        run: deno lint
+      - name: check
+        run: deno check src/cli/main.ts src/catalog/mod.ts
+      - name: test
+        run: deno test --allow-read --allow-write --allow-env --allow-run tests/

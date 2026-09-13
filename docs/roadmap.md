@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-当前仓库几乎是空的。已实现能力仅有 `README.md` 的定位陈述，没有运行时代码、测试或 CI。下文中的模块来自产品意图，不是现存实现。
+> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录和可机读 CLI 登记/查询；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -67,9 +67,21 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 `README.md` 写明：Portico 是受治理的 Agent 门户；Agent 不在这里运行，而在这里被发布、发现、授权和访问。
 
-- 运行时、目录、发布、审批、权限、网关、CLI、测试、CI
+- 运行时骨架（Deno L0）
 
-均不存在。标为待核验以外的“已有能力”一律不应被写出。
+`deno.json` + `.github/workflows/ci.yml`。检查与测试走 `deno lint` / `deno check` / `deno test`。产品命令不使用 `--allow-all`，CLI 仅 `--allow-read --allow-write --allow-env`。无 `package.json`、无 Node/Bun 锁文件。
+
+- Registry 内部目录
+
+`src/catalog/` 是目录内核。维护者可登记内部 Agent 表面（身份、名称、说明、渠道、版本、入口引用、维护者、治理状态=`internal`）。公开可见性不能通过登记“顺便成功”；未知字段或明文密钥字段被拒绝；失败不写目录。只读者可见内部记录，匿名不可见。
+
+- CLI 目录登记与查询
+
+`src/cli/main.ts`：`catalog register|list|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。身份目前是受信任的 CLI 标志（`--actor-*`），不是 Access Control。登录、公开发布提交、审批查询尚未实现。
+
+- 尚未实现
+
+Publisher 公开发布提交、Approval、Portal、Access Control、MCP 渠道/Gateway、UI Components、人类安全审计视图。标为待核验以外的“已有能力”一律不应被写出。
 
 ## 目标功能清单
 
@@ -182,16 +194,16 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-当前无测试目录。证据列全部为缺口；实现一级功能时必须补测并改本表。
+Registry 内部登记与 CLI 查询已有测试证据。其余一级功能仍为缺口；实现时必须补测并改本表。CLI 行只覆盖已落地的 `catalog register|list|get`，不含登录/公开发布/审批查询。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
-| Registry 登记与目录 | 高 | ❌ 缺口 | ❌ 缺口 | 只读 vs 维护者 | ❌ 缺口 | ❌ 缺口 |
+| Registry 登记与目录 | 高 | ✅ 维护者登记内部表面，只读者 list/get 同一条 | ✅ 公开可见性被拒；偷写 `approved_public` 被拒；非法 id / 明文密钥字段被拒 | ✅ 只读 vs 维护者；匿名看不到内部记录 | ✅ 失败不写 Memory/File 目录 | `tests/catalog_service_test.ts`；`tests/e2e/cli_catalog_e2e_test.ts` |
 | Publisher 内部发布 | 高 | ❌ 缺口 | ❌ 缺口 | 有权 vs 无权 | ❌ 缺口 | ❌ 缺口 |
 | Approval 公开发布审批 | 高 | ❌ 缺口 | ❌ 缺口 | 提交者 vs 审批者 | ❌ 缺口 | ❌ 缺口 |
 | Portal 发现与仪表盘 | 中 | ❌ 缺口 | ❌ 缺口 | 有权 vs 无权 | 不适用：默认只读发现，不改治理状态 | ❌ 缺口 |
 | Access Control 分级权限 | 高 | ❌ 缺口 | ❌ 缺口 | 人类审计 vs Agent 维护 | ❌ 缺口 | ❌ 缺口 |
-| CLI 发布与查询 | 高 | ❌ 缺口 | ❌ 缺口 | 有权 vs 无权 | ❌ 缺口 | ❌ 缺口 |
+| CLI 发布与查询 | 高 | ✅ `catalog register` 后 reader `list`/`get` 机读成功 | ✅ reader 登记 FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL | ✅ 维护者 vs 只读；匿名 list 为空 | ✅ 失败不创建 catalog 文件 | `tests/e2e/cli_catalog_e2e_test.ts` |
 | MCP 渠道登记与访问 | 高 | ❌ 缺口 | ❌ 缺口 | 已授权 vs 未授权 | ❌ 缺口 | ❌ 缺口 |
 | MCP Gateway 鉴权与路由 | 高 | ❌ 缺口 | ❌ 缺口 | 已授权 vs 未授权 | ❌ 缺口 | ❌ 缺口 |
 | UI Components 门户页维护 | 中 | ❌ 缺口 | ❌ 缺口 | 维护者 vs 只读 | ❌ 缺口 | ❌ 缺口 |
