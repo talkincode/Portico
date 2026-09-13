@@ -9,6 +9,7 @@ import type {
   EntryKind,
   EntryRef,
   MaintainerRef,
+  PublishInput,
   RegisterInput,
   Visibility,
 } from "./types.ts";
@@ -24,6 +25,7 @@ const ALLOWED_REGISTER_KEYS = new Set([
   "entry",
   "maintainers",
 ]);
+const ALLOWED_PUBLISH_KEYS = new Set(["id", "visibility"]);
 const SECRET_KEYS = new Set([
   "token",
   "password",
@@ -81,6 +83,106 @@ export class CatalogService {
     return structuredClone(record);
   }
 
+  async draft(actor: Actor, input: RegisterInput): Promise<AgentSurface> {
+    assertActor(actor);
+    if (actor.role !== "maintainer") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a maintainer may save a catalog draft",
+      );
+    }
+
+    const parsed = parseRegisterInput(input);
+    if (parsed.visibility === "public") {
+      throw new CatalogError(
+        ErrorCode.PUBLIC_REQUIRES_APPROVAL,
+        "public visibility requires a separate approval; drafts stay internal-only",
+      );
+    }
+
+    const existing = await this.store.get(parsed.id);
+    if (existing) {
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `surface '${parsed.id}' is already registered`,
+      );
+    }
+
+    const now = new Date().toISOString();
+    const record: AgentSurface = {
+      ...parsed,
+      visibility: "internal",
+      governanceState: "draft",
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.store.put(record);
+    return structuredClone(record);
+  }
+
+  async publish(actor: Actor, input: PublishInput): Promise<AgentSurface> {
+    assertActor(actor);
+    if (actor.role !== "maintainer") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a maintainer may publish a catalog surface",
+      );
+    }
+
+    const parsed = parsePublishInput(input);
+    const existing = await this.store.get(parsed.id);
+    if (!existing) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
+    }
+
+    if (parsed.visibility === "internal") {
+      if (existing.governanceState === "internal" && existing.visibility === "internal") {
+        return structuredClone(existing);
+      }
+      if (existing.governanceState !== "draft") {
+        throw new CatalogError(
+          ErrorCode.INVALID_STATE,
+          "only a draft can be published as internal",
+        );
+      }
+      const now = new Date().toISOString();
+      const record: AgentSurface = {
+        ...existing,
+        visibility: "internal",
+        governanceState: "internal",
+        updatedAt: now,
+      };
+      await this.store.put(record);
+      return structuredClone(record);
+    }
+
+    if (
+      existing.governanceState === "pending_public" &&
+      existing.visibility === "public"
+    ) {
+      return structuredClone(existing);
+    }
+    if (
+      existing.governanceState !== "draft" &&
+      existing.governanceState !== "internal"
+    ) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "only a draft or internal surface can be submitted for public approval",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const record: AgentSurface = {
+      ...existing,
+      visibility: "public",
+      governanceState: "pending_public",
+      updatedAt: now,
+    };
+    await this.store.put(record);
+    return structuredClone(record);
+  }
+
   async get(actor: Actor, id: string): Promise<AgentSurface> {
     assertActor(actor);
     if (!id || typeof id !== "string") {
@@ -103,6 +205,9 @@ export class CatalogService {
 }
 
 function canSee(actor: Actor, record: AgentSurface): boolean {
+  if (record.governanceState === "draft") {
+    return actor.role === "maintainer";
+  }
   if (
     record.visibility === "public" &&
     record.governanceState === "approved_public"
@@ -126,6 +231,40 @@ function assertActor(actor: Actor): void {
   if (!ACTOR_ROLES.has(actor.role)) {
     throw new CatalogError(ErrorCode.INVALID_INPUT, "actor.role is invalid");
   }
+}
+
+function parsePublishInput(input: PublishInput): PublishInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "publish payload must be an object");
+  }
+
+  const keys = Object.keys(input);
+  for (const key of keys) {
+    if (SECRET_KEYS.has(key)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "plaintext secret fields are not allowed; store a reference instead",
+      );
+    }
+    if (!ALLOWED_PUBLISH_KEYS.has(key)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `unknown or forbidden field '${key}'`,
+      );
+    }
+  }
+
+  if (!ID_PATTERN.test(input.id ?? "")) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "id must be 2-63 chars of lowercase kebab-case",
+    );
+  }
+  if (!VISIBILITIES.has(input.visibility)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "visibility must be internal or public");
+  }
+
+  return { id: input.id, visibility: input.visibility };
 }
 
 function parseRegisterInput(input: RegisterInput): RegisterInput {

@@ -41,7 +41,26 @@ deno task cli -- catalog list \
   --actor-role reader
 ```
 
-`--actor-*` 在 Access Control 落地前是受信任输入，不能当成生产鉴权。公开可见性不能通过 `register` 生效。
+草稿与发布：
+
+```sh
+deno task cli -- catalog draft \
+  --catalog ./data/catalog.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --input ./record.json
+
+deno task cli -- catalog publish \
+  --catalog ./data/catalog.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --id docs-writer \
+  --visibility internal
+```
+
+`--visibility public` 只产生 `pending_public` 候选，匿名渠道仍不可见。`--actor-*` 在 Access Control 落地前是受信任输入，不能当成生产鉴权。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
 
 ## 质量与验收
 

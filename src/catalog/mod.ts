@@ -12,6 +12,7 @@ export type {
   EntryRef,
   GovernanceState,
   MaintainerRef,
+  PublishInput,
   RegisterInput,
   Visibility,
 } from "./types.ts";
