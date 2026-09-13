@@ -9,12 +9,14 @@ import {
   ErrorCode,
 } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
+import { type PageService, renderComposedPage } from "../ui/mod.ts";
 import { dashboardFrom, renderDiscoveryPage } from "./html.ts";
 
 export interface PortalContext {
   catalog: CatalogService;
   access: AccessService;
   gateway?: GatewayService;
+  pages?: PageService;
 }
 
 const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
@@ -52,9 +54,18 @@ export async function handlePortalRequest(
       const surfaces = await context.catalog.list(actor);
       return jsonOk(dashboardFrom(surfaces));
     }
+    if (url.pathname === "/api/page") {
+      if (!context.pages) return jsonOk({ components: [] });
+      return jsonOk(await context.pages.get(actor));
+    }
     if (url.pathname === "/") {
       const surfaces = await context.catalog.list(actor);
-      return html(renderDiscoveryPage(dashboardFrom(surfaces)));
+      const dash = dashboardFrom(surfaces);
+      if (context.pages) {
+        const page = await context.pages.get(actor);
+        if (page.components.length > 0) return html(renderComposedPage(dash, page));
+      }
+      return html(renderDiscoveryPage(dash));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
   } catch (error) {

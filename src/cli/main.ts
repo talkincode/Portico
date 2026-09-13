@@ -13,6 +13,7 @@ import {
   type RegisterInput,
 } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
+import { FilePageStore, PageService } from "../ui/mod.ts";
 
 const USAGE = `portico <command>
 
@@ -33,10 +34,13 @@ Commands:
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   gateway audit     --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   audit list        --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> [--audit <path>]
+  page set          --page <path> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
+  page get          --page <path> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> [--audit <path>]
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
 Gateway audit path may also be set with PORTICO_GATEWAY_AUDIT_PATH.
+Page path may also be set with PORTICO_PAGE_PATH.
 Non-anonymous catalog commands resolve --actor-* against the identity roster.
 The first identity grant may omit --actor-* and must be a human auditor.
 The identity that submitted public cannot approve or reject the same request.
@@ -77,6 +81,9 @@ export async function runCli(
     }
     if (group === "audit") {
       return await runAudit(action, flags, env);
+    }
+    if (group === "page") {
+      return await runPage(action, flags, env);
     }
     if (group !== "catalog") {
       throw new UsageError(`unknown command '${group}'`);
@@ -226,6 +233,51 @@ async function runAudit(
     ? new GatewayService(catalog, new FileGatewayAuditStore(auditPath))
     : undefined;
   return ok(await new AuditService(catalog, access, gateway).list(actor));
+}
+
+async function runPage(
+  action: string | undefined,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<CliResult> {
+  const claimed = readActor(flags);
+  const pagePath = flags.page ?? env.PORTICO_PAGE_PATH;
+  if (!pagePath) {
+    throw new UsageError("missing --page or PORTICO_PAGE_PATH");
+  }
+  const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
+  if (!catalogPath) {
+    throw new UsageError("missing --catalog or PORTICO_CATALOG_PATH");
+  }
+  const actor = await resolveCatalogActor(claimed, flags, env);
+  const catalog = new CatalogService(new FileCatalogStore(catalogPath));
+  const access = new AccessService(new FileIdentityStore(readIdentitiesPath(flags, env)));
+  const auditPath = flags.audit ?? env.PORTICO_GATEWAY_AUDIT_PATH;
+  const audit = new AuditService(
+    catalog,
+    access,
+    auditPath ? new GatewayService(catalog, new FileGatewayAuditStore(auditPath)) : undefined,
+  );
+  const pages = new PageService(new FilePageStore(pagePath), catalog, audit);
+
+  if (action === "get") {
+    return ok(await pages.get(actor));
+  }
+  if (action === "set") {
+    if (!flags.input) throw new UsageError("missing --input");
+    const raw = await Deno.readTextFile(flags.input);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "input file is not valid JSON");
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "page payload must be an object");
+    }
+    return ok(await pages.set(actor, payload as Record<string, unknown>));
+  }
+  throw new UsageError(action ? `unknown page action '${action}'` : "missing page action");
 }
 
 async function runIdentity(
