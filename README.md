@@ -14,6 +14,35 @@ Portico 是组织的门廊：CLI、MCP、Web 都是入口，内部 / 公开 / �
 - 项目画像、功能清单与方向：[`docs/roadmap.md`](docs/roadmap.md)
 - Agent 工作规范：[`AGENTS.md`](AGENTS.md)
 
+## 开发
+
+需要 Deno 2.9.x。不要用 Node 或 Bun 跑本仓库。
+
+```sh
+deno task lint
+deno task check
+deno task test
+```
+
+内部登记一条 CLI 表面并查询（stdout 为 JSON）：
+
+```sh
+deno task cli -- catalog register \
+  --catalog ./data/catalog.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --input ./record.json
+
+deno task cli -- catalog list \
+  --catalog ./data/catalog.json \
+  --actor-id human:auditor \
+  --actor-kind human \
+  --actor-role reader
+```
+
+`--actor-*` 在 Access Control 落地前是受信任输入，不能当成生产鉴权。公开可见性不能通过 `register` 生效。
+
 ## 质量与验收
 
 一级业务功能必须达到 [`docs/roadmap.md`](docs/roadmap.md) 验收矩阵的覆盖底线：Happy Path E2E、高风险失败路径、权限双角色、写操作失败恢复；新增一级功能必须同步补 E2E 并更新矩阵。
