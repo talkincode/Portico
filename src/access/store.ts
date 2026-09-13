@@ -1,5 +1,5 @@
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
-import type { GrantRecord, Identity } from "./types.ts";
+import type { CredentialRecord, GrantRecord, Identity, SessionRecord } from "./types.ts";
 
 export interface IdentityStore {
   list(): Promise<Identity[]>;
@@ -105,6 +105,139 @@ export class FileIdentityStore implements IdentityStore {
     const tmp = `${this.path}.tmp`;
     const json = `${
       JSON.stringify({ identities: file.identities, grants: file.grants }, null, 2)
+    }\n`;
+    await Deno.writeTextFile(tmp, json);
+    await Deno.rename(tmp, this.path);
+  }
+}
+
+export interface SessionStore {
+  listCredentials(): Promise<CredentialRecord[]>;
+  commitCredential(record: CredentialRecord): Promise<void>;
+  listSessions(): Promise<SessionRecord[]>;
+  commitSession(record: SessionRecord): Promise<void>;
+  revokeSession(id: string, revokedAt: string): Promise<void>;
+}
+
+function cloneCredential(record: CredentialRecord): CredentialRecord {
+  return structuredClone(record);
+}
+
+function cloneSession(record: SessionRecord): SessionRecord {
+  return structuredClone(record);
+}
+
+export class MemorySessionStore implements SessionStore {
+  #credentials: CredentialRecord[] = [];
+  #sessions: SessionRecord[] = [];
+
+  listCredentials(): Promise<CredentialRecord[]> {
+    return Promise.resolve(this.#credentials.map(cloneCredential));
+  }
+
+  commitCredential(record: CredentialRecord): Promise<void> {
+    if (this.#credentials.some((item) => item.id === record.id)) {
+      return Promise.reject(
+        new CatalogError(ErrorCode.ALREADY_EXISTS, `credential '${record.id}' already exists`),
+      );
+    }
+    this.#credentials.push(cloneCredential(record));
+    return Promise.resolve();
+  }
+
+  listSessions(): Promise<SessionRecord[]> {
+    return Promise.resolve(this.#sessions.map(cloneSession));
+  }
+
+  commitSession(record: SessionRecord): Promise<void> {
+    if (this.#sessions.some((item) => item.id === record.id)) {
+      return Promise.reject(
+        new CatalogError(ErrorCode.ALREADY_EXISTS, `session '${record.id}' already exists`),
+      );
+    }
+    this.#sessions.push(cloneSession(record));
+    return Promise.resolve();
+  }
+
+  revokeSession(id: string, revokedAt: string): Promise<void> {
+    const record = this.#sessions.find((item) => item.id === id);
+    if (!record) {
+      return Promise.reject(new CatalogError(ErrorCode.NOT_FOUND, `session '${id}' not found`));
+    }
+    record.revokedAt = revokedAt;
+    return Promise.resolve();
+  }
+}
+
+interface SessionFile {
+  credentials: CredentialRecord[];
+  sessions: SessionRecord[];
+}
+
+export class FileSessionStore implements SessionStore {
+  constructor(private readonly path: string) {}
+
+  async listCredentials(): Promise<CredentialRecord[]> {
+    const file = await this.#load();
+    return file.credentials.map(cloneCredential);
+  }
+
+  async commitCredential(record: CredentialRecord): Promise<void> {
+    const file = await this.#load();
+    if (file.credentials.some((item) => item.id === record.id)) {
+      throw new CatalogError(ErrorCode.ALREADY_EXISTS, `credential '${record.id}' already exists`);
+    }
+    file.credentials.push(cloneCredential(record));
+    await this.#save(file);
+  }
+
+  async listSessions(): Promise<SessionRecord[]> {
+    const file = await this.#load();
+    return file.sessions.map(cloneSession);
+  }
+
+  async commitSession(record: SessionRecord): Promise<void> {
+    const file = await this.#load();
+    if (file.sessions.some((item) => item.id === record.id)) {
+      throw new CatalogError(ErrorCode.ALREADY_EXISTS, `session '${record.id}' already exists`);
+    }
+    file.sessions.push(cloneSession(record));
+    await this.#save(file);
+  }
+
+  async revokeSession(id: string, revokedAt: string): Promise<void> {
+    const file = await this.#load();
+    const record = file.sessions.find((item) => item.id === id);
+    if (!record) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `session '${id}' not found`);
+    }
+    record.revokedAt = revokedAt;
+    await this.#save(file);
+  }
+
+  async #load(): Promise<SessionFile> {
+    try {
+      const text = await Deno.readTextFile(this.path);
+      const parsed = JSON.parse(text) as Partial<SessionFile>;
+      if (!parsed || !Array.isArray(parsed.credentials) || !Array.isArray(parsed.sessions)) {
+        throw new Error(`session file is corrupt: ${this.path}`);
+      }
+      return {
+        credentials: parsed.credentials.map(cloneCredential),
+        sessions: parsed.sessions.map(cloneSession),
+      };
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) {
+        return { credentials: [], sessions: [] };
+      }
+      throw error;
+    }
+  }
+
+  async #save(file: SessionFile): Promise<void> {
+    const tmp = `${this.path}.tmp`;
+    const json = `${
+      JSON.stringify({ credentials: file.credentials, sessions: file.sessions }, null, 2)
     }\n`;
     await Deno.writeTextFile(tmp, json);
     await Deno.rename(tmp, this.path);
