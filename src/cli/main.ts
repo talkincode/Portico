@@ -35,6 +35,7 @@ Commands:
   catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog approve   --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog reject    --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog withdraw  --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog approvals --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog list      --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog get       --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
@@ -56,6 +57,7 @@ Non-anonymous catalog commands resolve --actor-* against the identity roster.
 Issued credential and session tokens are printed once and stored as hashes.
 The first identity grant may omit --actor-* and must be a human auditor.
 The identity that submitted public cannot approve or reject the same request.
+Withdrawing an approved public surface is reserved for a human auditor.
 Output is always JSON.`;
 
 interface CliResult {
@@ -142,6 +144,12 @@ export async function runCli(
           ? await service.approve(actor, payload)
           : await service.reject(actor, payload),
       );
+    }
+
+    if (action === "withdraw") {
+      if (!flags.id) throw new UsageError("missing --id");
+      const payload: ApprovalDecisionInput = { id: flags.id };
+      return ok(await service.withdraw(actor, payload));
     }
 
     if (action === "approvals") {

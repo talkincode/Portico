@@ -129,6 +129,20 @@ deno task cli -- catalog reject \
 
 提交同一请求的身份不能自批。维护者与 Agent 不能审。`--actor-*` 必须与身份名册一致；名册文件仍是本地信任根，不是登录会话或外部 IdP。公开可见性不能通过 `register` 或 `publish` 直接变成 `approved_public`。
 
+撤回已公开的入口同样属于公开信任边界，因此与批准共用同一权限面——只有人类审计者能撤回。撤回后记录回到内部，匿名与组织外主体在 CLI、Portal 与 Gateway 上立即不可达，再次发布只回到公开候选，必须重新经独立审批：
+
+```sh
+deno task cli -- catalog withdraw \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id docs-writer
+```
+
+只有仍是 `approved_public` 的记录可以撤回；对内部、待审、已拒绝或已撤回的记录会得到 `INVALID_STATE`，失败不改目录、不写审批记录。
+
 MCP 渠道登记外部 MCP Server。`mcp list` / `mcp describe` 只返回已授权连接信息，不执行工具、不代理流量。端点必须是 http(s) URL，不能带密钥或命令。
 
 ```sh
