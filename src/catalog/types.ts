@@ -9,6 +9,9 @@ export type GovernanceState =
 export type ActorKind = "human" | "agent";
 export type ActorRole = "reader" | "maintainer" | "auditor" | "anonymous";
 export type ApprovalDecision = "approved" | "rejected";
+/** A public-boundary decision recorded in the approval trail. `withdrawn` ends
+ * public reachability of an already approved surface; it is not an approval. */
+export type PublicDecision = ApprovalDecision | "withdrawn";
 export type EntryKind = "url" | "package" | "mcp_endpoint";
 
 export interface Actor {
@@ -50,7 +53,7 @@ export interface AgentSurface {
 export interface ApprovalRecord {
   id: string;
   surfaceId: string;
-  decision: ApprovalDecision;
+  decision: PublicDecision;
   submittedBy: MaintainerRef;
   reviewedBy: MaintainerRef;
   reviewedAt: string;

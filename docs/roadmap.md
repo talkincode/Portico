@@ -77,7 +77,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - CLI 目录登记、草稿、发布与查询
 
-`src/cli/main.ts`：`identity grant|list|grants|credential issue|login|logout|whoami`、`catalog register|draft|publish|approve|reject|list|get`、`mcp list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名命令对照身份名册解析 `--actor-*`，或在登录后用 `--session` 代替。外部 IdP 尚未实现。
+`src/cli/main.ts`：`identity grant|list|grants|credential issue|login|logout|whoami`、`catalog register|draft|publish|approve|reject|withdraw|list|get`、`mcp list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名命令对照身份名册解析 `--actor-*`，或在登录后用 `--session` 代替。外部 IdP 尚未实现。
 
 - Publisher 内部发布与公开候选
 
@@ -86,6 +86,10 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 - Approval 公开发布审批
 
 独立人类审计者可 `approve` / `reject` 公开候选。提交同一请求的身份不能自批（`SELF_APPROVAL`）；维护者与 Agent 不能审。通过后匿名可见 `approved_public`；拒绝后公开面仍不可达。审批记录与目录记录分开追加，维护者不能改写。审批者必须已在身份名册中被授予 human auditor，不能靠 `--actor-role` 自封。
+
+- 撤回公开发布
+
+已 `approved_public` 的记录可由人类审计者 `catalog withdraw --id <id>` 撤回：记录回到 `governanceState=internal`、`visibility=internal`，公开入口（CLI、Portal、Gateway）对匿名与组织外主体立即消失，响应不泄漏端点；只读及以上身份仍可见同一条内部记录。撤回是公开信任边界的收缩方向，因此与批准同一权限面：只有人类审计者能撤回，维护者、Agent、只读者与匿名得到 `FORBIDDEN`。只有仍然公开的记录可撤回，`internal` / `pending_public` / `rejected` 得到 `INVALID_STATE`，重复撤回同样 `INVALID_STATE`。撤回在审批轨迹中留下 `withdrawn` 记录（谁撤回、何时、撤回的是哪个版本），维护者不能改写。撤回后再次 `publish --visibility public` 只回到 `pending_public`，必须重新经独立审批才能重新公开。失败撤回不写目录、不追加审批记录。
 
 - Access Control 身份名册
 
@@ -230,13 +234,14 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、Access Control 身份名册、登录会话、Portal 发现/仪表盘、MCP 渠道登记/连接信息、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。非匿名 `--actor-*`、`--session` 与 Portal / Gateway `X-Portico-Actor-*` / Bearer 必须与身份名册一致；会话不冻结、不提升角色。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、登录会话、Portal 发现/仪表盘、MCP 渠道登记/连接信息、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。非匿名 `--actor-*`、`--session` 与 Portal / Gateway `X-Portico-Actor-*` / Bearer 必须与身份名册一致；会话不冻结、不提升角色。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
 | Registry 登记与目录 | 高 | ✅ 维护者登记内部表面，只读者 list/get 同一条 | ✅ 公开可见性被拒；偷写 `approved_public` 被拒；非法 id / 明文密钥字段被拒 | ✅ 只读 vs 维护者；匿名看不到内部记录 | ✅ 失败不写 Memory/File 目录 | `tests/catalog_service_test.ts`；`tests/e2e/cli_catalog_e2e_test.ts` |
 | Publisher 内部发布 | 高 | ✅ 草稿对只读隐藏；`publish --visibility internal` 后只读者可见同一条 | ✅ 无权 draft/publish 被拒；偷写 `approved_public`/明文密钥被拒；不能把 pending_public 降回 internal | ✅ 维护者 vs 只读；匿名看不到公开候选 | ✅ 失败不写/不改目录；公开候选对匿名仍不可达 | `tests/catalog_publisher_test.ts`；`tests/e2e/cli_publish_e2e_test.ts` |
 | Approval 公开发布审批 | 高 | ✅ 独立人类审计者 approve 后匿名 list/get 同一条 `approved_public` | ✅ 自批 SELF_APPROVAL；维护者/Agent/只读 FORBIDDEN；拒绝后匿名仍不可见；密钥字段被拒 | ✅ 提交者 vs 人类审计者；维护者不能审 | ✅ 失败不写审批记录、不改公开面；已拒绝不能再 reject 改写 | `tests/catalog_approval_test.ts`；`tests/e2e/cli_approval_e2e_test.ts` |
+| 公开发布撤回 | 高 | ✅ 人类审计者 `catalog withdraw --id` 后，匿名在 CLI `list`/`get`、Portal `/api/catalog` 与 `/api/mcp`、Gateway authorize 上同时不可达；只读者仍见同一条 `internal` | ✅ 维护者/Agent/只读者/匿名撤回 FORBIDDEN；未知 id NOT_FOUND；对 `internal`/`pending_public`/`rejected` 与重复撤回 INVALID_STATE；密钥字段被拒 | ✅ 人类审计者 vs 维护者/Agent/只读者/匿名 | ✅ 失败撤回不改目录文件字节、不追加审批记录，公开面仍 `approved_public`；撤回后重发只回 `pending_public`，须重新独立审批才能再公开 | `tests/catalog_withdraw_test.ts`；`tests/e2e/cli_withdrawal_e2e_test.ts` |
 | Portal 发现与仪表盘 | 中 | ✅ CLI register 后 reader 在 Portal list/HTML 看到同一条；approve 后匿名 Portal 与 CLI 同一条 `approved_public` | ✅ 内部与 pending_public 对匿名不可见；POST 405；冒充 auditor FORBIDDEN；HTML 转义名称 | ✅ reader vs 匿名 | ✅ 失败写不改 catalog 文件；只读入口无 `--allow-write` | `tests/portal_handler_test.ts`；`tests/e2e/portal_discovery_e2e_test.ts` |
 | Access Control 分级权限 | 高 | ✅ 审计者授予 Agent 维护者后，维护者 register、只读者 list 同一条 | ✅ 维护者自封 auditor FORBIDDEN；Agent 不能被授予 auditor；未知身份不能 register | ✅ 人类审计者 vs Agent 维护者；只读者不能 list 名册 | ✅ 失败 grant 不改 identities/grants；失败 approve 不改公开面 | `tests/access_service_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | 登录会话 | 高 | ✅ 审计者一次性下发凭证；主体 login 后 CLI `--session` list 与 Portal Bearer 看到同一条内部记录 | ✅ 错误 token 登录 FORBIDDEN；会话上伪造 auditor 头 FORBIDDEN；无效 Bearer 403；维护者 session 不能 approve | ✅ 只读 session 不能 register；维护者 session 不能审公开 | ✅ 失败登录不写 session 记录；logout 后原令牌不可用且不改 catalog | `tests/access_session_test.ts`；`tests/e2e/cli_session_e2e_test.ts`；`tests/e2e/portal_session_e2e_test.ts` |

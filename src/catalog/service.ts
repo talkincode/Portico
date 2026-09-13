@@ -15,6 +15,7 @@ import type {
   EntryRef,
   MaintainerRef,
   McpConnectionInfo,
+  PublicDecision,
   PublishInput,
   RegisterInput,
   Visibility,
@@ -198,6 +199,65 @@ export class CatalogService {
     return await this.#decidePublic(actor, input, "rejected");
   }
 
+  /**
+   * Ends public reachability of an already approved surface.
+   *
+   * Withdrawal is the safe direction of the public trust boundary — it can only
+   * remove exposure, never add it — so it is reserved for a human auditor, the
+   * same independent authority that granted exposure. The surface falls back to
+   * `internal`; a second public round needs a fresh `publish` + `approve`.
+   */
+  async withdraw(actor: Actor, input: ApprovalDecisionInput): Promise<AgentSurface> {
+    assertActor(actor);
+    if (actor.kind !== "human" || actor.role !== "auditor") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a human auditor may withdraw a public surface",
+      );
+    }
+
+    const parsed = parseApprovalInput(input);
+    const existing = await this.store.get(parsed.id);
+    if (!existing) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
+    }
+    if (existing.governanceState !== "approved_public") {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "only an approved public surface can be withdrawn",
+      );
+    }
+    const submittedBy = existing.publicSubmission?.submittedBy;
+    if (!submittedBy) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "approved public surface is missing its public submission",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const { publicSubmission: _clearedSubmission, ...base } = existing;
+    const record: AgentSurface = {
+      ...base,
+      visibility: "internal",
+      governanceState: "internal",
+      updatedAt: now,
+    };
+    const approval: ApprovalRecord = {
+      id: approvalId(record.id, "withdrawn", now),
+      surfaceId: record.id,
+      decision: "withdrawn",
+      submittedBy: { ...submittedBy },
+      reviewedBy: { id: actor.id, kind: actor.kind },
+      reviewedAt: now,
+      entry: { ...record.entry },
+      version: record.version,
+      name: record.name,
+    };
+    await this.store.commitApproval(record, approval);
+    return structuredClone(record);
+  }
+
   async #decidePublic(
     actor: Actor,
     input: ApprovalDecisionInput,
@@ -250,7 +310,7 @@ export class CatalogService {
       updatedAt: now,
     };
     const approval: ApprovalRecord = {
-      id: approvalId(record.id, now),
+      id: approvalId(record.id, decision, now),
       surfaceId: record.id,
       decision,
       submittedBy: { ...submittedBy },
@@ -399,12 +459,34 @@ function parseApprovalInput(input: ApprovalDecisionInput): ApprovalDecisionInput
   return { id: input.id };
 }
 
-function approvalId(surfaceId: string, reviewedAt: string): string {
-  return `apr-${surfaceId}-${reviewedAt.replaceAll(/[^0-9]/g, "")}`;
+function approvalId(
+  surfaceId: string,
+  decision: PublicDecision,
+  reviewedAt: string,
+): string {
+  return `apr-${surfaceId}-${decision}-${stamp(reviewedAt)}-${nextSequence()}`;
 }
 
 function changeId(surfaceId: string, action: CatalogChangeAction, at: string): string {
-  return `chg-${surfaceId}-${action}-${at.replaceAll(/[^0-9]/g, "")}`;
+  return `chg-${surfaceId}-${action}-${stamp(at)}-${nextSequence()}`;
+}
+
+function stamp(at: string): string {
+  return at.replaceAll(/[^0-9]/g, "");
+}
+
+/**
+ * Millisecond timestamps are not fine enough to keep ids unique: a surface can
+ * legitimately be withdrawn and republished inside the same millisecond. The
+ * sequence keeps ids unique within the process; the store still rejects any
+ * duplicate id outright, so a cross-process clash fails loudly instead of
+ * overwriting an audit record.
+ */
+let idSequence = 0;
+
+function nextSequence(): string {
+  idSequence += 1;
+  return idSequence.toString(36).padStart(3, "0");
 }
 
 function parsePublishInput(input: PublishInput): PublishInput {
