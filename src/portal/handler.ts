@@ -6,10 +6,25 @@ import {
   type ActorRole,
   CatalogError,
   CatalogService,
+  type Channel,
   ErrorCode,
 } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
 import { type PageService, renderComposedPage } from "../ui/mod.ts";
+import {
+  prefersDark,
+  type PublicContext,
+  renderAuditView,
+  renderCatalogView,
+  renderContentView,
+  renderPublicArticle,
+  renderPublicIndex,
+  renderPublicTopic,
+  renderSurfaceView,
+  resolvePageTheme,
+  summarize,
+  type Tone,
+} from "./design/mod.ts";
 import { dashboardFrom, renderDiscoveryPage } from "./html.ts";
 
 export interface PortalContext {
@@ -61,8 +76,7 @@ export async function handlePortalRequest(
       return jsonOk(await context.catalog.describeCli(actor, cliItem[1]));
     }
     if (url.pathname === "/api/audit") {
-      const audit = new AuditService(context.catalog, context.access, context.gateway);
-      return jsonOk(await audit.list(actor));
+      return jsonOk(await auditService(context).list(actor));
     }
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
@@ -72,6 +86,23 @@ export async function handlePortalRequest(
       if (!context.pages) return jsonOk({ components: [] });
       return jsonOk(await context.pages.get(actor));
     }
+
+    // ── internal console ─────────────────────────────────────────────────
+    // Everything below is served only to identities that already see internal
+    // records. Anonymous requests get a 404, not a 403: an unauthenticated
+    // caller learns nothing about which routes exist.
+    if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) {
+      if (actor.role === "anonymous") {
+        return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+      }
+      return await internalPage(request, url, actor, context);
+    }
+
+    // ── public editorial surface ─────────────────────────────────────────
+    if (url.pathname === "/public" || url.pathname.startsWith("/public/")) {
+      return await publicPage(request, url, actor, context);
+    }
+
     if (url.pathname === "/") {
       const surfaces = await context.catalog.list(actor);
       const dash = dashboardFrom(surfaces);
@@ -92,6 +123,110 @@ async function resolveActor(request: Request, access: AccessService): Promise<Ac
     sessionToken: readSessionToken(request),
     claimed: readClaimedActor(request),
   });
+}
+
+function auditService(context: PortalContext): AuditService {
+  return new AuditService(context.catalog, context.access, context.gateway);
+}
+
+/** An auditor-only view of the trail; every other role gets a refusal. */
+async function auditTrail(actor: Actor, context: PortalContext) {
+  if (!isAuditor(actor)) return [];
+  return await auditService(context).list(actor);
+}
+
+function isAuditor(actor: Actor): boolean {
+  return actor.kind === "human" && actor.role === "auditor";
+}
+
+function pageTheme(request: Request, url: URL, tone: Tone) {
+  return resolvePageTheme(tone, url.searchParams.get("theme"), prefersDark(request.headers));
+}
+
+/* ── internal console ─────────────────────────────────────────────────── */
+
+async function internalPage(
+  request: Request,
+  url: URL,
+  actor: Actor,
+  context: PortalContext,
+): Promise<Response> {
+  const theme = pageTheme(request, url, "internal");
+  const path = url.pathname + url.search;
+  const surfaces = await context.catalog.list(actor);
+  const base = { actor, path, theme, counts: summarize(surfaces) };
+
+  if (url.pathname === "/internal") {
+    const events = await auditTrail(actor, context);
+    return html(renderContentView({ ctx: base, surfaces, recentEvents: events }));
+  }
+
+  if (url.pathname === "/internal/c") {
+    const state = url.searchParams.get("state") ?? undefined;
+    const channel = url.searchParams.get("channel") ?? undefined;
+    return html(
+      renderCatalogView({
+        ctx: base,
+        surfaces,
+        filter: { state: state ?? undefined, channel: channel ?? undefined },
+      }),
+    );
+  }
+
+  if (url.pathname === "/internal/audit") {
+    // The trail is a privileged surface, not an empty screen for everyone
+    // else: a non-auditor must not learn that the route exists at all.
+    if (!isAuditor(actor)) return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+    const events = await auditTrail(actor, context);
+    return html(renderAuditView({ ctx: base, events }));
+  }
+
+  const surfaceMatch = url.pathname.match(/^\/internal\/s\/([a-z][a-z0-9-]{1,62})$/);
+  if (surfaceMatch) {
+    const surface = await context.catalog.get(actor, surfaceMatch[1]);
+    const events = await auditTrail(actor, context);
+    return html(renderSurfaceView({ ctx: base, surface, events }));
+  }
+
+  return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+}
+
+/* ── public editorial surface ─────────────────────────────────────────── */
+
+async function publicPage(
+  request: Request,
+  url: URL,
+  actor: Actor,
+  context: PortalContext,
+): Promise<Response> {
+  const theme = pageTheme(request, url, "public");
+  const path = url.pathname + url.search;
+  const ctx: PublicContext = { actor, path, theme };
+  // The editorial surface renders only what crossed the approval boundary, even
+  // for an internal session: `publicOnly` is applied inside the views.
+  const surfaces = await context.catalog.list(actor);
+
+  if (url.pathname === "/public") {
+    return html(renderPublicIndex({ ctx, surfaces }));
+  }
+
+  const topicMatch = url.pathname.match(/^\/public\/t\/(cli|mcp|web)$/);
+  if (topicMatch) {
+    return html(
+      renderPublicTopic({ ctx, surfaces, channel: topicMatch[1] as Channel }),
+    );
+  }
+
+  const storyMatch = url.pathname.match(/^\/public\/s\/([a-z][a-z0-9-]{1,62})$/);
+  if (storyMatch) {
+    const surface = await context.catalog.get(actor, storyMatch[1]);
+    const page = renderPublicArticle({ ctx, surface, others: surfaces });
+    // A record that never crossed the boundary has no published page at all.
+    if (page === null) return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+    return html(page);
+  }
+
+  return jsonError(404, ErrorCode.NOT_FOUND, "not found");
 }
 
 function readSessionToken(request: Request): string | null {
