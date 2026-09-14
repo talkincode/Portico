@@ -17,8 +17,49 @@ import { bootEntrypoint, JsonBody } from "./process.ts";
  * assert that the Portal genuinely boots without write access.
  */
 
+const GATEWAY = `${ROOT}src/gateway/main.ts`;
 const MCP = `${ROOT}src/mcp/main.ts`;
 const CLI = `${ROOT}src/cli/main.ts`;
+
+Deno.test("E2E: the Gateway audits a denial under a file-scoped write grant", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-boot-scoped-" });
+  const audit = `${dir}/gateway-audit.json`;
+  // The deployed scripts grant write access to exactly these two paths — not to
+  // the directory that contains them. An implementation that unconditionally
+  // `mkdir`s the parent dies here with `Requires write access to "<dir>"`,
+  // which surfaced in production as a 500 on the deny path instead of a 404.
+  const scoped = [
+    `--allow-read=${dir}`,
+    `--allow-write=${audit},${audit}.tmp`,
+    "--allow-env",
+    "--allow-net=127.0.0.1",
+  ];
+  const server = await bootEntrypoint<{ url: string }>(GATEWAY, {
+    PORTICO_CATALOG_PATH: `${dir}/catalog.json`,
+    PORTICO_IDENTITIES_PATH: `${dir}/identities.json`,
+    PORTICO_GATEWAY_AUDIT_PATH: audit,
+  }, scoped);
+  try {
+    const denied = await fetch(
+      `${server.body.data.url}/gateway/mcp/missing-surface/authorize`,
+      { method: "POST" },
+    );
+    assertEquals(denied.status, 404, "a denied authorize must not surface as 500");
+    const body = await denied.json() as JsonBody;
+    assertEquals(body.error?.code, "NOT_FOUND");
+
+    // A denial that cannot be audited is itself a governance failure.
+    const written = JSON.parse(await Deno.readTextFile(audit)) as {
+      records: Array<{ decision: string; reason: string }>;
+    };
+    assert(
+      written.records.some((record) => record.decision === "denied"),
+      "the denial must be appended to the audit file",
+    );
+  } finally {
+    await server.stop();
+  }
+});
 
 Deno.test("E2E: the shipped MCP entrypoint starts and speaks JSON-RPC 2.0", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-boot-mcp-" });
