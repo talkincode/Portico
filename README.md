@@ -179,6 +179,18 @@ deno task cli -- catalog list \
 
 Portal `GET /api/catalog?q=&channel=&state=` 与 MCP `portico_list` 使用同一过滤器。匿名仍然只看得到 `approved_public`。
 
+治理仪表盘（计数，不是运行指标）三入口同一载荷：
+
+```sh
+deno task cli -- catalog dashboard \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --session pst1_…
+```
+
+Portal `GET /api/dashboard` 与 MCP `portico_dashboard` 返回同一 `{counts,surfaces}`。匿名只计入 `approved_public`。
+
 草稿与发布：
 
 ```sh

@@ -2,10 +2,10 @@ import type { AuditService } from "../audit/mod.ts";
 import {
   type Actor,
   applyCatalogQuery,
-  CatalogError,
-  CatalogService,
   CATALOG_CHANNELS,
   CATALOG_GOVERNANCE_STATES,
+  CatalogError,
+  CatalogService,
   dashboardFrom,
   ErrorCode,
   parseCatalogQuery,
@@ -90,7 +90,7 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_dashboard",
     description:
-      "治理概览：当前身份可见的记录数与各治理状态计数。等价于 Portal `GET /api/dashboard`。这不是运行指标大盘。",
+      "治理概览：当前身份可见的记录数与各治理状态计数。等价于 CLI `catalog dashboard` 与 Portal `GET /api/dashboard`。这不是运行指标大盘。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -160,4 +160,3 @@ function requireId(value: unknown): string {
   }
   return value;
 }
-
