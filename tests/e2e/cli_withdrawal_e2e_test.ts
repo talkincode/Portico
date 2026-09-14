@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "../assert.ts";
 import { gatewayUrl, listenGateway } from "../../src/gateway/mod.ts";
 import { listenPortal, portalUrl } from "../../src/portal/mod.ts";
-import { actor, bootstrapRoster, runCli, sampleMcpRecord } from "./harness.ts";
+import { actor, bootstrapRoster, runCli, sampleMcpRecord, sessionFor } from "./harness.ts";
 
 interface JsonBody {
   ok: boolean;
@@ -18,14 +18,13 @@ async function fetchJson(
 }
 
 function anon(): string[] {
-  return ["--actor-id", "anonymous", "--actor-kind", "human", "--actor-role", "anonymous"];
+  // Anonymous is the absence of a session, not a claim.
+  return [];
 }
 
 function auditorHeaders(): HeadersInit {
   return {
-    "x-portico-actor-id": "human:security-auditor",
-    "x-portico-actor-kind": "human",
-    "x-portico-actor-role": "auditor",
+    authorization: `Bearer ${sessionFor("human:security-auditor")!}`,
   };
 }
 
@@ -33,6 +32,7 @@ interface Workspace {
   dir: string;
   catalog: string;
   identities: string;
+  sessions: string;
   gatewayAudit: string;
   input: string;
   env: Record<string, string>;
@@ -41,13 +41,15 @@ interface Workspace {
 async function workspace(): Promise<Workspace> {
   const dir = await Deno.makeTempDir({ prefix: "portico-withdraw-e2e-" });
   const identities = `${dir}/identities.json`;
-  const env = await bootstrapRoster(identities);
+  const sessions = `${dir}/sessions.json`;
+  const env = await bootstrapRoster(identities, sessions);
   const input = `${dir}/record.json`;
   await Deno.writeTextFile(input, `${JSON.stringify(sampleMcpRecord(), null, 2)}\n`);
   return {
     dir,
     catalog: `${dir}/catalog.json`,
     identities,
+    sessions,
     gatewayAudit: `${dir}/gateway-audit.json`,
     input,
     env,
@@ -118,6 +120,7 @@ async function withPortal(
   const server = listenPortal({
     catalogPath: ws.catalog,
     identitiesPath: ws.identities,
+    sessionsPath: ws.sessions,
     hostname: "127.0.0.1",
     port: 0,
     signal: controller.signal,
@@ -138,6 +141,7 @@ async function withGatewayOn(
   const server = listenGateway({
     catalogPath: ws.catalog,
     identitiesPath: ws.identities,
+    sessionsPath: ws.sessions,
     auditPath: ws.gatewayAudit,
     hostname: "127.0.0.1",
     port: 0,

@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "../assert.ts";
-import { bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
+import { actor, bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
 
 Deno.test("CLI happy path: maintainer registers, reader lists and gets the same record", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-e2e-" });
@@ -13,12 +13,7 @@ Deno.test("CLI happy path: maintainer registers, reader lists and gets the same 
     "register",
     "--catalog",
     catalog,
-    "--actor-id",
-    "agent:docs-bot",
-    "--actor-kind",
-    "agent",
-    "--actor-role",
-    "maintainer",
+    ...actor("maintainer", "agent:docs-bot", "agent"),
     "--input",
     input,
   ], env);
@@ -37,12 +32,7 @@ Deno.test("CLI happy path: maintainer registers, reader lists and gets the same 
     "list",
     "--catalog",
     catalog,
-    "--actor-id",
-    "human:auditor",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "reader",
+    ...actor("reader", "human:auditor", "human"),
   ], env);
   assertEquals(listed.code, 0, listed.raw || listed.stderr);
   const listBody = listed.stdout as {
@@ -61,12 +51,7 @@ Deno.test("CLI happy path: maintainer registers, reader lists and gets the same 
     "docs-writer",
     "--catalog",
     catalog,
-    "--actor-id",
-    "human:auditor",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "reader",
+    ...actor("reader", "human:auditor", "human"),
   ], env);
   assertEquals(got.code, 0, got.raw || got.stderr);
   const getBody = got.stdout as {
@@ -90,12 +75,7 @@ Deno.test("CLI reader cannot register; catalog file is not created", async () =>
     "register",
     "--catalog",
     catalog,
-    "--actor-id",
-    "human:auditor",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "reader",
+    ...actor("reader", "human:auditor", "human"),
     "--input",
     input,
   ], env);
@@ -128,12 +108,7 @@ Deno.test("CLI public register fails and does not dirty the catalog", async () =
     "register",
     "--catalog",
     catalog,
-    "--actor-id",
-    "agent:docs-bot",
-    "--actor-kind",
-    "agent",
-    "--actor-role",
-    "maintainer",
+    ...actor("maintainer", "agent:docs-bot", "agent"),
     "--input",
     input,
   ], env);
@@ -164,12 +139,7 @@ Deno.test("CLI anonymous list hides internal records", async () => {
     "register",
     "--catalog",
     catalog,
-    "--actor-id",
-    "agent:docs-bot",
-    "--actor-kind",
-    "agent",
-    "--actor-role",
-    "maintainer",
+    ...actor("maintainer", "agent:docs-bot", "agent"),
     "--input",
     input,
   ], env);
@@ -180,12 +150,7 @@ Deno.test("CLI anonymous list hides internal records", async () => {
     "list",
     "--catalog",
     catalog,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(listed.code, 0, listed.raw || listed.stderr);
   const body = listed.stdout as { ok: boolean; data: unknown[] };

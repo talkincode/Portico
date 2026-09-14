@@ -3,8 +3,6 @@ import { readSessionToken } from "../access/session-header.ts";
 import { AuditService } from "../audit/mod.ts";
 import {
   type Actor,
-  type ActorKind,
-  type ActorRole,
   CatalogError,
   CatalogService,
   type Channel,
@@ -35,9 +33,6 @@ export interface PortalContext {
   gateway?: GatewayService;
   pages?: PageService;
 }
-
-const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
-const ACTOR_ROLES = new Set<ActorRole>(["reader", "maintainer", "auditor", "anonymous"]);
 
 export async function handlePortalRequest(
   request: Request,
@@ -152,10 +147,14 @@ export async function handlePortalRequest(
   }
 }
 
+/**
+ * Portal callers prove who they are with a session, or they are anonymous.
+ * There is deliberately no `X-Portico-Actor-*` path: a header is not proof of
+ * an identity, and the roster ids are published in the README.
+ */
 async function resolveActor(request: Request, access: AccessService): Promise<Actor> {
   return await access.resolveRequestActor({
     sessionToken: readSessionToken(request),
-    claimed: readClaimedActor(request),
   });
 }
 
@@ -261,27 +260,6 @@ async function publicPage(
   }
 
   return jsonError(404, ErrorCode.NOT_FOUND, "not found");
-}
-
-function readClaimedActor(request: Request): Actor | null {
-  const id = request.headers.get("x-portico-actor-id");
-  const kind = request.headers.get("x-portico-actor-kind");
-  const role = request.headers.get("x-portico-actor-role");
-  if (!id && !kind && !role) return null;
-  if (!id || !kind || !role) {
-    throw new CatalogError(
-      ErrorCode.INVALID_INPUT,
-      "actor headers must include id, kind, and role together",
-    );
-  }
-  if (!ACTOR_KINDS.has(kind as ActorKind) || !ACTOR_ROLES.has(role as ActorRole)) {
-    throw new CatalogError(ErrorCode.INVALID_INPUT, "actor kind or role is invalid");
-  }
-  return {
-    id,
-    kind: kind as ActorKind,
-    role: role as ActorRole,
-  };
 }
 
 function jsonOk(data: unknown): Response {

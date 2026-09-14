@@ -24,46 +24,48 @@ import { FilePageStore, PageService } from "../ui/mod.ts";
 const USAGE = `portico <command>
 
 Commands:
-  identity grant    --identities <path> --id <id> --kind <human|agent> --role <reader|maintainer|auditor> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
-  identity revoke   --identities <path> --id <id> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
-  identity list     --identities <path> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
-  identity grants   --identities <path> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
-  identity credential issue --identities <path> --sessions <path> --id <subject> [--actor-* | --session <token>]
-  identity credential revoke --identities <path> --sessions <path> --id <subject> [--actor-* | --session <token>]
+  identity grant    --identities <path> --id <id> --kind <human|agent> --role <reader|maintainer|auditor> [--session <token> --sessions <path>]
+  identity revoke   --identities <path> --id <id> --session <token> --sessions <path>
+  identity list     --identities <path> [--session <token> --sessions <path>]
+  identity grants   --identities <path> --session <token> --sessions <path>
+  identity credential issue --identities <path> --sessions <path> --id <subject> [--session <token>]
+  identity credential revoke --identities <path> --sessions <path> --id <subject> --session <token>
   identity login    --identities <path> --sessions <path> --id <id> --token <issued>
   identity logout   --identities <path> --sessions <path> --session <token>
   identity whoami   --identities <path> --sessions <path> --session <token>
-  catalog register  --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog draft     --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog update    --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  catalog approve   --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog reject    --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog withdraw  --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog approvals --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog list      --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  catalog get       --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  mcp list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  mcp describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  web list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  web describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  cli list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  cli describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  gateway audit     --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
-  audit list        --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> [--audit <path>]
-  page set          --page <path> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
-  page get          --page <path> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> [--audit <path>]
+  catalog register  --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
+  catalog draft     --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
+  catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog update    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
+  catalog approve   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog list      --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog get       --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  mcp list          --catalog <path> --identities <path> --session <token> --sessions <path>
+  mcp describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  web list          --catalog <path> --identities <path> --session <token> --sessions <path>
+  web describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  cli list          --catalog <path> --identities <path> --session <token> --sessions <path>
+  cli describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
+  gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
+  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
+  page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
+  page get          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
 
 Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
 Session path may also be set with PORTICO_SESSIONS_PATH.
 Gateway audit path may also be set with PORTICO_GATEWAY_AUDIT_PATH.
 Page path may also be set with PORTICO_PAGE_PATH.
-Non-anonymous catalog commands resolve --actor-* against the identity roster.
---session / PORTICO_SESSION may replace --actor-* after login; do not mix them.
+A non-anonymous command proves its identity with --session; --actor-* alone is
+refused (USAGE). With no identity flags at all a command runs as anonymous.
+The first identity grant and the first credential issue need no session.
 Issued credential and session tokens are printed once and stored as hashes.
-The first identity grant may omit --actor-* and must be a human auditor.
+The first identity grant needs no session and must be a human auditor.
+The first credential issue is the one-time bootstrap and needs no session.
 An identity cannot revoke itself; the last human auditor cannot be revoked.
 Revoking credentials invalidates login tokens and sessions without removing the roster identity.
 The identity that submitted public cannot approve or reject the same request.
@@ -407,11 +409,12 @@ async function runIdentity(
       );
     }
     if (!flags.id) throw new UsageError("missing --id");
-    const actor = await resolveFlagsActor(flags, env);
     if (subaction === "revoke") {
+      const actor = await resolveFlagsActor(flags, env);
       return ok(await service.revokeCredentials(actor, { id: flags.id }));
     }
-    return ok(await service.issueCredential(actor, { id: flags.id }));
+    // No session may mean the one-time bootstrap; the service decides.
+    return ok(await service.issueCredential(await tryResolveActor(flags, env), { id: flags.id }));
   }
 
   if (action === "login") {
@@ -467,23 +470,43 @@ function openAccess(
   );
 }
 
+/**
+ * Resolves the calling identity for a CLI command.
+ *
+ * A login session is the only proof. `--actor-*` used to be accepted on its own
+ * by looking the claim up in the roster — but the roster ids are published in
+ * the README, so an agent maintainer could type `human:security-auditor` and
+ * approve its own public submission. It is now rejected outright, and with no
+ * flags at all a command runs as anonymous, exactly like the Portal.
+ */
 async function resolveFlagsActor(
   flags: Record<string, string>,
   env: Record<string, string | undefined>,
 ): Promise<Actor> {
   const sessionToken = flags.session ?? env.PORTICO_SESSION;
   const hasActor = Boolean(flags["actor-id"] || flags["actor-kind"] || flags["actor-role"]);
-  if (sessionToken && hasActor) {
-    throw new UsageError("cannot mix --session with --actor-*");
-  }
   if (sessionToken) {
     const access = openAccess(flags, env, true);
-    return await access.resolveSession(sessionToken);
+    const actor = await access.resolveSession(sessionToken);
+    if (hasActor) {
+      const claimed = readActor(flags);
+      if (
+        claimed.id !== actor.id || claimed.kind !== actor.kind || claimed.role !== actor.role
+      ) {
+        throw new UsageError("claimed --actor-* does not match the session identity");
+      }
+    }
+    return actor;
   }
-  const claimed = readActor(flags);
-  return await resolveCatalogActor(claimed, flags, env);
+  if (hasActor) {
+    throw new UsageError(
+      "--actor-* is not proof of an identity and is no longer accepted; run `identity login` and pass --session",
+    );
+  }
+  return { id: "anonymous", kind: "human", role: "anonymous" };
 }
 
+/** Like `resolveFlagsActor`, but "no actor given at all" stays distinguishable. */
 async function tryResolveActor(
   flags: Record<string, string>,
   env: Record<string, string | undefined>,
@@ -492,17 +515,6 @@ async function tryResolveActor(
   const hasActor = Boolean(flags["actor-id"] || flags["actor-kind"] || flags["actor-role"]);
   if (!sessionToken && !hasActor) return null;
   return await resolveFlagsActor(flags, env);
-}
-
-async function resolveCatalogActor(
-  claimed: Actor,
-  flags: Record<string, string>,
-  env: Record<string, string | undefined>,
-): Promise<Actor> {
-  if (claimed.role === "anonymous") return claimed;
-  const identitiesPath = readIdentitiesPath(flags, env);
-  const access = new AccessService(new FileIdentityStore(identitiesPath));
-  return await access.resolve(claimed);
 }
 
 function readSessionToken(

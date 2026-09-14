@@ -117,16 +117,29 @@ Deno.test("E2E: CLI login session is visible on Portal Bearer and hidden from an
     assertEquals(anon.status, 200);
     assertEquals(anon.body.data, []);
 
-    const forged = await fetchJson(`${base}/api/catalog`, {
+    // A reader session that also sends forged auditor headers stays a reader:
+    // the claim cannot add a role the session does not have.
+    const forged = await fetchJson(`${base}/api/audit`, {
       headers: {
         authorization: `Bearer ${sessionToken}`,
-        "x-portico-actor-id": "human:reader",
+        "x-portico-actor-id": "human:security-auditor",
         "x-portico-actor-kind": "human",
         "x-portico-actor-role": "auditor",
       },
     });
     assertEquals(forged.status, 403);
     assertEquals(forged.body.error?.code, "FORBIDDEN");
+
+    // …and forged headers with no session at all are simply anonymous.
+    const noSession = await fetchJson(`${base}/api/audit`, {
+      headers: {
+        "x-portico-actor-id": "human:security-auditor",
+        "x-portico-actor-kind": "human",
+        "x-portico-actor-role": "auditor",
+      },
+    });
+    assertEquals(noSession.status, 403);
+    assertEquals(noSession.body.error?.code, "FORBIDDEN");
 
     const invalid = await fetchJson(`${base}/api/catalog`, {
       headers: { authorization: "Bearer pst1_nope" },

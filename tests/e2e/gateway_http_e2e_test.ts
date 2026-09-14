@@ -1,6 +1,13 @@
 import { assert, assertEquals } from "../assert.ts";
 import { gatewayUrl, listenGateway } from "../../src/gateway/mod.ts";
-import { actor, bootstrapRoster, runCli, sampleMcpRecord } from "./harness.ts";
+import {
+  actor,
+  bootstrapRoster,
+  runCli,
+  sampleMcpRecord,
+  sessionFor,
+  sessionsPathFor,
+} from "./harness.ts";
 
 interface JsonBody {
   ok: boolean;
@@ -18,17 +25,13 @@ async function fetchJson(
 
 function readerHeaders(): HeadersInit {
   return {
-    "x-portico-actor-id": "human:reader",
-    "x-portico-actor-kind": "human",
-    "x-portico-actor-role": "reader",
+    authorization: `Bearer ${sessionFor("human:reader")!}`,
   };
 }
 
 function auditorHeaders(): HeadersInit {
   return {
-    "x-portico-actor-id": "human:security-auditor",
-    "x-portico-actor-kind": "human",
-    "x-portico-actor-role": "auditor",
+    authorization: `Bearer ${sessionFor("human:security-auditor")!}`,
   };
 }
 
@@ -42,6 +45,7 @@ async function withGateway(
   const server = listenGateway({
     catalogPath: catalog,
     identitiesPath: identities,
+    sessionsPath: sessionsPathFor(identities),
     auditPath: audit,
     hostname: "127.0.0.1",
     port: 0,

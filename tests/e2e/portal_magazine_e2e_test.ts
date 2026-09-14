@@ -1,12 +1,17 @@
 import { assert, assertEquals } from "../assert.ts";
 import { listenPortal, portalUrl } from "../../src/portal/mod.ts";
-import { actor, bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
+import {
+  actor,
+  bootstrapRoster,
+  runCli,
+  sampleRecord,
+  sessionFor,
+  sessionsPathFor,
+} from "./harness.ts";
 
 function readerHeaders(): HeadersInit {
   return {
-    "x-portico-actor-id": "human:reader",
-    "x-portico-actor-kind": "human",
-    "x-portico-actor-role": "reader",
+    authorization: `Bearer ${sessionFor("human:reader")!}`,
   };
 }
 
@@ -19,6 +24,7 @@ async function withPortal(
   const server = listenPortal({
     catalogPath: catalog,
     identitiesPath: identities,
+    sessionsPath: sessionsPathFor(identities),
     hostname: "127.0.0.1",
     port: 0,
     signal: controller.signal,

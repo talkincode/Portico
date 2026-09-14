@@ -251,14 +251,36 @@ export class AccessService {
     return { id: record.id, kind: record.kind, role: record.role };
   }
 
-  async issueCredential(actor: Actor, input: IssueCredentialInput): Promise<IssuedCredential> {
+  /**
+   * Issues a login credential.
+   *
+   * With an actor: the caller must be a human auditor, as before. With no
+   * actor at all: this is the one-time bootstrap that turns the roster into a
+   * trust root. Bootstrap is only possible before any credential has ever been
+   * issued, and only for a human auditor — once one credential exists, every
+   * later issuance requires an existing auditor session. Without that rule the
+   * roster would have no root at all: anyone able to run the CLI could mint
+   * themselves an auditor session, and every "agent cannot approve its own
+   * publish" guarantee downstream would be decoration.
+   *
+   * The token is returned exactly once and only its SHA-256 is stored, so it is
+   * the one secret in the system that a reader of the data directory cannot
+   * recover. Handing it to the human auditor out of band is the operator's job.
+   */
+  async issueCredential(
+    actor: Actor | null,
+    input: IssueCredentialInput,
+  ): Promise<IssuedCredential> {
     const sessions = this.#requireSessions();
-    const reviewer = await this.#requireHumanAuditor(actor);
     const parsed = parseCredentialInput(input);
     const subject = await this.store.get(parsed.id);
     if (!subject) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `identity '${parsed.id}' is not in the roster`);
     }
+
+    const reviewer = actor
+      ? await this.#requireHumanAuditor(actor)
+      : await this.#bootstrapAuditor(subject, sessions);
 
     const issuedAt = this.clock().toISOString();
     const token = randomToken("pct1_");
@@ -279,6 +301,23 @@ export class AccessService {
       token,
       issuedAt,
     };
+  }
+
+  async #bootstrapAuditor(subject: Identity, sessions: SessionStore): Promise<Actor> {
+    if (subject.kind !== "human" || subject.role !== "auditor") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a human auditor may be issued the bootstrap credential",
+      );
+    }
+    const credentials = await sessions.listCredentials();
+    if (credentials.length > 0) {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "this roster already has credentials; sign in with an existing session to issue more",
+      );
+    }
+    return { id: subject.id, kind: subject.kind, role: subject.role };
   }
 
   async login(input: LoginInput): Promise<SessionView> {
@@ -335,6 +374,16 @@ export class AccessService {
     return { sessionId: record.id, revoked: true };
   }
 
+  /**
+   * Resolves who is calling.
+   *
+   * A session token is the only thing that proves an identity. Claimed actor
+   * fields are still accepted *alongside* a session as a cross-check, but on
+   * their own they prove nothing: the claimant could type any roster id, and
+   * the roster ids are published in the README. Accepting them as proof made
+   * the whole approval design decorative — a delegated agent could assert
+   * `human:security-auditor` and approve its own public submission.
+   */
   async resolveRequestActor(input: RequestActorInput): Promise<Actor> {
     const sessionToken = input.sessionToken?.trim() || null;
     const claimed = input.claimed ?? null;
@@ -355,10 +404,14 @@ export class AccessService {
       }
       return actor;
     }
-    if (!claimed) {
-      return { id: "anonymous", kind: "human", role: "anonymous" };
+    if (claimed) {
+      assertClaimedActor(claimed);
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "an identity must be proven with a session; claimed actor fields are not proof",
+      );
     }
-    return await this.resolve(claimed);
+    return { id: "anonymous", kind: "human", role: "anonymous" };
   }
 
   async #requireHumanAuditor(actor: Actor | null): Promise<Actor> {

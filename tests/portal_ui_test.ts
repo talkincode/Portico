@@ -8,7 +8,7 @@
  */
 
 import { assert, assertEquals } from "./assert.ts";
-import { AccessService, MemoryIdentityStore } from "../src/access/mod.ts";
+import { type RosterFixture, signedInRoster } from "./fixtures.ts";
 import {
   type Actor,
   CatalogService,
@@ -20,17 +20,6 @@ import { handlePortalRequest } from "../src/portal/mod.ts";
 const maintainer: Actor = { id: "agent:docs-bot", kind: "agent", role: "maintainer" };
 const reader: Actor = { id: "human:reader", kind: "human", role: "reader" };
 const auditor: Actor = { id: "human:security-auditor", kind: "human", role: "auditor" };
-
-/** `grant` narrows the role, so bootstrap with explicit literals. */
-async function bootstrap(access: AccessService): Promise<void> {
-  await access.grant(null, {
-    id: "human:security-auditor",
-    kind: "human",
-    role: "auditor",
-  });
-  await access.grant(auditor, { id: "agent:docs-bot", kind: "agent", role: "maintainer" });
-  await access.grant(auditor, { id: "human:reader", kind: "human", role: "reader" });
-}
 
 function surface(overrides: Partial<RegisterInput> = {}): RegisterInput {
   return {
@@ -46,19 +35,17 @@ function surface(overrides: Partial<RegisterInput> = {}): RegisterInput {
   };
 }
 
+let roster: RosterFixture;
+
 async function seeded() {
-  const access = new AccessService(new MemoryIdentityStore());
-  await bootstrap(access);
+  roster = await signedInRoster();
   const catalog = new CatalogService(new MemoryCatalogStore());
-  return { catalog, access };
+  return { catalog, access: roster.access, roster };
 }
 
+/** A real Bearer session: an identity is proven, never asserted. */
 function headers(actor: Actor): HeadersInit {
-  return {
-    "x-portico-actor-id": actor.id,
-    "x-portico-actor-kind": actor.kind,
-    "x-portico-actor-role": actor.role,
-  };
+  return roster.headersFor(actor.id);
 }
 
 async function get(

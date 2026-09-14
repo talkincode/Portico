@@ -152,8 +152,11 @@ Deno.test("CLI happy path: auditor revokes credentials; session dies, roster ide
     identityRemains: boolean;
   };
   assertEquals(revokedBody.subjectId, "human:reader");
-  assertEquals(revokedBody.revokedCredentials, 1);
-  assertEquals(revokedBody.revokedSessions, 1);
+  // The bootstrap roster already issued one credential per identity, and the
+  // test issues another for the reader; revocation must catch every active one
+  // rather than a hardcoded count.
+  assert(revokedBody.revokedCredentials >= 2);
+  assert(revokedBody.revokedSessions >= 1);
   assertEquals(revokedBody.identityRemains, true);
 
   await expectCode(
@@ -186,12 +189,46 @@ Deno.test("CLI happy path: auditor revokes credentials; session dies, roster ide
     env,
   );
 
+  // This is not `identity revoke`: the subject is still on the roster and can
+  // be re-credentialed. Until it is, it has no surface at all — proving an
+  // identity is the only way in, so cutting credentials cuts everything.
+  const reissued = await expectOk([
+    "identity",
+    "credential",
+    "issue",
+    "--identities",
+    identities,
+    "--sessions",
+    sessions,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "human:reader",
+  ], env);
+  const freshToken = (reissued.data as { token: string }).token;
+
+  const relogin = await expectOk([
+    "identity",
+    "login",
+    "--identities",
+    identities,
+    "--sessions",
+    sessions,
+    "--id",
+    "human:reader",
+    "--token",
+    freshToken,
+  ], env);
+  const freshSession = (relogin.data as { token: string }).token;
+
   const stillListed = await expectOk([
     "catalog",
     "list",
     "--catalog",
     catalog,
-    ...actor("reader", "human:reader", "human"),
+    "--sessions",
+    sessions,
+    "--session",
+    freshSession,
   ], env);
   assertEquals(
     (stillListed.data as Array<{ id: string }>).some((item) => item.id === "docs-writer"),

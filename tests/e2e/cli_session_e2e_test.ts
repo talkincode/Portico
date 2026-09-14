@@ -134,13 +134,17 @@ Deno.test("CLI reader session cannot register; failed login writes no session", 
     "--token",
     "pct1_not-a-real-token",
   ], env);
+  const beforeFail = JSON.parse(await Deno.readTextFile(sessions)) as {
+    sessions: unknown[];
+  };
   assertEquals(badLogin.code, 1);
   const badBody = badLogin.stdout as { ok: boolean; error: { code: string } };
   assertEquals(badBody.error.code, "FORBIDDEN");
+  // The bootstrap roster already has sessions; a failed login must add none.
   const afterFail = JSON.parse(await Deno.readTextFile(sessions)) as {
     sessions: unknown[];
   };
-  assertEquals(afterFail.sessions, []);
+  assertEquals(afterFail.sessions.length, beforeFail.sessions.length);
 
   const login = await runCli([
     "identity",

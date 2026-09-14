@@ -1,6 +1,13 @@
 import { assert, assertEquals } from "../assert.ts";
 import { listenPortal, portalUrl } from "../../src/portal/mod.ts";
-import { actor, bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
+import {
+  actor,
+  bootstrapRoster,
+  runCli,
+  sampleRecord,
+  sessionFor,
+  sessionsPathFor,
+} from "./harness.ts";
 
 interface JsonBody {
   ok: boolean;
@@ -18,9 +25,7 @@ async function fetchJson(
 
 function readerHeaders(): HeadersInit {
   return {
-    "x-portico-actor-id": "human:reader",
-    "x-portico-actor-kind": "human",
-    "x-portico-actor-role": "reader",
+    authorization: `Bearer ${sessionFor("human:reader")!}`,
   };
 }
 
@@ -33,6 +38,7 @@ async function withPortal(
   const server = listenPortal({
     catalogPath: catalog,
     identitiesPath: identities,
+    sessionsPath: sessionsPathFor(identities),
     hostname: "127.0.0.1",
     port: 0,
     signal: controller.signal,
@@ -204,9 +210,7 @@ Deno.test("E2E: Portal POST does not dirty the catalog file", async () => {
       method: "POST",
       headers: {
         ...readerHeaders(),
-        "x-portico-actor-id": "agent:docs-bot",
-        "x-portico-actor-kind": "agent",
-        "x-portico-actor-role": "maintainer",
+        authorization: `Bearer ${sessionFor("agent:docs-bot")!}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({ visibility: "public", token: "should-not-be-written" }),
