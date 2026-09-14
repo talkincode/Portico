@@ -1,6 +1,6 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
-import { gatewayUrl, listenGateway } from "./server.ts";
+import { listenGateway } from "./server.ts";
 
 class UsageError extends Error {
   readonly code = ErrorCode.USAGE;
@@ -27,8 +27,11 @@ if (import.meta.main) {
       sessionsPath: env.PORTICO_SESSIONS_PATH,
       hostname,
       port,
-      onListen: () => {
-        console.log(JSON.stringify({ ok: true, data: { url: gatewayUrl(server) } }));
+      onListen: (addr) => {
+        console.log(JSON.stringify({
+          ok: true,
+          data: { url: `http://${addr.hostname}:${addr.port}` },
+        }));
       },
     });
     await server.finished;
