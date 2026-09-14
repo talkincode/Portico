@@ -359,7 +359,7 @@ export function renderPublicArticle(input: PublicArticleInput): string | null {
   const channels = surface.channels;
 
   const body = `    <main class="tk-shell pub-article">
-      <nav class="int-crumb" aria-label="面包屑">
+      <nav class="pub-crumb int-crumb" aria-label="面包屑">
         <a href="/public">首发</a>
         <span class="int-crumb__sep">›</span>
         <a href="/public/t/${esc(channels[0])}">${esc(CHANNEL_LABEL[channels[0]])}</a>
