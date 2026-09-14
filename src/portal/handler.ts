@@ -46,6 +46,13 @@ export async function handlePortalRequest(
     if (mcpItem) {
       return jsonOk(await context.catalog.describeMcp(actor, mcpItem[1]));
     }
+    if (url.pathname === "/api/web") {
+      return jsonOk(await context.catalog.listWeb(actor));
+    }
+    const webItem = url.pathname.match(/^\/api\/web\/([a-z][a-z0-9-]{1,62})$/);
+    if (webItem) {
+      return jsonOk(await context.catalog.describeWeb(actor, webItem[1]));
+    }
     if (url.pathname === "/api/audit") {
       const audit = new AuditService(context.catalog, context.access, context.gateway);
       return jsonOk(await audit.list(actor));

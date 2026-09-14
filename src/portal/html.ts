@@ -21,6 +21,7 @@ export function renderDiscoveryPage(view: DashboardView): string {
           <td>${escapeHtml(surface.visibility)}</td>
           <td>${escapeHtml(surface.channels.join(", "))}</td>
           <td>${escapeHtml(surface.version)}</td>
+          <td>${renderEntry(surface.entry.kind, surface.entry.value)}</td>
         </tr>`).join("");
 
   const empty = view.surfaces.length === 0 ? `<p class="empty">没有可见的 Agent 表面。</p>` : "";
@@ -64,6 +65,7 @@ export function renderDiscoveryPage(view: DashboardView): string {
           <th>可见性</th>
           <th>渠道</th>
           <th>版本</th>
+          <th>入口</th>
         </tr>
       </thead>
       <tbody>${rows}
@@ -93,6 +95,23 @@ export function dashboardFrom(surfaces: AgentSurface[]): DashboardView {
   }
   const ordered = [...surfaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return { counts, surfaces: ordered };
+}
+
+function renderEntry(kind: string, value: string): string {
+  const safe = escapeHtml(value);
+  if (kind === "url" && isDirectHttpHref(value)) {
+    return `<a href="${safe}" rel="noopener noreferrer">${safe}</a>`;
+  }
+  return `<code>${escapeHtml(kind)}: ${safe}</code>`;
+}
+
+function isDirectHttpHref(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export function escapeHtml(value: string): string {

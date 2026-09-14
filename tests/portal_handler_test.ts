@@ -52,6 +52,19 @@ function internalMcp(): RegisterInput {
   };
 }
 
+function internalWeb(): RegisterInput {
+  return {
+    id: "docs-web",
+    name: "Docs Web",
+    description: "External documentation portal.",
+    channels: ["web"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "url", value: "https://docs.example.test/portals/docs-writer" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  };
+}
+
 async function seededContext() {
   const identities = new MemoryIdentityStore();
   const access = new AccessService(identities);
@@ -298,6 +311,91 @@ Deno.test("reader sees the same MCP connection on portal that catalog registered
   const record = described.body.data as { id: string; connect: { mode: string } };
   assertEquals(record.id, "docs-mcp");
   assertEquals(record.connect.mode, "direct");
+});
+
+Deno.test("reader sees the same web href on portal that catalog registered", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalWeb());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/web", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.ok, true);
+  const data = listed.body.data as Array<{
+    id: string;
+    href: { value: string };
+    connect: { mode: string };
+  }>;
+  assertEquals(data.length, 1);
+  assertEquals(data[0].id, "docs-web");
+  assertEquals(data[0].href.value, "https://docs.example.test/portals/docs-writer");
+  assertEquals(data[0].connect.mode, "direct");
+
+  const described = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/web/docs-web", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(described.status, 200);
+  const record = described.body.data as { id: string; connect: { mode: string } };
+  assertEquals(record.id, "docs-web");
+  assertEquals(record.connect.mode, "direct");
+
+  const html = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(html.status, 200);
+  const page = await html.text();
+  assert(page.includes("Docs Web"));
+  assert(page.includes('href="https://docs.example.test/portals/docs-writer"'));
+});
+
+Deno.test("portal HTML escapes web hrefs so entries cannot inject markup", async () => {
+  const context = await seededContext();
+  const input = internalWeb();
+  input.entry = {
+    kind: "url",
+    value: 'https://docs.example.test/app?q="><script>x</script>',
+  };
+  await context.catalog.register(maintainer, input);
+
+  const html = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  const page = await html.text();
+  assert(!page.includes('"><script>x</script>'), "raw markup must not appear in href");
+  assert(page.includes("&quot;"), "quotes in authorized hrefs must be escaped");
+  assert(page.includes("&lt;script&gt;"), "angle brackets in authorized hrefs must be escaped");
+});
+
+Deno.test("anonymous cannot see an internal web href on the portal", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalWeb());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/web"), context),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.data, []);
+
+  const described = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/web/docs-web"), context),
+  );
+  assertEquals(described.status, 404);
+  assertEquals(described.body.ok, false);
+  assertEquals(described.body.error?.code, "NOT_FOUND");
+
+  const html = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const page = await html.text();
+  assert(!page.includes("Docs Web"));
+  assert(!page.includes("https://docs.example.test/portals/docs-writer"));
 });
 
 Deno.test("anonymous cannot see an internal MCP connection on the portal", async () => {

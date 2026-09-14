@@ -79,6 +79,19 @@ export function sampleMcpRecord() {
   };
 }
 
+export function sampleWebRecord() {
+  return {
+    id: "docs-web",
+    name: "Docs Web",
+    description: "External documentation portal.",
+    channels: ["web"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "url", value: "https://docs.example.test/portals/docs-writer" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  };
+}
+
 export async function bootstrapRoster(identities: string): Promise<Record<string, string>> {
   const first = await runCli([
     "identity",

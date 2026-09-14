@@ -20,6 +20,7 @@ import type {
   RegisterInput,
   UpdateInput,
   Visibility,
+  WebConnectionInfo,
 } from "./types.ts";
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,62}$/;
@@ -243,7 +244,7 @@ export class CatalogService {
     const now = new Date().toISOString();
     const channels = parsed.fields.channels ?? existing.channels;
     const entry = parsed.fields.entry ?? existing.entry;
-    assertMcpChannelEntry(channels, entry);
+    assertChannelEntry(channels, entry);
 
     const record: AgentSurface = {
       ...existing,
@@ -459,6 +460,19 @@ export class CatalogService {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
     }
     return toMcpConnection(record);
+  }
+
+  async listWeb(actor: Actor): Promise<WebConnectionInfo[]> {
+    const records = await this.list(actor);
+    return records.filter(isWebSurface).map(toWebConnection);
+  }
+
+  async describeWeb(actor: Actor, id: string): Promise<WebConnectionInfo> {
+    const record = await this.get(actor, id);
+    if (!isWebSurface(record)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+    return toWebConnection(record);
   }
 }
 
@@ -682,7 +696,7 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
 
   const channels = parseChannels(input.channels);
   const entry = parseEntry(input.entry);
-  assertMcpChannelEntry(channels, entry);
+  assertChannelEntry(channels, entry);
   const maintainers = parseMaintainers(input.maintainers);
 
   return {
@@ -716,6 +730,11 @@ function isMcpSurface(record: AgentSurface): boolean {
     record.entry.kind === "mcp_endpoint";
 }
 
+function isWebSurface(record: AgentSurface): boolean {
+  return record.channels.length === 1 && record.channels[0] === "web" &&
+    record.entry.kind === "url";
+}
+
 function toMcpConnection(record: AgentSurface): McpConnectionInfo {
   return {
     id: record.id,
@@ -729,8 +748,22 @@ function toMcpConnection(record: AgentSurface): McpConnectionInfo {
   };
 }
 
-function assertMcpChannelEntry(channels: Channel[], entry: EntryRef): void {
+function toWebConnection(record: AgentSurface): WebConnectionInfo {
+  return {
+    id: record.id,
+    name: record.name,
+    description: record.description,
+    version: record.version,
+    visibility: record.visibility,
+    governanceState: record.governanceState,
+    href: { ...record.entry },
+    connect: { mode: "direct" },
+  };
+}
+
+function assertChannelEntry(channels: Channel[], entry: EntryRef): void {
   const hasMcp = channels.includes("mcp");
+  const hasWeb = channels.includes("web");
   if (hasMcp && (channels.length !== 1 || entry.kind !== "mcp_endpoint")) {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
@@ -743,31 +776,46 @@ function assertMcpChannelEntry(channels: Channel[], entry: EntryRef): void {
       "mcp_endpoint requires the mcp channel",
     );
   }
+  if (hasWeb && (channels.length !== 1 || entry.kind !== "url")) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "web channel requires a single url entry",
+    );
+  }
+  if (entry.kind === "url" && !hasWeb) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "url entry requires the web channel",
+    );
+  }
   if (entry.kind === "mcp_endpoint") {
-    parseMcpEndpoint(entry.value);
+    parseHttpHref(entry.value, "mcp_endpoint");
+  }
+  if (entry.kind === "url") {
+    parseHttpHref(entry.value, "url");
   }
 }
 
-function parseMcpEndpoint(value: string): void {
+function parseHttpHref(value: string, field: "mcp_endpoint" | "url"): void {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
-      "mcp_endpoint must be an absolute http(s) URL",
+      `${field} must be an absolute http(s) URL`,
     );
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
-      "mcp_endpoint must be an http(s) URL, not a command or other scheme",
+      `${field} must be an http(s) URL, not a command or other scheme`,
     );
   }
   if (url.username || url.password) {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
-      "mcp_endpoint must not include userinfo; store a secret reference instead",
+      `${field} must not include userinfo; store a secret reference instead`,
     );
   }
   for (const key of url.searchParams.keys()) {
