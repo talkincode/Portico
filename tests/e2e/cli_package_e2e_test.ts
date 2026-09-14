@@ -135,12 +135,7 @@ Deno.test("CLI anonymous cannot list or describe an internal package surface", a
     "list",
     "--catalog",
     catalog,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(listed.code, 0, listed.raw || listed.stderr);
   const listBody = listed.stdout as { ok: boolean; data: unknown[] };
@@ -153,12 +148,7 @@ Deno.test("CLI anonymous cannot list or describe an internal package surface", a
     "docs-writer",
     "--catalog",
     catalog,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(described.code, 1);
   const describeBody = described.stdout as { ok: boolean; error: { code: string } };
@@ -227,12 +217,7 @@ Deno.test("CLI public package publish stays hidden from anonymous until independ
     "list",
     "--catalog",
     catalog,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(anonPending.code, 0, anonPending.raw || anonPending.stderr);
   const pendingBody = anonPending.stdout as { ok: boolean; data: unknown[] };
@@ -256,12 +241,7 @@ Deno.test("CLI public package publish stays hidden from anonymous until independ
     "docs-writer",
     "--catalog",
     catalog,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(anonApproved.code, 0, anonApproved.raw || anonApproved.stderr);
   const describeBody = anonApproved.stdout as {

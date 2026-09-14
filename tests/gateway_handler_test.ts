@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { AccessService, MemoryIdentityStore } from "../src/access/mod.ts";
+import { type RosterFixture, signedInRoster } from "./fixtures.ts";
 import {
   type Actor,
   CatalogService,
@@ -45,36 +45,20 @@ function internalMcp(): RegisterInput {
   };
 }
 
+let roster: RosterFixture;
+
 async function seededContext() {
-  const identities = new MemoryIdentityStore();
-  const access = new AccessService(identities);
-  await access.grant(null, {
-    id: "human:security-auditor",
-    kind: "human",
-    role: "auditor",
-  });
-  await access.grant(auditor, {
-    id: "agent:docs-bot",
-    kind: "agent",
-    role: "maintainer",
-  });
-  await access.grant(auditor, {
-    id: "human:reader",
-    kind: "human",
-    role: "reader",
-  });
+  roster = await signedInRoster();
+  const access = roster.access;
   const catalogStore = new MemoryCatalogStore();
   const catalog = new CatalogService(catalogStore);
   const gateway = new GatewayService(catalog, new MemoryGatewayAuditStore());
   return { catalog, catalogStore, access, gateway };
 }
 
+/** A real Bearer session: an identity is proven, never asserted. */
 function actorHeaders(actor: Actor): HeadersInit {
-  return {
-    "x-portico-actor-id": actor.id,
-    "x-portico-actor-kind": actor.kind,
-    "x-portico-actor-role": actor.role,
-  };
+  return roster.headersFor(actor.id);
 }
 
 async function jsonOf(response: Response): Promise<{

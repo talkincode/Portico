@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "../assert.ts";
-import { actor, ROOT, runCli, sampleMcpRecord } from "./harness.ts";
+import { actor, bootstrapRoster, ROOT, runCli, sampleMcpRecord } from "./harness.ts";
 import { bootEntrypoint, type JsonBody } from "./process.ts";
 
 /**
@@ -47,36 +47,12 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
   const dataDir = `${dir}/data`;
   const catalog = `${dataDir}/catalog.json`;
   const identities = `${dataDir}/identities.json`;
+  const sessions = `${dataDir}/sessions.json`;
 
   // ── seed one governed, approved-public MCP surface ───────────────────
-  const bootstrap = await runCli([
-    "identity",
-    "grant",
-    "--identities",
-    identities,
-    "--id",
-    "human:security-auditor",
-    "--kind",
-    "human",
-    "--role",
-    "auditor",
-  ]);
-  assertEquals(bootstrap.code, 0, bootstrap.raw);
-
-  const maintainer = await runCli([
-    "identity",
-    "grant",
-    "--identities",
-    identities,
-    ...actor("auditor", "human:security-auditor", "human"),
-    "--id",
-    "agent:docs-bot",
-    "--kind",
-    "agent",
-    "--role",
-    "maintainer",
-  ]);
-  assertEquals(maintainer.code, 0, maintainer.raw);
+  await bootstrapRoster(identities, sessions);
+  const auditor = actor("auditor", "human:security-auditor", "human");
+  const maintainer = actor("maintainer", "agent:docs-bot");
 
   const record = `${dir}/mcp.json`;
   await Deno.writeTextFile(record, JSON.stringify(sampleMcpRecord()));
@@ -87,7 +63,7 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     catalog,
     "--identities",
     identities,
-    ...actor("maintainer"),
+    ...maintainer,
     "--input",
     record,
   ]);
@@ -100,7 +76,7 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     catalog,
     "--identities",
     identities,
-    ...actor("maintainer"),
+    ...maintainer,
     "--id",
     "docs-mcp",
     "--visibility",
@@ -115,7 +91,7 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     catalog,
     "--identities",
     identities,
-    ...actor("auditor", "human:security-auditor", "human"),
+    ...auditor,
     "--id",
     "docs-mcp",
   ]);

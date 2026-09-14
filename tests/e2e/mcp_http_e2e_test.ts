@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "../assert.ts";
 import { MCP_PERMS, PORTAL_PERMS } from "../../src/perms.ts";
-import { actor, ROOT, runCli } from "./harness.ts";
+import { actor, bootstrapRoster, ROOT, runCli, sessionFor } from "./harness.ts";
 import { bootEntrypoint } from "./process.ts";
 
 /**
@@ -84,43 +84,10 @@ Deno.test("E2E: CLI, Portal and MCP present the same governance state", async ()
   const catalog = `${dataDir}/catalog.json`;
   const identities = `${dataDir}/identities.json`;
   const sessions = `${dataDir}/sessions.json`;
+  // bootstrapRoster grants the standard roster and signs every identity in;
+  // `actor()` then authenticates with a real session.
+  await bootstrapRoster(identities, sessions);
   const auditor = actor("auditor", "human:security-auditor", "human");
-
-  // ── roster ───────────────────────────────────────────────────────────
-  const bootstrap = await runCli([
-    "identity",
-    "grant",
-    "--identities",
-    identities,
-    "--id",
-    "human:security-auditor",
-    "--kind",
-    "human",
-    "--role",
-    "auditor",
-  ]);
-  assertEquals(bootstrap.code, 0, bootstrap.raw);
-  for (
-    const [id, kind, role] of [
-      ["agent:docs-bot", "agent", "maintainer"],
-      ["human:reader", "human", "reader"],
-    ]
-  ) {
-    const granted = await runCli([
-      "identity",
-      "grant",
-      "--identities",
-      identities,
-      ...auditor,
-      "--id",
-      id,
-      "--kind",
-      kind,
-      "--role",
-      role,
-    ]);
-    assertEquals(granted.code, 0, granted.raw);
-  }
 
   // ── one approved-public surface and one internal-only surface ────────
   const records: Array<[string, unknown]> = [
@@ -188,36 +155,8 @@ Deno.test("E2E: CLI, Portal and MCP present the same governance state", async ()
   ]);
   assertEquals(approved.code, 0, approved.raw);
 
-  // ── a real reader session, not a claimed identity ────────────────────
-  const issued = await runCli([
-    "identity",
-    "credential",
-    "issue",
-    "--identities",
-    identities,
-    "--sessions",
-    sessions,
-    ...auditor,
-    "--id",
-    "human:reader",
-  ]);
-  assertEquals(issued.code, 0, issued.raw);
-  const credential = (issued.stdout as Envelope<{ token: string }>).data?.token ?? "";
-  const loggedIn = await runCli([
-    "identity",
-    "login",
-    "--identities",
-    identities,
-    "--sessions",
-    sessions,
-    "--id",
-    "human:reader",
-    "--token",
-    credential,
-  ]);
-  assertEquals(loggedIn.code, 0, loggedIn.raw);
-  const session = (loggedIn.stdout as Envelope<{ token: string }>).data?.token ?? "";
-  assert(session.startsWith("pst1_"), "login must return a session token");
+  // A real reader session, not a claimed identity.
+  const session = sessionFor("human:reader")!;
 
   // ── all three entrances, as real processes ───────────────────────────
   const portal = await bootEntrypoint<{ url: string }>(PORTAL, {

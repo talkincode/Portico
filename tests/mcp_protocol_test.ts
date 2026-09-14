@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { AccessService, MemoryIdentityStore, MemorySessionStore } from "../src/access/mod.ts";
+import { signedInRoster } from "./fixtures.ts";
 import {
   type Actor,
   CatalogService,
@@ -17,6 +17,9 @@ import { handleMcpRequest, type McpContext } from "../src/mcp/mod.ts";
 
 const maintainer: Actor = { id: "agent:docs-bot", kind: "agent", role: "maintainer" };
 const auditor: Actor = { id: "human:security-auditor", kind: "human", role: "auditor" };
+
+/** Session tokens the fixture roster actually signed in with. */
+const SESSION_TOKENS = new Map<string, string>();
 
 interface JsonRpcBody {
   jsonrpc: string;
@@ -38,10 +41,11 @@ interface Envelope {
 async function seeded(): Promise<{ context: McpContext; catalog: CatalogService }> {
   const store: CatalogStore = new MemoryCatalogStore();
   const catalog = new CatalogService(store);
-  const access = new AccessService(
-    new MemoryIdentityStore(),
-    new MemorySessionStore(),
-  );
+  const roster = await signedInRoster();
+  const access = roster.access;
+  for (const id of ["human:security-auditor", "agent:docs-bot", "human:reader"]) {
+    SESSION_TOKENS.set(id, roster.tokenFor(id));
+  }
 
   await catalog.register(maintainer, {
     id: "docs-writer",
@@ -140,8 +144,8 @@ Deno.test("anonymous sees only approved-public surfaces through MCP", async () =
 
 Deno.test("an MCP caller cannot claim an identity with a header", async () => {
   const { context } = await seeded();
-  // The Portal/Gateway claim path is deliberately absent here: a forged
-  // auditor header must not turn into an auditor session.
+  // A forged auditor header must not turn into an auditor session. This is the
+  // rule the Portal and Gateway now follow too.
   const response = await rpc(context, {
     jsonrpc: "2.0",
     id: 1,
@@ -157,6 +161,25 @@ Deno.test("an MCP caller cannot claim an identity with a header", async () => {
   });
   assertEquals(response.body.result?.isError, true);
   assertEquals(envelope(response.body).error?.code, "FORBIDDEN");
+});
+
+Deno.test("an MCP session proves the identity the roster granted", async () => {
+  const { context } = await seeded();
+  // The fixture roster has a real session; the auditor's own session must be
+  // able to read the trail, which is the positive half of the rule above.
+  const response = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_audit", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${SESSION_TOKENS.get("human:security-auditor")!}`,
+    },
+  });
+  assertEquals(response.body.result?.isError, undefined);
+  assert(Array.isArray(envelope(response.body).data));
 });
 
 Deno.test("the audit tool is refused for non-auditors and filled for auditors", async () => {

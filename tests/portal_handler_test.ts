@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { AccessService, MemoryIdentityStore } from "../src/access/mod.ts";
+import { type RosterFixture, signedInRoster } from "./fixtures.ts";
 import {
   type Actor,
   CatalogService,
@@ -65,34 +65,18 @@ function internalWeb(): RegisterInput {
   };
 }
 
+let roster: RosterFixture;
+
 async function seededContext() {
-  const identities = new MemoryIdentityStore();
-  const access = new AccessService(identities);
-  await access.grant(null, {
-    id: "human:security-auditor",
-    kind: "human",
-    role: "auditor",
-  });
-  await access.grant(auditor, {
-    id: "agent:docs-bot",
-    kind: "agent",
-    role: "maintainer",
-  });
-  await access.grant(auditor, {
-    id: "human:reader",
-    kind: "human",
-    role: "reader",
-  });
+  roster = await signedInRoster();
+  const access = roster.access;
   const catalog = new CatalogService(new MemoryCatalogStore());
   return { catalog, access };
 }
 
+/** A real Bearer session: an identity is proven, never asserted. */
 function actorHeaders(actor: Actor): HeadersInit {
-  return {
-    "x-portico-actor-id": actor.id,
-    "x-portico-actor-kind": actor.kind,
-    "x-portico-actor-role": actor.role,
-  };
+  return roster.headersFor(actor.id);
 }
 
 async function jsonOf(response: Response): Promise<{
@@ -231,22 +215,9 @@ Deno.test("HTML escapes surface names so portal pages are not a CMS", async () =
 });
 
 Deno.test("portal writes are rejected and do not mutate the catalog", async () => {
-  const store = new MemoryCatalogStore();
-  const identities = new MemoryIdentityStore();
-  const access = new AccessService(identities);
-  await access.grant(null, {
-    id: "human:security-auditor",
-    kind: "human",
-    role: "auditor",
-  });
-  await access.grant(auditor, {
-    id: "agent:docs-bot",
-    kind: "agent",
-    role: "maintainer",
-  });
-  const catalog = new CatalogService(store);
-  await catalog.register(maintainer, internalCli());
-  const before = JSON.stringify(await store.list());
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  const before = JSON.stringify(await context.catalog.list(auditor));
 
   const response = await handlePortalRequest(
     new Request("http://portico.local/api/catalog", {
@@ -254,29 +225,60 @@ Deno.test("portal writes are rejected and do not mutate the catalog", async () =
       headers: { ...actorHeaders(maintainer), "content-type": "application/json" },
       body: JSON.stringify({ id: "evil", visibility: "public" }),
     }),
-    { catalog, access },
+    context,
   );
   const { status, body } = await jsonOf(response);
   assertEquals(status, 405);
   assertEquals(body.ok, false);
   assertEquals(body.error?.code, "USAGE");
-  assertEquals(JSON.stringify(await store.list()), before);
+  assertEquals(JSON.stringify(await context.catalog.list(auditor)), before);
 });
 
-Deno.test("claimed role that does not match the roster is forbidden", async () => {
+Deno.test("a forged actor header grants nothing; the caller gets the anonymous view", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
-  const response = await handlePortalRequest(
-    new Request("http://portico.local/api/catalog", {
-      headers: actorHeaders({ id: "human:reader", kind: "human", role: "auditor" }),
-    }),
-    context,
+  // The exact strings an agent would copy out of the README, with no session.
+  const forged = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog", {
+        headers: {
+          "x-portico-actor-id": "human:security-auditor",
+          "x-portico-actor-kind": "human",
+          "x-portico-actor-role": "auditor",
+        },
+      }),
+      context,
+    ),
   );
-  const { status, body } = await jsonOf(response);
-  assertEquals(status, 403);
-  assertEquals(body.ok, false);
-  assertEquals(body.error?.code, "FORBIDDEN");
+  assertEquals(forged.status, 200);
+  // Anonymous sees no internal record, and in particular not the audit trail.
+  assertEquals(forged.body.data, []);
+
+  const audit = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", {
+        headers: {
+          "x-portico-actor-id": "human:security-auditor",
+          "x-portico-actor-kind": "human",
+          "x-portico-actor-role": "auditor",
+        },
+      }),
+      context,
+    ),
+  );
+  assertEquals(audit.status, 403);
+  assertEquals(audit.body.error?.code, "FORBIDDEN");
+
+  // A real session for the same identity does see it.
+  const real = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(real.status, 200);
+  assertEquals((real.body.data as Array<{ id: string }>).map((s) => s.id), ["docs-writer"]);
 });
 
 Deno.test("reader sees the same MCP connection on portal that catalog registered", async () => {

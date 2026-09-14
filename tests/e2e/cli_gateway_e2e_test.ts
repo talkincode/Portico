@@ -119,12 +119,7 @@ Deno.test("CLI anonymous authorize of internal MCP fails; catalog unchanged; den
     catalog,
     "--audit",
     audit,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(denied.code, 1);
   const body = denied.stdout as { ok: boolean; error: { code: string; message: string } };
@@ -241,12 +236,7 @@ Deno.test("CLI pending public MCP stays unauthorized for anonymous until indepen
     catalog,
     "--audit",
     audit,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(pending.code, 1);
   const pendingBody = pending.stdout as { ok: boolean; error: { code: string } };
@@ -272,12 +262,7 @@ Deno.test("CLI pending public MCP stays unauthorized for anonymous until indepen
     catalog,
     "--audit",
     audit,
-    "--actor-id",
-    "anonymous",
-    "--actor-kind",
-    "human",
-    "--actor-role",
-    "anonymous",
+    ...actor("anonymous", "anonymous", "human"),
   ]);
   assertEquals(allowed.code, 0, allowed.raw || allowed.stderr);
   const route = allowed.stdout as {

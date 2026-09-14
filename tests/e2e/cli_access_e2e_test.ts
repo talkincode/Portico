@@ -1,116 +1,15 @@
 import { assertEquals } from "../assert.ts";
+import { actor, bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
 
-const ROOT = new URL("../../", import.meta.url).pathname;
-const CLI = `${ROOT}src/cli/main.ts`;
-
-interface CliResult {
-  code: number;
-  stdout: unknown;
-  raw: string;
-  stderr: string;
-}
-
-async function runCli(
-  args: string[],
-  env: Record<string, string> = {},
-): Promise<CliResult> {
-  const command = new Deno.Command(Deno.execPath(), {
-    args: [
-      "run",
-      "--allow-read",
-      "--allow-write",
-      "--allow-env",
-      CLI,
-      ...args,
-    ],
-    cwd: ROOT,
-    env: { ...Deno.env.toObject(), ...env },
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const output = await command.output();
-  const raw = new TextDecoder().decode(output.stdout).trim();
-  const stderr = new TextDecoder().decode(output.stderr);
-  let stdout: unknown = null;
-  if (raw) {
-    try {
-      stdout = JSON.parse(raw);
-    } catch {
-      stdout = raw;
-    }
-  }
-  return { code: output.code, stdout, raw, stderr };
-}
-
-function actor(role: string, id: string, kind: string) {
-  return [
-    "--actor-id",
-    id,
-    "--actor-kind",
-    kind,
-    "--actor-role",
-    role,
-  ];
-}
-
-function sampleRecord() {
-  return {
-    id: "docs-writer",
-    name: "Docs Writer",
-    description: "Drafts internal documentation.",
-    channels: ["cli"],
-    version: "1.0.0",
-    visibility: "internal",
-    entry: { kind: "package", value: "jsr:@example/docs-writer" },
-    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
-  };
-}
-
-async function bootstrapRoster(identities: string): Promise<void> {
-  const first = await runCli([
-    "identity",
-    "grant",
-    "--identities",
-    identities,
-    "--id",
-    "human:security-auditor",
-    "--kind",
-    "human",
-    "--role",
-    "auditor",
-  ]);
-  assertEquals(first.code, 0, first.raw || first.stderr);
-
-  const maintainer = await runCli([
-    "identity",
-    "grant",
-    "--identities",
-    identities,
-    ...actor("auditor", "human:security-auditor", "human"),
-    "--id",
-    "agent:docs-bot",
-    "--kind",
-    "agent",
-    "--role",
-    "maintainer",
-  ]);
-  assertEquals(maintainer.code, 0, maintainer.raw || maintainer.stderr);
-
-  const reader = await runCli([
-    "identity",
-    "grant",
-    "--identities",
-    identities,
-    ...actor("auditor", "human:security-auditor", "human"),
-    "--id",
-    "human:reader",
-    "--kind",
-    "human",
-    "--role",
-    "reader",
-  ]);
-  assertEquals(reader.code, 0, reader.raw || reader.stderr);
-}
+/**
+ * Identity is proven, not claimed.
+ *
+ * These tests used to show a caller *asserting* a role and being checked
+ * against the roster. That is not proof: the roster ids are published in the
+ * README, so an agent maintainer could type `human:security-auditor` and
+ * approve its own public submission. Now every non-anonymous command runs on a
+ * login session, and `--actor-*` on its own is refused outright.
+ */
 
 Deno.test("CLI happy path: granted maintainer registers; reader lists the same record", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-access-e2e-" });
@@ -127,7 +26,7 @@ Deno.test("CLI happy path: granted maintainer registers; reader lists the same r
     catalog,
     "--identities",
     identities,
-    ...actor("maintainer", "agent:docs-bot", "agent"),
+    ...actor("maintainer", "agent:docs-bot"),
     "--input",
     input,
   ]);
@@ -155,7 +54,7 @@ Deno.test("CLI happy path: granted maintainer registers; reader lists the same r
   assertEquals(listBody.data[0].id, "docs-writer");
 });
 
-Deno.test("CLI maintainer cannot claim auditor; identities and catalog stay unchanged", async () => {
+Deno.test("CLI refuses a claimed auditor outright; catalog and approvals stay untouched", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-access-e2e-" });
   const identities = `${dir}/identities.json`;
   const catalog = `${dir}/catalog.json`;
@@ -170,7 +69,7 @@ Deno.test("CLI maintainer cannot claim auditor; identities and catalog stay unch
     catalog,
     "--identities",
     identities,
-    ...actor("maintainer", "agent:docs-bot", "agent"),
+    ...actor("maintainer", "agent:docs-bot"),
     "--input",
     input,
   ]);
@@ -183,7 +82,7 @@ Deno.test("CLI maintainer cannot claim auditor; identities and catalog stay unch
     catalog,
     "--identities",
     identities,
-    ...actor("maintainer", "agent:docs-bot", "agent"),
+    ...actor("maintainer", "agent:docs-bot"),
     "--id",
     "docs-writer",
     "--visibility",
@@ -191,6 +90,7 @@ Deno.test("CLI maintainer cannot claim auditor; identities and catalog stay unch
   ]);
   assertEquals(published.code, 0, published.raw || published.stderr);
 
+  // The exact string an agent would copy out of the README, with no session.
   const claimed = await runCli([
     "catalog",
     "approve",
@@ -198,14 +98,19 @@ Deno.test("CLI maintainer cannot claim auditor; identities and catalog stay unch
     catalog,
     "--identities",
     identities,
-    ...actor("auditor", "agent:docs-bot", "agent"),
+    "--actor-id",
+    "human:security-auditor",
+    "--actor-kind",
+    "human",
+    "--actor-role",
+    "auditor",
     "--id",
     "docs-writer",
   ]);
   assertEquals(claimed.code, 1);
-  const body = claimed.stdout as { ok: boolean; error: { code: string } };
+  const body = claimed.stdout as { ok: boolean; error: { code: string; message: string } };
   assertEquals(body.ok, false);
-  assertEquals(body.error.code, "FORBIDDEN");
+  assertEquals(body.error.code, "USAGE");
 
   const file = JSON.parse(await Deno.readTextFile(catalog)) as {
     records: Array<{ governanceState: string }>;
@@ -213,6 +118,60 @@ Deno.test("CLI maintainer cannot claim auditor; identities and catalog stay unch
   };
   assertEquals(file.records[0].governanceState, "pending_public");
   assertEquals(file.approvals ?? [], []);
+});
+
+Deno.test("CLI maintainer session cannot approve; only an auditor session can", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-access-e2e-" });
+  const identities = `${dir}/identities.json`;
+  const catalog = `${dir}/catalog.json`;
+  const input = `${dir}/record.json`;
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord())}\n`);
+  await bootstrapRoster(identities);
+
+  for (
+    const args of [
+      ["catalog", "register", "--input", input],
+      ["catalog", "publish", "--id", "docs-writer", "--visibility", "public"],
+    ]
+  ) {
+    const result = await runCli([
+      ...args,
+      "--catalog",
+      catalog,
+      "--identities",
+      identities,
+      ...actor("maintainer", "agent:docs-bot"),
+    ]);
+    assertEquals(result.code, 0, result.raw || result.stderr);
+  }
+
+  const refused = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    "--identities",
+    identities,
+    ...actor("maintainer", "agent:docs-bot"),
+    "--id",
+    "docs-writer",
+  ]);
+  assertEquals(refused.code, 1);
+  const body = refused.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(body.error.code, "FORBIDDEN");
+
+  const allowed = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    "--identities",
+    identities,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+  ]);
+  assertEquals(allowed.code, 0, allowed.raw || allowed.stderr);
 });
 
 Deno.test("CLI maintainer cannot grant self auditor; identity file is not rewritten", async () => {
@@ -226,7 +185,7 @@ Deno.test("CLI maintainer cannot grant self auditor; identity file is not rewrit
     "grant",
     "--identities",
     identities,
-    ...actor("maintainer", "agent:docs-bot", "agent"),
+    ...actor("maintainer", "agent:docs-bot"),
     "--id",
     "agent:docs-bot",
     "--kind",
@@ -241,7 +200,7 @@ Deno.test("CLI maintainer cannot grant self auditor; identity file is not rewrit
   assertEquals(await Deno.readTextFile(identities), before);
 });
 
-Deno.test("CLI unknown identity cannot register; catalog file is absent", async () => {
+Deno.test("CLI anonymous cannot register; catalog file is absent", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-access-e2e-" });
   const identities = `${dir}/identities.json`;
   const catalog = `${dir}/catalog.json`;
@@ -256,7 +215,6 @@ Deno.test("CLI unknown identity cannot register; catalog file is absent", async 
     catalog,
     "--identities",
     identities,
-    ...actor("maintainer", "agent:stranger", "agent"),
     "--input",
     input,
   ]);

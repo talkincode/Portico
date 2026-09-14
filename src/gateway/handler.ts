@@ -1,12 +1,6 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
-import {
-  type Actor,
-  type ActorKind,
-  type ActorRole,
-  CatalogError,
-  ErrorCode,
-} from "../catalog/mod.ts";
+import { type Actor, CatalogError, ErrorCode } from "../catalog/mod.ts";
 import type { GatewayService } from "./service.ts";
 
 export interface GatewayContext {
@@ -14,8 +8,6 @@ export interface GatewayContext {
   gateway: GatewayService;
 }
 
-const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
-const ACTOR_ROLES = new Set<ActorRole>(["reader", "maintainer", "auditor", "anonymous"]);
 const AUTHORIZE = /^\/gateway\/mcp\/([a-z][a-z0-9-]{1,62})\/authorize$/;
 
 export async function handleGatewayRequest(
@@ -57,32 +49,14 @@ function isToolExecution(request: Request, pathname: string): boolean {
   return true;
 }
 
+/**
+ * Gateway callers prove who they are with a session, or they are anonymous.
+ * No `X-Portico-Actor-*` path: a header is not proof of an identity.
+ */
 async function resolveActor(request: Request, access: AccessService): Promise<Actor> {
   return await access.resolveRequestActor({
     sessionToken: readSessionToken(request),
-    claimed: readClaimedActor(request),
   });
-}
-
-function readClaimedActor(request: Request): Actor | null {
-  const id = request.headers.get("x-portico-actor-id");
-  const kind = request.headers.get("x-portico-actor-kind");
-  const role = request.headers.get("x-portico-actor-role");
-  if (!id && !kind && !role) return null;
-  if (!id || !kind || !role) {
-    throw new CatalogError(
-      ErrorCode.INVALID_INPUT,
-      "actor headers must include id, kind, and role together",
-    );
-  }
-  if (!ACTOR_KINDS.has(kind as ActorKind) || !ACTOR_ROLES.has(role as ActorRole)) {
-    throw new CatalogError(ErrorCode.INVALID_INPUT, "actor kind or role is invalid");
-  }
-  return {
-    id,
-    kind: kind as ActorKind,
-    role: role as ActorRole,
-  };
 }
 
 function jsonOk(data: unknown): Response {

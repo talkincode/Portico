@@ -173,7 +173,7 @@ Deno.test(
     ], env);
     assertEquals(approved.code, 0, approved.raw || approved.stderr);
 
-    const anon = ["--actor-id", "anonymous", "--actor-kind", "human", "--actor-role", "anonymous"];
+    const anon: string[] = [];
     const publicSeen = await runCli([
       "catalog",
       "get",
