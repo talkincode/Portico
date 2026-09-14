@@ -1,0 +1,34 @@
+#!/bin/bash
+# Portico Portal (read-only entrance).
+#
+# Canonical copy: this file is versioned so the deployment's permission
+# allow-list is reviewable and testable. `tests/deploy_contract_test.ts` fails
+# if it drifts from `src/perms.ts`.
+#
+# The read-only entrances must never be granted write access: an unconditional
+# `mkdir` in the store layer once turned every Gateway audit append into a 500
+# on the live deployment, because the deployed grant covers two files and not
+# the directory. Keeping this list in the repo is what makes that visible.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIND="${PORTICO_DEPLOY_BIND:-10.201.15.192}"
+PORT="${PORTICO_DEPLOY_PORT:-8788}"
+IMAGE="${PORTICO_DENO_IMAGE:-denoland/deno:2.9.6}"
+DOCKER="${PORTICO_DOCKER:-/usr/bin/docker}"
+
+exec "$DOCKER" run --rm --name portico-portal --network host \
+  --user 1000:1000 \
+  --tmpfs /tmp:rw,mode=1777 \
+  -e DENO_DIR=/tmp/deno-dir \
+  -v "$ROOT:/app:ro" \
+  -w /app \
+  -e PORTICO_BIND="$BIND" \
+  -e PORTICO_PORT="$PORT" \
+  -e PORTICO_CATALOG_PATH=/app/data/catalog.json \
+  -e PORTICO_IDENTITIES_PATH=/app/data/identities.json \
+  -e PORTICO_SESSIONS_PATH=/app/data/sessions.json \
+  -e PORTICO_GATEWAY_AUDIT_PATH=/app/data/gateway-audit.json \
+  "$IMAGE" \
+  run --allow-read=/app --allow-env --allow-net=127.0.0.1,"$BIND" \
+  src/portal/main.ts
