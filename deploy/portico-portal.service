@@ -1,16 +1,14 @@
-# Portico MCP entrance (read-only, session-authenticated).
+# Portico Portal entrance.
 #
 # Install on the intranet test host (needs root):
-#   sudo cp deploy/portico-mcp.service /etc/systemd/system/
+#   sudo cp deploy/portico-portal.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now portico-mcp
+#   sudo systemctl enable --now portico-portal
 #
 # ExecStart must be this checkout's versioned run script. Do not point at
 # /home/master/portico-runtime — that copy is not reviewed with the code.
-# MCP used to run as a detached unless-stopped container, so restarting
-# portal/gateway left it on an old process.
 [Unit]
-Description=Portico MCP entrance (intranet test, not production)
+Description=Portico Portal (intranet test, not production)
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -22,14 +20,14 @@ Restart=on-failure
 RestartSec=3
 WorkingDirectory=/home/master/src/portico
 Environment=PORTICO_DEPLOY_BIND=10.201.15.192
-Environment=PORTICO_DEPLOY_PORT=8790
-ExecStartPre=-/usr/bin/docker rm -f portico-mcp
-ExecStart=/home/master/src/portico/deploy/run-mcp.sh
-ExecStop=/usr/bin/docker stop portico-mcp
+Environment=PORTICO_DEPLOY_PORT=8788
+ExecStartPre=-/usr/bin/docker rm -f portico-portal
+ExecStart=/home/master/src/portico/deploy/run-portal.sh
+ExecStop=/usr/bin/docker stop portico-portal
 TimeoutStopSec=20
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=portico-mcp
+SyslogIdentifier=portico-portal
 
 [Install]
 WantedBy=multi-user.target

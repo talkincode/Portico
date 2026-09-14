@@ -1,6 +1,6 @@
 # 部署
 
-三份入口启动脚本 + 一份 systemd unit。**它们是版本化的**，因为部署的权限白名单决定了代码能不能跑：
+三份入口启动脚本 + 三份 systemd unit。**它们是版本化的**，因为部署的权限白名单决定了代码能不能跑，而重启合同必须覆盖全部三个入口：
 
 ## 为什么放在仓库里
 
@@ -22,6 +22,18 @@
 | `PORTICO_DOCKER` | `/usr/bin/docker` | docker 可执行文件 |
 
 数据目录固定为检出目录下的 `data/`，只有 Gateway 以可写方式挂载它。
+
+## systemd
+
+内网测试主机（appserver，不是生产上线）用这三份 unit，`ExecStart` 必须指向本仓库的 `deploy/run-*.sh`，**不得**指向未纳入审查的 `/home/master/portico-runtime` 副本。MCP 曾经以 `unless-stopped` 容器游离在 systemd 之外，只重启 portal/gateway 会留下旧 MCP 进程。
+
+```sh
+sudo cp deploy/portico-portal.service deploy/portico-gateway.service deploy/portico-mcp.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now portico-portal portico-gateway portico-mcp
+```
+
+unit 钉死 `PORTICO_DEPLOY_BIND=10.201.15.192` 与 8788/8789/8790。不要改成 `0.0.0.0`，不要占用无关生产端口。`tests/deploy_contract_test.ts` 同样解析这些 unit。
 
 ## 首次凭证引导
 
