@@ -47,6 +47,8 @@ Commands:
   mcp describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   web list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   web describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  cli list          --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  cli describe      --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   gateway audit     --audit <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   audit list        --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> [--audit <path>]
@@ -102,6 +104,9 @@ export async function runCli(
     }
     if (group === "web") {
       return await runWeb(action, flags, env);
+    }
+    if (group === "cli") {
+      return await runCliChannel(action, flags, env);
     }
     if (group === "gateway") {
       return await runGateway(action, flags, env);
@@ -243,6 +248,28 @@ async function runWeb(
     return ok(await service.describeWeb(actor, flags.id));
   }
   throw new UsageError(action ? `unknown web action '${action}'` : "missing web action");
+}
+
+async function runCliChannel(
+  action: string | undefined,
+  flags: Record<string, string>,
+  env: Record<string, string | undefined>,
+): Promise<CliResult> {
+  const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
+  if (!catalogPath) {
+    throw new UsageError("missing --catalog or PORTICO_CATALOG_PATH");
+  }
+  const actor = await resolveFlagsActor(flags, env);
+  const service = new CatalogService(new FileCatalogStore(catalogPath));
+
+  if (action === "list") {
+    return ok(await service.listCli(actor));
+  }
+  if (action === "describe") {
+    if (!flags.id) throw new UsageError("missing --id");
+    return ok(await service.describeCli(actor, flags.id));
+  }
+  throw new UsageError(action ? `unknown cli action '${action}'` : "missing cli action");
 }
 
 async function runGateway(

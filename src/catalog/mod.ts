@@ -13,6 +13,7 @@ export type {
   CatalogChangeAction,
   CatalogChangeRecord,
   Channel,
+  CliPackageInfo,
   EntryKind,
   EntryRef,
   GovernanceState,

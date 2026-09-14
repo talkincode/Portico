@@ -398,6 +398,73 @@ Deno.test("anonymous cannot see an internal web href on the portal", async () =>
   assert(!page.includes("https://docs.example.test/portals/docs-writer"));
 });
 
+Deno.test("reader sees the same CLI package on portal that catalog registered", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/cli", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.ok, true);
+  const data = listed.body.data as Array<{
+    id: string;
+    package: { value: string };
+    connect: { mode: string };
+  }>;
+  assertEquals(data.length, 1);
+  assertEquals(data[0].id, "docs-writer");
+  assertEquals(data[0].package.value, "jsr:@example/docs-writer");
+  assertEquals(data[0].connect.mode, "coordinate");
+
+  const described = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/cli/docs-writer", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(described.status, 200);
+  const record = described.body.data as { id: string; connect: { mode: string } };
+  assertEquals(record.id, "docs-writer");
+  assertEquals(record.connect.mode, "coordinate");
+
+  const html = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(html.status, 200);
+  const page = await html.text();
+  assert(page.includes("Docs Writer"));
+  assert(page.includes("jsr:@example/docs-writer"));
+  assert(!page.includes('href="jsr:@example/docs-writer"'));
+});
+
+Deno.test("anonymous cannot see an internal CLI package on the portal", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const listed = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/cli"), context),
+  );
+  assertEquals(listed.status, 200);
+  assertEquals(listed.body.data, []);
+
+  const described = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/cli/docs-writer"), context),
+  );
+  assertEquals(described.status, 404);
+  assertEquals(described.body.ok, false);
+  assertEquals(described.body.error?.code, "NOT_FOUND");
+
+  const html = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const page = await html.text();
+  assert(!page.includes("Docs Writer"));
+  assert(!page.includes("jsr:@example/docs-writer"));
+});
+
 Deno.test("anonymous cannot see an internal MCP connection on the portal", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalMcp());

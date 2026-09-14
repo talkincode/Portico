@@ -53,6 +53,13 @@ export async function handlePortalRequest(
     if (webItem) {
       return jsonOk(await context.catalog.describeWeb(actor, webItem[1]));
     }
+    if (url.pathname === "/api/cli") {
+      return jsonOk(await context.catalog.listCli(actor));
+    }
+    const cliItem = url.pathname.match(/^\/api\/cli\/([a-z][a-z0-9-]{1,62})$/);
+    if (cliItem) {
+      return jsonOk(await context.catalog.describeCli(actor, cliItem[1]));
+    }
     if (url.pathname === "/api/audit") {
       const audit = new AuditService(context.catalog, context.access, context.gateway);
       return jsonOk(await audit.list(actor));

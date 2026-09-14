@@ -104,6 +104,18 @@ export interface WebConnectionInfo {
   connect: { mode: "direct" };
 }
 
+/** Authorized CLI package coordinate. Portico does not install or run it. */
+export interface CliPackageInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  visibility: Visibility;
+  governanceState: GovernanceState;
+  package: EntryRef;
+  connect: { mode: "coordinate" };
+}
+
 export interface RegisterInput {
   id: string;
   name: string;
