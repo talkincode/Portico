@@ -1,5 +1,6 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
-import { gatewayUrl, listenGateway } from "./server.ts";
+import { readBind } from "../runtime/bind.ts";
+import { listenGateway } from "./server.ts";
 
 class UsageError extends Error {
   readonly code = ErrorCode.USAGE;
@@ -15,23 +16,10 @@ function readPath(name: string, env: Record<string, string | undefined>): string
   return value;
 }
 
-function readBind(env: Record<string, string | undefined>): { hostname: string; port: number } {
-  const hostname = env.PORTICO_BIND ?? "127.0.0.1";
-  if (hostname !== "127.0.0.1" && hostname !== "localhost") {
-    throw new UsageError("PORTICO_BIND must be 127.0.0.1 or localhost; do not expose the gateway");
-  }
-  const raw = env.PORTICO_PORT ?? "8789";
-  const port = Number(raw);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new UsageError("PORTICO_PORT must be an integer 0-65535");
-  }
-  return { hostname, port };
-}
-
 if (import.meta.main) {
   try {
     const env = Deno.env.toObject();
-    const { hostname, port } = readBind(env);
+    const { hostname, port } = readBind(env, 8789);
     const server = listenGateway({
       catalogPath: readPath("PORTICO_CATALOG_PATH", env),
       identitiesPath: readPath("PORTICO_IDENTITIES_PATH", env),
@@ -39,8 +27,11 @@ if (import.meta.main) {
       sessionsPath: env.PORTICO_SESSIONS_PATH,
       hostname,
       port,
-      onListen: () => {
-        console.log(JSON.stringify({ ok: true, data: { url: gatewayUrl(server) } }));
+      onListen: (addr) => {
+        console.log(JSON.stringify({
+          ok: true,
+          data: { url: `http://${addr.hostname}:${addr.port}` },
+        }));
       },
     });
     await server.finished;

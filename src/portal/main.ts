@@ -1,5 +1,6 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
-import { listenPortal, portalUrl } from "./server.ts";
+import { readBind } from "../runtime/bind.ts";
+import { listenPortal } from "./server.ts";
 
 class UsageError extends Error {
   readonly code = ErrorCode.USAGE;
@@ -15,23 +16,10 @@ function readPath(name: string, env: Record<string, string | undefined>): string
   return value;
 }
 
-function readBind(env: Record<string, string | undefined>): { hostname: string; port: number } {
-  const hostname = env.PORTICO_BIND ?? "127.0.0.1";
-  if (hostname !== "127.0.0.1" && hostname !== "localhost") {
-    throw new UsageError("PORTICO_BIND must be 127.0.0.1 or localhost; do not expose the portal");
-  }
-  const raw = env.PORTICO_PORT ?? "8788";
-  const port = Number(raw);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new UsageError("PORTICO_PORT must be an integer 0-65535");
-  }
-  return { hostname, port };
-}
-
 if (import.meta.main) {
   try {
     const env = Deno.env.toObject();
-    const { hostname, port } = readBind(env);
+    const { hostname, port } = readBind(env, 8788);
     const server = listenPortal({
       catalogPath: readPath("PORTICO_CATALOG_PATH", env),
       identitiesPath: readPath("PORTICO_IDENTITIES_PATH", env),
@@ -39,10 +27,13 @@ if (import.meta.main) {
       pagePath: env.PORTICO_PAGE_PATH,
       hostname,
       port,
+      onListen: (addr) => {
+        console.log(JSON.stringify({
+          ok: true,
+          data: { url: `http://${addr.hostname}:${addr.port}` },
+        }));
+      },
     });
-    // Announced after `Deno.serve` has returned. `onListen` fires *during* that
-    // call, so reading `server.addr` from inside it would see an unbound value.
-    console.log(JSON.stringify({ ok: true, data: { url: portalUrl(server) } }));
     await server.finished;
   } catch (error) {
     const code = error instanceof CatalogError || error instanceof UsageError
