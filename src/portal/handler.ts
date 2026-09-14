@@ -1,6 +1,6 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
-import { AuditService } from "../audit/mod.ts";
+import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
 import {
   type Actor,
   applyCatalogQuery,
@@ -80,7 +80,8 @@ export async function handlePortalRequest(
       return jsonOk(await context.catalog.describeCli(actor, cliItem[1]));
     }
     if (url.pathname === "/api/audit") {
-      return jsonOk(await auditService(context).list(actor));
+      const events = await auditService(context).list(actor);
+      return jsonOk(applyAuditQuery(events, auditQueryFrom(url)));
     }
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
@@ -176,6 +177,15 @@ function auditService(context: PortalContext): AuditService {
   return new AuditService(context.catalog, context.access, context.gateway);
 }
 
+function auditQueryFrom(url: URL) {
+  return parseAuditQuery({
+    q: url.searchParams.get("q"),
+    kind: url.searchParams.get("kind"),
+    action: url.searchParams.get("action"),
+    subject: url.searchParams.get("subject"),
+  });
+}
+
 /** An auditor-only view of the trail; every other role gets a refusal. */
 async function auditTrail(actor: Actor, context: PortalContext) {
   if (!isAuditor(actor)) return [];
@@ -224,8 +234,9 @@ async function internalPage(
     // The trail is a privileged surface, not an empty screen for everyone
     // else: a non-auditor must not learn that the route exists at all.
     if (!isAuditor(actor)) return htmlNotFound(request);
-    const events = await auditTrail(actor, context);
-    return html(renderAuditView({ ctx: base, events }));
+    const query = auditQueryFrom(url);
+    const events = applyAuditQuery(await auditTrail(actor, context), query);
+    return html(renderAuditView({ ctx: base, events, query }));
   }
 
   const surfaceMatch = url.pathname.match(/^\/internal\/s\/([a-z][a-z0-9-]{1,62})$/);

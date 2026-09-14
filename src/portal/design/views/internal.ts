@@ -8,6 +8,7 @@
  */
 
 import type { Actor, AgentSurface, Channel, GovernanceState } from "../../../catalog/types.ts";
+import { AUDIT_KINDS, type AuditQuery } from "../../../audit/mod.ts";
 import type { AuditEvent } from "../../../audit/types.ts";
 import {
   boundaryNote,
@@ -510,11 +511,21 @@ function renderCatalogRow(surface: AgentSurface): string {
 export interface AuditViewInput {
   ctx: ViewContext;
   events: AuditEvent[];
+  query?: AuditQuery;
 }
 
 export function renderAuditView(input: AuditViewInput): string {
   const { ctx, events } = input;
+  const query = input.query ?? {};
   const grouped = events.slice(0, 200);
+  const kindOptions = [
+    `<option value=""${query.kind ? "" : " selected"}>全部种类</option>`,
+    ...AUDIT_KINDS.map((kind) =>
+      `<option value="${esc(kind)}"${query.kind === kind ? " selected" : ""}>${
+        esc(KIND_LABEL[kind] ?? kind)
+      }</option>`
+    ),
+  ].join("");
 
   const body = `      <main class="int-page">
         <div class="int-page__head">
@@ -523,6 +534,13 @@ export function renderAuditView(input: AuditViewInput): string {
         </div>
         <div class="int-filters">
           ${boundaryNote("审计结论与维护轨迹分开存储；维护者身份不能覆盖或删除。")}
+          <form method="get" action="/internal/audit" role="search">
+            <input type="search" name="q" value="${
+    esc(query.q ?? "")
+  }" maxlength="120" placeholder="按摘要、主体或动作过滤" aria-label="过滤审计时间线">
+            <select name="kind" aria-label="事件种类">${kindOptions}</select>
+            <button type="submit">过滤</button>
+          </form>
         </div>
         ${
     grouped.length === 0

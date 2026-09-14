@@ -1,4 +1,10 @@
-import type { AuditService } from "../audit/mod.ts";
+import {
+  applyAuditQuery,
+  AUDIT_ACTIONS,
+  AUDIT_KINDS,
+  type AuditService,
+  parseAuditQuery,
+} from "../audit/mod.ts";
 import {
   type Actor,
   applyCatalogQuery,
@@ -96,8 +102,32 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_audit",
     description:
-      "人类安全审计时间线（目录变更、授权、撤回、凭证作废、公开审批，以及可选的 Gateway 访问审计）。仅人类审计者可读；其他身份得到 FORBIDDEN。",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      "人类安全审计时间线（目录变更、授权、撤回、凭证作废、公开审批，以及可选的 Gateway 访问审计）。仅人类审计者可读；其他身份得到 FORBIDDEN。过滤与 CLI `audit list`、Portal `GET /api/audit` 相同：不搜索入口 URL。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: {
+          type: "string",
+          description:
+            "在当前时间线的 id / 主体 / 摘要 / 动作里做子串过滤；不搜索入口 URL 或包坐标",
+        },
+        kind: {
+          type: "string",
+          enum: [...AUDIT_KINDS],
+          description: "只返回该种类的审计事件",
+        },
+        action: {
+          type: "string",
+          enum: [...AUDIT_ACTIONS],
+          description: "只返回该动作的审计事件",
+        },
+        subject: {
+          type: "string",
+          description: "只返回该 subjectId 的事件（精确匹配）",
+        },
+      },
+      additionalProperties: false,
+    },
   },
 ];
 
@@ -139,8 +169,10 @@ export async function callTool(
     }
     case "portico_dashboard":
       return dashboardFrom(await deps.catalog.list(actor));
-    case "portico_audit":
-      return await deps.audit.list(actor);
+    case "portico_audit": {
+      const events = await deps.audit.list(actor);
+      return applyAuditQuery(events, parseAuditQuery(input));
+    }
     default:
       throw new CatalogError(ErrorCode.NOT_FOUND, `unknown tool '${name}'`);
   }

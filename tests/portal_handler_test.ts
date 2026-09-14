@@ -556,6 +556,62 @@ Deno.test("portal cannot rewrite audit conclusions", async () => {
   assertEquals(after.body.data, before.body.data);
 });
 
+Deno.test("audit query filters the auditor timeline and stays forbidden for others", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const filtered = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit?kind=catalog&q=Writer", {
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(filtered.status, 200);
+  const events = filtered.body.data as Array<{
+    kind: string;
+    subjectId: string;
+    entry?: { value: string };
+  }>;
+  assertEquals(events.length >= 1, true);
+  assertEquals(events.every((item) => item.kind === "catalog"), true);
+  assertEquals(events.every((item) => item.subjectId === "docs-writer"), true);
+
+  const byCoordinate = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit?q=jsr%3A%40example%2Fdocs-writer", {
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(byCoordinate.status, 200);
+  assertEquals(byCoordinate.body.data, []);
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit?kind=catalog", {
+        headers: actorHeaders(maintainer),
+      }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const badKind = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit?kind=runtime", {
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(badKind.status, 400);
+  assertEquals(badKind.body.error?.code, "INVALID_INPUT");
+});
+
 Deno.test("catalog query filters visible records and does not leak internals to anonymous", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
