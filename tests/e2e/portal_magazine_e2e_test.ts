@@ -5,6 +5,7 @@ import {
   bootstrapRoster,
   runCli,
   sampleRecord,
+  sampleWebRecord,
   sessionFor,
   sessionsPathFor,
 } from "./harness.ts";
@@ -125,5 +126,89 @@ Deno.test("E2E: reader sees registered surface in list and detail; approve then 
     const detailHtml = await detail.text();
     assert(detailHtml.includes("Docs Writer"));
     assert(detailHtml.includes("jsr:@example/docs-writer"));
+  });
+});
+
+Deno.test("E2E: magazine search is a GET over authorized surfaces, not a CMS article index", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-magazine-search-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const writerInput = `${dir}/writer.json`;
+  const webInput = `${dir}/web.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(writerInput, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+  await Deno.writeTextFile(webInput, `${JSON.stringify(sampleWebRecord(), null, 2)}\n`);
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      writerInput,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      webInput,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-web",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-web",
+    ], env)).code,
+    0,
+  );
+
+  await withPortal(catalog, identities, async (base) => {
+    const home = await fetch(`${base}/`);
+    const homeHtml = await home.text();
+    assert(homeHtml.includes("<form"), "search must submit without script");
+    assert(homeHtml.includes('name="q"'));
+    assert(homeHtml.includes("搜索已授权入口"));
+    assert(!homeHtml.includes("搜索文章、报告或主题"));
+
+    const readerHit = await fetch(`${base}/?q=Writer`, { headers: readerHeaders() });
+    assertEquals(readerHit.status, 200);
+    const readerHtml = await readerHit.text();
+    assert(readerHtml.includes("Docs Writer"));
+    assert(!readerHtml.includes("Docs Web"), "q must not mix unrelated visible records");
+    assert(readerHtml.includes('value="Writer"'));
+
+    const anonMiss = await fetch(`${base}/?q=Writer`);
+    assertEquals(anonMiss.status, 200);
+    const anonHtml = await anonMiss.text();
+    assert(!anonHtml.includes("Docs Writer"));
+    assert(!anonHtml.includes("jsr:@example/docs-writer"));
   });
 });

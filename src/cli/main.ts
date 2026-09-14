@@ -10,9 +10,11 @@ import {
   type ActorKind,
   type ActorRole,
   type ApprovalDecisionInput,
+  applyCatalogQuery,
   CatalogError,
   CatalogService,
   ErrorCode,
+  parseCatalogQuery,
   FileCatalogStore,
   type PublishInput,
   type RegisterInput,
@@ -41,7 +43,7 @@ Commands:
   catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
-  catalog list      --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected]
   catalog get       --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   mcp list          --catalog <path> --identities <path> --session <token> --sessions <path>
   mcp describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
@@ -194,7 +196,12 @@ export async function runCli(
     }
 
     if (action === "list") {
-      return ok(await service.list(actor));
+      const query = parseCatalogQuery({
+        q: flags.q,
+        channel: flags.channel,
+        state: flags.state,
+      });
+      return ok(applyCatalogQuery(await service.list(actor), query));
     }
 
     if (action === "get") {

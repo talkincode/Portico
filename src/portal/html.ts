@@ -18,6 +18,7 @@ export interface MagazinePick {
 export interface MagazinePageInput {
   theme: ThemeMode;
   channel: ChannelFilter;
+  q?: string;
   view: DashboardView;
   selected?: AgentSurface;
   picks?: MagazinePick[];
@@ -150,20 +151,31 @@ const MAGAZINE_CSS = `
         background: var(--tag-bg);
         border: 1px solid var(--rule);
         border-radius: 6px;
-        padding: 0.45rem 0.85rem;
+        padding: 0.35rem 0.55rem 0.35rem 0.85rem;
         font-size: 0.82rem;
         color: var(--muted);
         min-width: 220px;
+        margin: 0;
       }
-      .search-box svg { width: 14px; height: 14px; stroke: var(--muted); }
-      .search-box .shortcut {
-        margin-left: auto;
-        font-size: 0.72rem;
-        border: 1px solid var(--rule);
-        border-radius: 3px;
-        padding: 0 0.35rem;
-        background: var(--panel);
-        color: var(--muted);
+      .search-box svg { width: 14px; height: 14px; stroke: var(--muted); flex: none; }
+      .search-box input[type="search"] {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        outline: none;
+      }
+      .search-box button {
+        border: 0;
+        background: transparent;
+        color: var(--accent);
+        font: inherit;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0.15rem 0.35rem;
       }
       .motto {
         font-size: 0.75rem;
@@ -853,12 +865,13 @@ export function renderMagazinePage(input: MagazinePageInput): string {
     : input.view.surfaces.find((item) => item.governanceState === "approved_public");
   const main = selected
     ? renderReading(input.view.surfaces, selected, input.theme, input.channel)
-    : renderHome(input.view.surfaces, hero, input.theme, input.channel);
+    : renderHome(input.view.surfaces, hero, input.theme, input.channel, input.q);
   const side = selected ? "" : renderSidebar(picks, input.theme, input.channel, path);
   const frameClass = selected ? "frame reading" : "frame home";
   return renderChrome({
     theme: input.theme,
     channel: input.channel,
+    q: input.q,
     path,
     title: selected ? selected.name : "Portico",
     body: `<div class="${frameClass}">${main}${side}</div>`,
@@ -894,13 +907,15 @@ export function escapeHtml(value: string): string {
 function renderChrome(input: {
   theme: ThemeMode;
   channel: ChannelFilter;
+  q?: string;
   path: string;
   title: string;
   body: string;
 }): string {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
-  const contentHref = withQuery("/", input.theme, null);
-  const topicHref = withQuery("/", input.theme, input.channel ?? "web");
+  const q = input.q;
+  const contentHref = withQuery("/", input.theme, null, q);
+  const topicHref = withQuery("/", input.theme, input.channel ?? "web", q);
   const contentActive = input.channel === null && !input.path.startsWith("/s/") ? " active" : "";
   const topicActive = input.channel !== null ? " active" : "";
   return `<!DOCTYPE html>
@@ -928,19 +943,21 @@ function renderChrome(input: {
         <span aria-disabled="true">收藏</span>
       </nav>
       <div class="topbar-right">
-        <div class="search-box" aria-hidden="true">
+        <form class="search-box" method="get" action="/" role="search">
+          ${input.theme === "system" ? "" : `<input type="hidden" name="theme" value="${escapeHtml(input.theme)}">`}
+          ${input.channel ? `<input type="hidden" name="channel" value="${escapeHtml(input.channel)}">` : ""}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="7"/>
             <path d="M21 21l-4.35-4.35"/>
           </svg>
-          <span>搜索文章、报告或主题...</span>
-          <kbd class="shortcut">/</kbd>
-        </div>
+          <input type="search" name="q" value="${escapeHtml(q ?? "")}" placeholder="搜索已授权入口" maxlength="120" aria-label="搜索已授权入口">
+          <button type="submit">搜索</button>
+        </form>
         <div class="motto">更好的技术内容<br>连接更多的实践者</div>
         <p class="themes">
-          <a href="${escapeHtml(withQuery(input.path, "light", input.channel))}">日</a>
-          <a href="${escapeHtml(withQuery(input.path, "dark", input.channel))}">夜</a>
-          <a href="${escapeHtml(withQuery(input.path, "system", input.channel))}">自动</a>
+          <a href="${escapeHtml(withQuery(input.path, "light", input.channel, q))}">日</a>
+          <a href="${escapeHtml(withQuery(input.path, "dark", input.channel, q))}">夜</a>
+          <a href="${escapeHtml(withQuery(input.path, "system", input.channel, q))}">自动</a>
         </p>
       </div>
     </header>
@@ -955,10 +972,11 @@ function renderHome(
   hero: AgentSurface | undefined,
   theme: ThemeMode,
   channel: ChannelFilter,
+  q?: string,
 ): string {
   const empty = surfaces.length === 0 ? `<p class="empty">没有可见的 Agent 表面。</p>` : "";
   const heroHtml = hero ? renderHero(hero, theme, channel) : "";
-  const filterTabs = renderFilterTabs(theme, channel, "/");
+  const filterTabs = renderFilterTabs(theme, channel, "/", q);
   const cards = surfaces.map((surface, idx) => renderCard(surface, theme, channel, { index: idx })).join("");
   return `<main>
       ${heroHtml}
@@ -967,7 +985,12 @@ function renderHome(
     </main>`;
 }
 
-function renderFilterTabs(theme: ThemeMode, channel: ChannelFilter, path: string): string {
+function renderFilterTabs(
+  theme: ThemeMode,
+  channel: ChannelFilter,
+  path: string,
+  q?: string,
+): string {
   const items: Array<{ id: ChannelFilter; label: string }> = [
     { id: null, label: "全部" },
     { id: "web", label: "Web" },
@@ -975,7 +998,7 @@ function renderFilterTabs(theme: ThemeMode, channel: ChannelFilter, path: string
     { id: "mcp", label: "MCP" },
   ];
   const links = items.map((item) => {
-    const href = withQuery(path.startsWith("/s/") ? path : "/", theme, item.id);
+    const href = withQuery(path.startsWith("/s/") ? path : "/", theme, item.id, q);
     const active = channel === item.id ? " active" : "";
     return `<a class="${active.trim()}" href="${escapeHtml(href)}">${item.label}</a>`;
   }).join("");
@@ -1387,14 +1410,24 @@ function isDirectHttpHref(value: string): boolean {
   }
 }
 
-function queryOf(theme: ThemeMode, channel: ChannelFilter): URLSearchParams {
+function queryOf(
+  theme: ThemeMode,
+  channel: ChannelFilter,
+  q?: string,
+): URLSearchParams {
   const params = new URLSearchParams();
   if (theme !== "system") params.set("theme", theme);
   if (channel) params.set("channel", channel);
+  if (q) params.set("q", q);
   return params;
 }
 
-function withQuery(path: string, theme: ThemeMode, channel: ChannelFilter): string {
-  const query = queryOf(theme, channel).toString();
+function withQuery(
+  path: string,
+  theme: ThemeMode,
+  channel: ChannelFilter,
+  q?: string,
+): string {
+  const query = queryOf(theme, channel, q).toString();
   return query ? `${path}?${query}` : path;
 }
