@@ -1,6 +1,6 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
-import { listenPortal, portalUrl } from "./server.ts";
+import { listenPortal } from "./server.ts";
 
 class UsageError extends Error {
   readonly code = ErrorCode.USAGE;
@@ -27,8 +27,11 @@ if (import.meta.main) {
       pagePath: env.PORTICO_PAGE_PATH,
       hostname,
       port,
-      onListen: () => {
-        console.log(JSON.stringify({ ok: true, data: { url: portalUrl(server) } }));
+      onListen: (addr) => {
+        console.log(JSON.stringify({
+          ok: true,
+          data: { url: `http://${addr.hostname}:${addr.port}` },
+        }));
       },
     });
     await server.finished;
