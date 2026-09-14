@@ -4,7 +4,7 @@ import {
   FileSessionStore,
   type GrantInput,
 } from "../access/mod.ts";
-import { AuditService } from "../audit/mod.ts";
+import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
 import {
   type Actor,
   type ActorKind,
@@ -55,7 +55,7 @@ Commands:
   cli describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
-  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
+  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   page get          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
 
@@ -342,7 +342,14 @@ async function runAudit(
   const gateway = auditPath
     ? new GatewayService(catalog, new FileGatewayAuditStore(auditPath))
     : undefined;
-  return ok(await new AuditService(catalog, access, gateway).list(actor));
+  const events = await new AuditService(catalog, access, gateway).list(actor);
+  const query = parseAuditQuery({
+    q: flags.q,
+    kind: flags.kind,
+    action: flags.action,
+    subject: flags.subject,
+  });
+  return ok(applyAuditQuery(events, query));
 }
 
 async function runPage(

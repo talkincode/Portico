@@ -429,7 +429,7 @@ curl -s http://127.0.0.1:8788/api/page \
   -H "Authorization: Bearer $PORTICO_SESSION"
 ```
 
-人类安全审计视图只读。维护者与 Agent 不能读、不能改写。CLI `audit list`、Portal `GET /api/audit` 与 MCP `portico_audit` 呈现同一份时间线：目录变更、授权记录、公开审批，以及 Gateway 访问审计。给 Portal / MCP 设置 `PORTICO_GATEWAY_AUDIT_PATH` 即并入 Gateway 事件；`deno task up` 会同时交给三个入口。
+人类安全审计视图只读。维护者与 Agent 不能读、不能改写。CLI `audit list`、Portal `GET /api/audit` 与 MCP `portico_audit` 呈现同一份时间线：目录变更、授权记录、公开审批，以及 Gateway 访问审计。三者共用 `--q` / `--kind` / `--action` / `--subject`（Portal 查询参数与 MCP 工具参数同名）：过滤发生在审计者鉴权之后，只匹配 id / 主体 / 摘要 / 动作，不搜索入口 URL。给 Portal / MCP 设置 `PORTICO_GATEWAY_AUDIT_PATH` 即并入 Gateway 事件；`deno task up` 会同时交给三个入口。
 
 ```sh
 deno task cli -- audit list \

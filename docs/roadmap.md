@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-- 需修订（已修订）：原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面），以及 CLI 包坐标发现（`cli list`/`cli describe`、Portal `GET /api/cli`，只返回 `jsr:`/`npm:` 坐标，不安装不执行），以及 Portal 双平面页面层（内部笔记台与公开发布页、四个颜色主题预设、纯 CSS 主题切换），以及 `GET /` 社论杂志风发现壳（渠道过滤、明暗 `data-theme`、`/s/:id` 阅读栏，不是 CMS，不替代 `/internal` 与 `/public`），以及目录过滤查询（CLI `catalog list --q/--channel/--state`、Portal `GET /api/catalog` 与 MCP `portico_list` 共用同一过滤器，只匹配当前身份可见的 id/名称/说明，不搜索入口 URL 或包坐标），以及治理仪表盘（CLI `catalog dashboard`、Portal `GET /api/dashboard` 与 MCP `portico_dashboard` 共用 `dashboardFrom`，按当前身份可见性计数，不是运行指标大盘）；未实现的模块仍是产品意图，不是现存实现。
+- 需修订（已修订）：原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面），以及 CLI 包坐标发现（`cli list`/`cli describe`、Portal `GET /api/cli`，只返回 `jsr:`/`npm:` 坐标，不安装不执行），以及 Portal 双平面页面层（内部笔记台与公开发布页、四个颜色主题预设、纯 CSS 主题切换），以及 `GET /` 社论杂志风发现壳（渠道过滤、明暗 `data-theme`、`/s/:id` 阅读栏，不是 CMS，不替代 `/internal` 与 `/public`），以及目录过滤查询（CLI `catalog list --q/--channel/--state`、Portal `GET /api/catalog` 与 MCP `portico_list` 共用同一过滤器，只匹配当前身份可见的 id/名称/说明，不搜索入口 URL 或包坐标），以及治理仪表盘（CLI `catalog dashboard`、Portal `GET /api/dashboard` 与 MCP `portico_dashboard` 共用 `dashboardFrom`，按当前身份可见性计数，不是运行指标大盘），以及审计时间线过滤查询（CLI `audit list --q/--kind/--action/--subject`、Portal `GET /api/audit` 与 MCP `portico_audit` 共用同一过滤器，只匹配当前审计者可见时间线的 id/主体/摘要/动作，不搜索入口 URL 或包坐标）；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -141,7 +141,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 人类安全审计视图
 
-`src/audit/` 给人类审计者一条只读时间线。`audit list`、Portal `GET /api/audit` 与 MCP `portico_audit` 对同一身份合并同一份时间线：追加式目录变更（register / draft / publish / update）、身份授权、身份撤回、登录凭证作废、公开审批，以及 Gateway 访问审计。三处都读同一个可选 `PORTICO_GATEWAY_AUDIT_PATH`；`up` 会把它同时交给 Portal、MCP 与 Gateway，所以默认情况下三者呈现相同内容，而不是"CLI 有、其他入口没有"。维护者与 Agent 得到 `FORBIDDEN`；没有改写或删除入口。Portal 写方法仍 405，失败登记不写目录变更。审计结论与维护轨迹分开存储，维护者身份不能覆盖。
+`src/audit/` 给人类审计者一条只读时间线。`audit list`、Portal `GET /api/audit` 与 MCP `portico_audit` 对同一身份合并同一份时间线：追加式目录变更（register / draft / publish / update）、身份授权、身份撤回、登录凭证作废、公开审批，以及 Gateway 访问审计。三处都读同一个可选 `PORTICO_GATEWAY_AUDIT_PATH`；`up` 会把它同时交给 Portal、MCP 与 Gateway，所以默认情况下三者呈现相同内容，而不是"CLI 有、其他入口没有"。`audit list` 接受 `--q` / `--kind` / `--action` / `--subject`，与 Portal `GET /api/audit`、MCP `portico_audit` 共用 `src/audit/query.ts`：过滤发生在审计者鉴权之后，只匹配 id / 主体 / 摘要 / 动作，不搜索入口 URL 或包坐标；非法过滤器 `INVALID_INPUT`，失败不写目录。维护者、只读者与匿名即使带过滤器也得到 `FORBIDDEN`；没有改写或删除入口。Portal `/internal/audit` 是无脚本 GET 表单，只给人类审计者。Portal 写方法仍 405，失败登记不写目录变更。审计结论与维护轨迹分开存储，维护者身份不能覆盖。
 
 - UI Components 受约束门户组件
 
@@ -274,7 +274,7 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、Portal 双平面 UI 与颜色主题、目录过滤查询、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、CLI 渠道登记/已授权包坐标、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。三个非匿名入口都只认会话：CLI `--session`，Portal / Gateway / MCP 的 `Authorization: Bearer` 或 `X-Portico-Session`。`--actor-*` 与 `X-Portico-Actor-*` 不构成证明，Portal / Gateway / MCP 已不接受，CLI 单独给出即拒绝。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、Portal 双平面 UI 与颜色主题、目录过滤查询、审计时间线过滤查询、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、CLI 渠道登记/已授权包坐标、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。三个非匿名入口都只认会话：CLI `--session`，Portal / Gateway / MCP 的 `Authorization: Bearer` 或 `X-Portico-Session`。`--actor-*` 与 `X-Portico-Actor-*` 不构成证明，Portal / Gateway / MCP 已不接受，CLI 单独给出即拒绝。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -299,6 +299,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | MCP Gateway 鉴权与路由 | 高 | ✅ 维护者登记 MCP 后，只读者 `gateway authorize` 与 HTTP `POST /gateway/mcp/:id/authorize` 得到同一 `connect.mode=direct` 路由；审计者可读到 allowed 记录 | ✅ 匿名内部/待审公开 NOT_FOUND 且不泄漏端点；CLI 表面不可授权；`tools/call` 返回 405 且不执行 | ✅ 已授权 reader vs 匿名；维护者不能读审计 | ✅ 失败授权不改 catalog 文件；拒绝工具调用不脏写目录 | `tests/gateway_service_test.ts`；`tests/gateway_handler_test.ts`；`tests/e2e/cli_gateway_e2e_test.ts`；`tests/e2e/gateway_http_e2e_test.ts` |
 | UI Components 门户页维护 | 中 | ✅ 维护者 `page set` 组合 catalog_card；只读者 CLI `page get` 与 Portal `/api/page`、HTML 看到同一张卡 | ✅ 未知种类/HTML/密钥字段被拒；内部卡对匿名不可见；待审公开仍不可达 | ✅ 维护者 vs 只读；匿名看不到未审批引用 | ✅ 失败 set 不写 page 文件；Portal POST `/api/page` 405 且不改 page/catalog | `tests/ui_page_test.ts`；`tests/portal_page_handler_test.ts`；`tests/e2e/cli_page_e2e_test.ts`；`tests/e2e/portal_page_e2e_test.ts` |
 | Agent 维护与人类安全审计 | 高 | ✅ 维护者登记并提交公开后，人类审计者 `audit list`、Portal `GET /api/audit` 与 MCP `portico_audit` 看到同一条目录变更、授权、撤回与审批时间线；配置 `PORTICO_GATEWAY_AUDIT_PATH` 后三处都并入 Gateway 访问事件 | ✅ 维护者/只读/匿名 FORBIDDEN；Portal PATCH/POST `/api/audit` 405；失败公开登记不出现 catalog 事件 | ✅ 维护 Agent vs 人类审计者；维护者不能读、不能改写 | ✅ 失败登记不写 catalog 文件与变更日志；读审计不改授权/审批记录 | `tests/catalog_change_test.ts`；`tests/audit_service_test.ts`；`tests/portal_handler_test.ts`；`tests/e2e/cli_audit_e2e_test.ts`；`tests/e2e/portal_audit_e2e_test.ts` |
+| 审计时间线过滤查询 | 高 | ✅ 同一人类审计者经 CLI `audit list --kind/--q`、Portal `GET /api/audit?kind=&q=` 与 MCP `portico_audit` 得到同一批过滤结果与同一顺序；`/internal/audit` 是无脚本 GET 表单，只展示匹配事件 | ✅ 维护者/只读/匿名带过滤器仍 FORBIDDEN；q 不搜索入口 URL 或包坐标；非法 kind / 过长 q / 控制字符 `INVALID_INPUT` | ✅ 人类审计者 vs 维护者/只读/匿名 | ✅ 非法查询不改 catalog 文件字节；Portal / MCP 只读入口无 `--allow-write` | `tests/audit_query_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/audit_query_e2e_test.ts` |
 
 缺口的最低期望：每行至少先有一条跨入口的 Happy Path（发布或发现能在 CLI 与 Portal 对上）；所有高风险行必须再有失败路径（未审批公开、越权、自批）；权限行必须打两种身份；写操作必须证明失败后公开面与目录不被脏写。
 

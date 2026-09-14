@@ -218,6 +218,20 @@ Deno.test("tool failures keep the same machine-readable code as the CLI", async 
   });
   assertEquals(badFilter.body.result?.isError, true);
   assertEquals(envelope(badFilter.body).error?.code, "INVALID_INPUT");
+
+  const badAudit = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_audit", arguments: { kind: "runtime" } },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(badAudit.body.result?.isError, true);
+  assertEquals(envelope(badAudit.body).error?.code, "INVALID_INPUT");
 });
 
 Deno.test("protocol errors are separated from tool errors", async () => {
