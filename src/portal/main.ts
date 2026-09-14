@@ -39,10 +39,10 @@ if (import.meta.main) {
       pagePath: env.PORTICO_PAGE_PATH,
       hostname,
       port,
-      onListen: () => {
-        console.log(JSON.stringify({ ok: true, data: { url: portalUrl(server) } }));
-      },
     });
+    // Announced after `Deno.serve` has returned. `onListen` fires *during* that
+    // call, so reading `server.addr` from inside it would see an unbound value.
+    console.log(JSON.stringify({ ok: true, data: { url: portalUrl(server) } }));
     await server.finished;
   } catch (error) {
     const code = error instanceof CatalogError || error instanceof UsageError

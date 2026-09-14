@@ -12,6 +12,7 @@ Portico 是组织的门廊：CLI、MCP、Web 都是入口，内部 / 公开 / �
 ## 文档
 
 - 项目画像、功能清单与方向：[`docs/roadmap.md`](docs/roadmap.md)
+- 页面层与颜色主题规范：[`docs/ui-spec.md`](docs/ui-spec.md)
 - Agent 工作规范：[`AGENTS.md`](AGENTS.md)
 
 ## 开发
@@ -281,6 +282,28 @@ deno task cli -- gateway audit \
 ```
 
 只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp`、`GET /api/web`、`GET /api/cli` 与 `GET /api/page`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头或会话视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。已登录时用 `Authorization: Bearer` 或 `X-Portico-Session`（`PORTICO_SESSIONS_PATH`）。页面文件可选：`PORTICO_PAGE_PATH`。发现页对当前身份可见的记录展示已授权入口，Web 为直连链接，CLI 为包坐标。
+
+### 页面层：两个平面
+
+`/` 是兼容的多角色发现索引。页面层另有两条面向人的平面，共用一套语义 token：
+
+| 平面 | 路由 | 读者 | 呈现 |
+| --- | --- | --- | --- |
+| 内部笔记台 | `/internal`、`/internal/c`、`/internal/audit`、`/internal/s/:id` | 只读及以上（匿名 404） | 治理状态、入口、维护者、治理路径、审计时间线 |
+| 公开发布 | `/public`、`/public/t/:channel`、`/public/s/:id` | 任何人 | 仅 `approved_public` 的登记，按渠道分栏 |
+
+公开页在视图层再筛一次：即使请求者是维护者，草稿、内部与待审公开也不进入公开页；未审批记录的
+`/public/s/:id` 返回 404。审计路由只对人类审计者存在，其他身份得到 404。页面不含脚本、不引用
+远程字体或图片，CSP 仍为 `default-src 'none'`。
+
+颜色主题是四个固定预设（内部 / 公开 × 浅色 / 深色），用 `?theme=` 切换，解析顺序为 `?theme=` →
+操作系统提示 → 平面默认；非法或跨平面取值静默降级。维护者不能自定义主题——界面不是可配置字段。
+完整规范见 [`docs/ui-spec.md`](docs/ui-spec.md)。
+
+```sh
+http://127.0.0.1:8788/internal?theme=internal-dark
+http://127.0.0.1:8788/public?theme=editorial-dark
+```
 
 ```sh
 deno task portal
