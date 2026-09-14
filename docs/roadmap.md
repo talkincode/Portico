@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），和 2026-09-14 新增的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册）；未实现的模块仍是产品意图，不是现存实现。
+> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面）；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -77,11 +77,11 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - Registry 受治理的表面更新
 
-已登记的 `draft` / `internal` 记录可由维护者 `catalog update --id <id> --input <file>` 更新名称、说明、版本、渠道、入口（不能直接改 `visibility` / `governanceState`）；渠道与入口一起改会重新校验 MCP 一致性。`pending_public`（待审）与 `approved_public`（已公开）的记录不能直接更新——必须先 `reject` / `withdraw`，改完再重新 `publish` 走独立审批，避免维护者绕过审批悄悄改变已批准或待审的公开表面。未知字段、明文密钥字段与空更新被拒；失败不写目录。
+已登记的 `draft` / `internal` 记录可由维护者 `catalog update --id <id> --input <file>` 更新名称、说明、版本、渠道、入口（不能直接改 `visibility` / `governanceState`）；渠道与入口一起改会重新校验 MCP / Web 一致性。`pending_public`（待审）与 `approved_public`（已公开）的记录不能直接更新——必须先 `reject` / `withdraw`，改完再重新 `publish` 走独立审批，避免维护者绕过审批悄悄改变已批准或待审的公开表面。未知字段、明文密钥字段与空更新被拒；失败不写目录。
 
 - CLI 目录登记、草稿、发布、更新与查询
 
-`src/cli/main.ts`：`identity grant|revoke|list|grants|credential issue|credential revoke|login|logout|whoami`、`catalog register|draft|publish|update|approve|reject|withdraw|list|get`、`mcp list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名命令对照身份名册解析 `--actor-*`，或在登录后用 `--session` 代替。外部 IdP 尚未实现。
+`src/cli/main.ts`：`identity grant|revoke|list|grants|credential issue|credential revoke|login|logout|whoami`、`catalog register|draft|publish|update|approve|reject|withdraw|list|get`、`mcp list|describe`、`web list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名命令对照身份名册解析 `--actor-*`，或在登录后用 `--session` 代替。外部 IdP 尚未实现。
 
 - Publisher 内部发布与公开候选
 
@@ -105,11 +105,15 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - Portal 发现与治理仪表盘
 
-`src/portal/` 是只读 HTTP 入口，消费同一 `CatalogService`。`GET /api/catalog`、`GET /api/catalog/:id`、`GET /api/dashboard`、`GET /api/mcp`、`GET /api/mcp/:id`、`GET /api/audit` 与 `GET /`（HTML）对同一身份呈现与 CLI 相同的可见性（审计面仅人类审计者）。无 actor 头且无会话为匿名；`X-Portico-Actor-*` 对照身份名册解析，不能自封角色；`Authorization: Bearer` / `X-Portico-Session` 解析已登录会话且角色以名册为准。默认绑定 `127.0.0.1`。POST/PUT/PATCH/DELETE 返回 405，不写目录。登录在 CLI 完成；Portal 只读消费会话文件。
+`src/portal/` 是只读 HTTP 入口，消费同一 `CatalogService`。`GET /api/catalog`、`GET /api/catalog/:id`、`GET /api/dashboard`、`GET /api/mcp`、`GET /api/mcp/:id`、`GET /api/web`、`GET /api/web/:id`、`GET /api/audit` 与 `GET /`（HTML）对同一身份呈现与 CLI 相同的可见性（审计面仅人类审计者）。发现页对可见记录展示已授权入口：Web 为直连 http(s) 链接，其它渠道为转义后的引用，不代理页面。无 actor 头且无会话为匿名；`X-Portico-Actor-*` 对照身份名册解析，不能自封角色；`Authorization: Bearer` / `X-Portico-Session` 解析已登录会话且角色以名册为准。默认绑定 `127.0.0.1`。POST/PUT/PATCH/DELETE 返回 405，不写目录。登录在 CLI 完成；Portal 只读消费会话文件。
 
 - MCP 渠道登记与访问
 
 维护者可登记 `channels=["mcp"]` 且 `entry.kind=mcp_endpoint` 的外部 MCP Server。端点必须是绝对 http(s) URL，禁止 userinfo、查询串密钥和命令式入口。`mcp list` / `mcp describe` 与 Portal `GET /api/mcp` 对同一身份返回连接信息 `{endpoint, connect:{mode:"direct"}}`，由客户端直连；Portico 不执行工具、不代理流量。可见性与目录相同：内部对匿名不可见，公开须审批。CLI 表面不会出现在 MCP 列表。失败登记不写目录。
+
+- Web 渠道登记与已授权入口
+
+维护者可登记 `channels=["web"]` 且 `entry.kind=url` 的外部 Web 入口。URL 必须是绝对 http(s)，禁止 userinfo、查询串密钥、`javascript:` 及其它非 http(s) 方案。`web list` / `web describe` 与 Portal `GET /api/web` 对同一身份返回 `{href, connect:{mode:"direct"}}`，由客户端直连；Portico 不抓取、不代理、不渲染远程页面。可见性与目录相同：内部对匿名不可见，公开须审批。CLI / MCP 表面不会出现在 Web 列表。失败登记不写目录。Portal HTML 只给当前身份可见的记录展示入口，并对 href 做 HTML 转义。
 
 - MCP Gateway 鉴权与路由（门卫）
 
@@ -246,7 +250,7 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、MCP 渠道登记/连接信息、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。非匿名 `--actor-*`、`--session` 与 Portal / Gateway `X-Portico-Actor-*` 或会话头必须对照名册，不能自封角色。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。非匿名 `--actor-*`、`--session` 与 Portal / Gateway `X-Portico-Actor-*` 或会话头必须对照名册，不能自封角色。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -262,6 +266,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | 登录凭证作废 | 高 | ✅ 人类审计者 `identity credential revoke --id` 后，原 login token 与 `--session` / Portal 会话头立即 FORBIDDEN；名册仍有该身份，`--actor-*` 仍能 list 同一条内部记录；`audit list` 出现 `revoke_credential` | ✅ 维护者/只读/匿名 FORBIDDEN；未知主体 NOT_FOUND；无活动凭证/会话与重复作废 INVALID_STATE；密钥字段被拒 | ✅ 人类审计者 vs 维护者；被作废主体 vs 仍可用的 `--actor-*` | ✅ 失败作废不改 identities/sessions 文件字节、不追加 credentialRevokes；成功后可重新 issue 新凭证 | `tests/access_credential_revoke_test.ts`；`tests/audit_service_test.ts`；`tests/e2e/cli_credential_revoke_e2e_test.ts` |
 | CLI 发布与查询 | 高 | ✅ `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败；未授权身份 FORBIDDEN | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件、approvals 与 identities | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | MCP 渠道登记与访问 | 高 | ✅ 维护者登记 mcp_endpoint；只读者 `mcp list`/`describe` 与 Portal `/api/mcp` 同一连接信息 | ✅ 密钥查询/userinfo/命令式入口被拒；CLI 表面不出现在 MCP 列表；匿名看不到内部 MCP；未审批公开 MCP 对匿名不可达 | ✅ 只读 vs 匿名；维护者可登记、只读者可描述 | ✅ 失败登记不写 catalog 文件；Portal POST `/api/mcp` 不改目录 | `tests/mcp_channel_test.ts`；`tests/e2e/cli_mcp_e2e_test.ts`；`tests/e2e/portal_mcp_e2e_test.ts`；`tests/portal_handler_test.ts` |
+| Web 渠道登记与已授权入口 | 高 | ✅ 维护者登记 url；只读者 `web list`/`describe` 与 Portal `/api/web`、HTML 同一 href（`connect.mode=direct`） | ✅ 密钥查询/userinfo/`javascript:` 入口被拒；CLI 表面不出现在 Web 列表；匿名看不到内部 Web；未审批公开 Web 对匿名不可达 | ✅ 只读 vs 匿名；维护者可登记、只读者可描述 | ✅ 失败登记不写 catalog 文件；Portal POST `/api/web` 不改目录 | `tests/web_channel_test.ts`；`tests/e2e/cli_web_e2e_test.ts`；`tests/e2e/portal_web_e2e_test.ts`；`tests/portal_handler_test.ts` |
 | MCP Gateway 鉴权与路由 | 高 | ✅ 维护者登记 MCP 后，只读者 `gateway authorize` 与 HTTP `POST /gateway/mcp/:id/authorize` 得到同一 `connect.mode=direct` 路由；审计者可读到 allowed 记录 | ✅ 匿名内部/待审公开 NOT_FOUND 且不泄漏端点；CLI 表面不可授权；`tools/call` 返回 405 且不执行 | ✅ 已授权 reader vs 匿名；维护者不能读审计 | ✅ 失败授权不改 catalog 文件；拒绝工具调用不脏写目录 | `tests/gateway_service_test.ts`；`tests/gateway_handler_test.ts`；`tests/e2e/cli_gateway_e2e_test.ts`；`tests/e2e/gateway_http_e2e_test.ts` |
 | UI Components 门户页维护 | 中 | ✅ 维护者 `page set` 组合 catalog_card；只读者 CLI `page get` 与 Portal `/api/page`、HTML 看到同一张卡 | ✅ 未知种类/HTML/密钥字段被拒；内部卡对匿名不可见；待审公开仍不可达 | ✅ 维护者 vs 只读；匿名看不到未审批引用 | ✅ 失败 set 不写 page 文件；Portal POST `/api/page` 405 且不改 page/catalog | `tests/ui_page_test.ts`；`tests/portal_page_handler_test.ts`；`tests/e2e/cli_page_e2e_test.ts`；`tests/e2e/portal_page_e2e_test.ts` |
 | Agent 维护与人类安全审计 | 高 | ✅ 维护者登记并提交公开后，人类审计者 `audit list` 与 Portal `GET /api/audit` 看到同一条目录变更、授权、撤回与审批时间线 | ✅ 维护者/只读/匿名 FORBIDDEN；Portal PATCH/POST `/api/audit` 405；失败公开登记不出现 catalog 事件 | ✅ 维护 Agent vs 人类审计者；维护者不能读、不能改写 | ✅ 失败登记不写 catalog 文件与变更日志；读审计不改授权/审批记录 | `tests/catalog_change_test.ts`；`tests/audit_service_test.ts`；`tests/portal_handler_test.ts`；`tests/e2e/cli_audit_e2e_test.ts`；`tests/e2e/portal_audit_e2e_test.ts` |

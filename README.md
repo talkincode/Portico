@@ -181,6 +181,33 @@ deno task cli -- catalog withdraw \
 
 MCP 渠道登记外部 MCP Server。`mcp list` / `mcp describe` 只返回已授权连接信息，不执行工具、不代理流量。端点必须是 http(s) URL，不能带密钥或命令。
 
+Web 渠道登记外部 Web 入口。`web list` / `web describe` 只返回已授权 href，不抓取、不代理页面。URL 必须是绝对 http(s)，不能带密钥、userinfo 或 `javascript:`。
+
+```sh
+deno task cli -- catalog register \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --input ./web-record.json
+
+deno task cli -- web list \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:reader \
+  --actor-kind human \
+  --actor-role reader
+
+deno task cli -- web describe \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id human:reader \
+  --actor-kind human \
+  --actor-role reader \
+  --id docs-web
+```
+
 ```sh
 deno task cli -- catalog register \
   --catalog ./data/catalog.json \
@@ -226,7 +253,7 @@ deno task cli -- gateway audit \
   --actor-role auditor
 ```
 
-只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp` 与 `GET /api/page`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头或会话视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。已登录时用 `Authorization: Bearer` 或 `X-Portico-Session`（`PORTICO_SESSIONS_PATH`）。页面文件可选：`PORTICO_PAGE_PATH`。
+只读 Portal 与 CLI 呈现同一治理状态，包括 `GET /api/mcp`、`GET /api/web` 与 `GET /api/page`。默认只绑 `127.0.0.1`，无 `--allow-write`。未带身份头或会话视为匿名；带上的 `X-Portico-Actor-*` 必须与名册一致。已登录时用 `Authorization: Bearer` 或 `X-Portico-Session`（`PORTICO_SESSIONS_PATH`）。页面文件可选：`PORTICO_PAGE_PATH`。发现页对当前身份可见的记录展示已授权入口，Web 为直连链接。
 
 ```sh
 deno task portal
@@ -242,6 +269,11 @@ deno task portal
 
 ```sh
 curl -s http://127.0.0.1:8788/api/catalog \
+  -H 'x-portico-actor-id: human:reader' \
+  -H 'x-portico-actor-kind: human' \
+  -H 'x-portico-actor-role: reader'
+
+curl -s http://127.0.0.1:8788/api/web \
   -H 'x-portico-actor-id: human:reader' \
   -H 'x-portico-actor-kind: human' \
   -H 'x-portico-actor-role: reader'

@@ -93,6 +93,17 @@ export interface McpConnectionInfo {
   connect: { mode: "direct" };
 }
 
+export interface WebConnectionInfo {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  visibility: Visibility;
+  governanceState: GovernanceState;
+  href: EntryRef;
+  connect: { mode: "direct" };
+}
+
 export interface RegisterInput {
   id: string;
   name: string;

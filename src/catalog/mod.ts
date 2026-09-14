@@ -24,4 +24,5 @@ export type {
   RegisterInput,
   UpdateInput,
   Visibility,
+  WebConnectionInfo,
 } from "./types.ts";
