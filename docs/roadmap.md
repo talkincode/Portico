@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面），以及 CLI 包坐标发现（`cli list`/`cli describe`、Portal `GET /api/cli`，只返回 `jsr:`/`npm:` 坐标，不安装不执行）；未实现的模块仍是产品意图，不是现存实现。
+- 需修订（已修订）：原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面），以及 CLI 包坐标发现（`cli list`/`cli describe`、Portal `GET /api/cli`，只返回 `jsr:`/`npm:` 坐标，不安装不执行），以及 Portal 双平面页面层（内部笔记台与公开发布页、四个颜色主题预设、纯 CSS 主题切换）；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -139,6 +139,10 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 已签发的登录凭证与活动会话可由独立人类审计者 `identity credential revoke --id <subject>` 作废：该主体的未过期凭证和会话立即标 `revokedAt`（仍只存哈希），CLI `--session` 与 Portal / Gateway 会话头变为 `FORBIDDEN`；名册身份仍在，`--actor-*` 对照名册仍可解析，目录记录不变。这与 `identity revoke` 不同：后者撤走主体，前者只切断登录面。维护者、Agent、只读者与匿名得到 `FORBIDDEN`。未知主体 `NOT_FOUND`。没有活动凭证或会话、以及重复作废得到 `INVALID_STATE`。明文密钥字段被拒。失败不作废他人会话、不改名册、不追加作废记录。成功后审计者可重新 `credential issue`。作废轨迹进入人类安全审计视图（`kind=credential`），维护者不能读、不能改写。
 
+- Portal 双平面 UI（内部笔记台 / 公开发布）
+
+`src/portal/design/` 是页面层。同一套语义 token 支撑两个平面：内部笔记台（`/internal`、`/internal/c`、`/internal/audit`、`/internal/s/:id`）面向只读及以上身份，呈治理状态、入口、维护者与治理路径；公开发布页（`/public`、`/public/t/:channel`、`/public/s/:id`）面向任何人，把已过审批的登记当作稿件呈现。公开发布页在视图层再筛一次，只渲染 `visibility=public` 且 `governanceState=approved_public` 的记录——即使请求者是维护者，草稿与待审公开也不进入公开页。颜色主题为四个固定预设（内部/公开 × 浅色/深色），解析顺序是 `?theme=` → 操作系统提示 → 平面默认；非法或跨平面取值静默降级。主题与模式是纯 CSS 属性，页面不含脚本、不引用远程字体或图片，CSP 仍为 `default-src 'none'`。审计路由只对人类审计者存在，其他身份得到 404。`/` 仍是兼容的多角色发现索引。规范见 [`ui-spec.md`](ui-spec.md)。
+
 - 尚未实现
 
 外部 IdP / 联邦登录。标为待核验以外的“已有能力”一律不应被写出。
@@ -254,7 +258,7 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、CLI 渠道登记/已授权包坐标、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。非匿名 `--actor-*`、`--session` 与 Portal / Gateway `X-Portico-Actor-*` 或会话头必须对照名册，不能自封角色。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、Portal 双平面 UI 与颜色主题、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、CLI 渠道登记/已授权包坐标、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口。非匿名 `--actor-*`、`--session` 与 Portal / Gateway `X-Portico-Actor-*` 或会话头必须对照名册，不能自封角色。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -264,6 +268,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | Approval 公开发布审批 | 高 | ✅ 独立人类审计者 approve 后匿名 list/get 同一条 `approved_public` | ✅ 自批 SELF_APPROVAL；维护者/Agent/只读 FORBIDDEN；拒绝后匿名仍不可见；密钥字段被拒 | ✅ 提交者 vs 人类审计者；维护者不能审 | ✅ 失败不写审批记录、不改公开面；已拒绝不能再 reject 改写 | `tests/catalog_approval_test.ts`；`tests/e2e/cli_approval_e2e_test.ts` |
 | 公开发布撤回 | 高 | ✅ 人类审计者 `catalog withdraw --id` 后，匿名在 CLI `list`/`get`、Portal `/api/catalog` 与 `/api/mcp`、Gateway authorize 上同时不可达；只读者仍见同一条 `internal` | ✅ 维护者/Agent/只读者/匿名撤回 FORBIDDEN；未知 id NOT_FOUND；对 `internal`/`pending_public`/`rejected` 与重复撤回 INVALID_STATE；密钥字段被拒 | ✅ 人类审计者 vs 维护者/Agent/只读者/匿名 | ✅ 失败撤回不改目录文件字节、不追加审批记录，公开面仍 `approved_public`；撤回后重发只回 `pending_public`，须重新独立审批才能再公开 | `tests/catalog_withdraw_test.ts`；`tests/e2e/cli_withdrawal_e2e_test.ts` |
 | Portal 发现与仪表盘 | 中 | ✅ CLI register 后 reader 在 Portal list/HTML 看到同一条；approve 后匿名 Portal 与 CLI 同一条 `approved_public` | ✅ 内部与 pending_public 对匿名不可见；POST 405；冒充 auditor FORBIDDEN；HTML 转义名称 | ✅ reader vs 匿名 | ✅ 失败写不改 catalog 文件；只读入口无 `--allow-write` | `tests/portal_handler_test.ts`；`tests/e2e/portal_discovery_e2e_test.ts` |
+| Portal 双平面 UI 与颜色主题 | 中 | ✅ 维护者在 `/internal` 看到草稿、待审与内部记录；同一批数据在 `/public` 只呈现 `approved_public`；四个主题预设各自渲染，`?theme=` 切换生效 | ✅ 匿名访问 `/internal*` 全部 404 且不泄漏记录；非审计者 `/internal/audit` 404；未审批记录的 `/public/s/:id` 404；撤回后公开页与文章同时消失；未知或跨平面 `?theme=` 静默降级；页面不含 script / inline handler / `javascript:` | ✅ 匿名 / reader / maintainer / human auditor 四种身份在公开页与审计面上结果不同 | ✅ 撤回与拒绝后公开面立即不可达且不脏写；主题解析失败不改目录、不返回 500 | `tests/portal_ui_test.ts`；`tests/portal_theme_test.ts` |
 | Access Control 分级权限 | 高 | ✅ 审计者授予 Agent 维护者后，维护者 register、只读者 list 同一条 | ✅ 维护者自封 auditor FORBIDDEN；Agent 不能被授予 auditor；未知身份不能 register | ✅ 人类审计者 vs Agent 维护者；只读者不能 list 名册 | ✅ 失败 grant 不改 identities/grants；失败 approve 不改公开面 | `tests/access_service_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | 身份授权撤回 | 高 | ✅ 人类审计者 `identity revoke --id` 后，被撤维护者不能再 register；只读者仍见其留下的目录记录；`audit list` 出现 `revoke` | ✅ 维护者/Agent/只读 FORBIDDEN；自撤 FORBIDDEN；最后一位人类审计者 INVALID_STATE；未知或重复撤回 NOT_FOUND；密钥字段被拒 | ✅ 人类审计者 vs 维护者；被撤主体 vs 仍在名册的只读者 | ✅ 失败撤回不改 identities 文件字节、不追加 revoke、不作废会话/凭证；成功撤回后原 session 立即 FORBIDDEN | `tests/access_revoke_test.ts`；`tests/audit_service_test.ts`；`tests/e2e/cli_identity_revoke_e2e_test.ts` |
 | 登录会话 | 高 | ✅ 审计者一次性下发凭证；主体 login 后 CLI `--session` list 与 Portal 会话头看到同一条内部记录 | ✅ 错误 token 登录 FORBIDDEN；会话上伪造 auditor 头 FORBIDDEN；无效 session 不能 approve | ✅ 只读 session 不能 register；维护者 session 不能审公开 | ✅ 失败登录不写 session 记录；logout 后原令牌不可用且不改 catalog | `tests/access_session_test.ts`；`tests/e2e/cli_session_e2e_test.ts`；`tests/e2e/portal_session_e2e_test.ts` |
