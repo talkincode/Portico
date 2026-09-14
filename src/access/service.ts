@@ -3,6 +3,8 @@ import type { Actor, ActorKind, ActorRole } from "../catalog/types.ts";
 import type { IdentityStore, SessionStore } from "./store.ts";
 import type {
   CredentialRecord,
+  CredentialRevokeRecord,
+  CredentialRevokeResult,
   GrantInput,
   GrantRecord,
   GrantRole,
@@ -133,6 +135,68 @@ export class AccessService {
     };
   }
 
+  /**
+   * Invalidates login credentials and sessions for a roster identity without
+   * removing the identity. This is the incident-response direction of the
+   * login surface: a leaked token must die, but the subject remains a
+   * granted reader/maintainer/auditor. Only a human auditor may do it.
+   */
+  async revokeCredentials(
+    actor: Actor,
+    input: RevokeInput,
+  ): Promise<CredentialRevokeResult> {
+    const parsed = parseRevokeInput(input);
+    const reviewer = await this.#requireHumanAuditor(actor);
+    const sessions = this.#requireSessions();
+    const subject = await this.store.get(parsed.id);
+    if (!subject) {
+      throw new CatalogError(
+        ErrorCode.NOT_FOUND,
+        `identity '${parsed.id}' is not in the roster`,
+      );
+    }
+
+    const credentials = await sessions.listCredentials();
+    const sessionRecords = await sessions.listSessions();
+    const activeCredentials = credentials.filter((item) =>
+      item.subjectId === subject.id && !item.revokedAt
+    );
+    const activeSessions = sessionRecords.filter((item) =>
+      item.subjectId === subject.id && !item.revokedAt
+    );
+    if (activeCredentials.length === 0 && activeSessions.length === 0) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "no active credentials or sessions to revoke",
+      );
+    }
+
+    const revokedAt = this.clock().toISOString();
+    await this.#invalidateSubjectAccess(subject.id, revokedAt);
+
+    const record: CredentialRevokeRecord = {
+      id: credentialRevokeId(subject.id, revokedAt),
+      subjectId: subject.id,
+      kind: subject.kind,
+      role: subject.role,
+      revokedBy: { id: reviewer.id, kind: reviewer.kind },
+      revokedAt,
+      credentials: activeCredentials.length,
+      sessions: activeSessions.length,
+    };
+    await this.store.commitCredentialRevoke(record);
+    return {
+      id: record.id,
+      subjectId: record.subjectId,
+      kind: record.kind,
+      role: record.role,
+      revokedCredentials: record.credentials,
+      revokedSessions: record.sessions,
+      identityRemains: true,
+      revokedAt: record.revokedAt,
+    };
+  }
+
   async list(actor: Actor): Promise<Identity[]> {
     await this.#requireRosterActor(actor);
     if (actor.role === "anonymous") {
@@ -157,6 +221,12 @@ export class AccessService {
   async listRevokes(actor: Actor): Promise<RevokeRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listRevokes();
+    return records.map((record) => structuredClone(record));
+  }
+
+  async listCredentialRevokes(actor: Actor): Promise<CredentialRevokeRecord[]> {
+    await this.#requireHumanAuditor(actor);
+    const records = await this.store.listCredentialRevokes();
     return records.map((record) => structuredClone(record));
   }
 
@@ -502,6 +572,11 @@ function grantId(subjectId: string, grantedAt: string): string {
 function revokeId(subjectId: string, revokedAt: string): string {
   const safe = subjectId.replaceAll(/[^a-z0-9-]/gi, "-");
   return `rvk-${safe}-${revokedAt.replaceAll(/[^0-9]/g, "")}-${randomHex(4)}`;
+}
+
+function credentialRevokeId(subjectId: string, revokedAt: string): string {
+  const safe = subjectId.replaceAll(/[^a-z0-9-]/gi, "-");
+  return `crv-${safe}-${revokedAt.replaceAll(/[^0-9]/g, "")}-${randomHex(4)}`;
 }
 
 function issuedId(prefix: string, subjectId: string, at: string): string {

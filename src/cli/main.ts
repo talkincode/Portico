@@ -29,6 +29,7 @@ Commands:
   identity list     --identities <path> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
   identity grants   --identities <path> [--actor-id <id> --actor-kind <human|agent> --actor-role <role> | --session <token> --sessions <path>]
   identity credential issue --identities <path> --sessions <path> --id <subject> [--actor-* | --session <token>]
+  identity credential revoke --identities <path> --sessions <path> --id <subject> [--actor-* | --session <token>]
   identity login    --identities <path> --sessions <path> --id <id> --token <issued>
   identity logout   --identities <path> --sessions <path> --session <token>
   identity whoami   --identities <path> --sessions <path> --session <token>
@@ -60,6 +61,7 @@ Non-anonymous catalog commands resolve --actor-* against the identity roster.
 Issued credential and session tokens are printed once and stored as hashes.
 The first identity grant may omit --actor-* and must be a human auditor.
 An identity cannot revoke itself; the last human auditor cannot be revoked.
+Revoking credentials invalidates login tokens and sessions without removing the roster identity.
 The identity that submitted public cannot approve or reject the same request.
 Withdrawing an approved public surface is reserved for a human auditor.
 A pending public candidate or an approved public surface cannot be updated
@@ -345,13 +347,16 @@ async function runIdentity(
   }
 
   if (action === "credential") {
-    if (subaction !== "issue") {
+    if (subaction !== "issue" && subaction !== "revoke") {
       throw new UsageError(
         subaction ? `unknown credential action '${subaction}'` : "missing credential action",
       );
     }
     if (!flags.id) throw new UsageError("missing --id");
     const actor = await resolveFlagsActor(flags, env);
+    if (subaction === "revoke") {
+      return ok(await service.revokeCredentials(actor, { id: flags.id }));
+    }
     return ok(await service.issueCredential(actor, { id: flags.id }));
   }
 
@@ -389,7 +394,7 @@ function needsSessionStore(action: string | undefined, subaction?: string): bool
   return action === "login" ||
     action === "logout" ||
     action === "whoami" ||
-    (action === "credential" && subaction === "issue");
+    (action === "credential" && (subaction === "issue" || subaction === "revoke"));
 }
 
 function openAccess(

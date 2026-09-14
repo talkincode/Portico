@@ -1,4 +1,9 @@
-import { AccessService, type GrantRecord, type RevokeRecord } from "../access/mod.ts";
+import {
+  AccessService,
+  type CredentialRevokeRecord,
+  type GrantRecord,
+  type RevokeRecord,
+} from "../access/mod.ts";
 import {
   type Actor,
   type ApprovalRecord,
@@ -30,6 +35,7 @@ export class AuditService {
 
     const grants = await this.access.listGrants(actor);
     const revokes = await this.access.listRevokes(actor);
+    const credentialRevokes = await this.access.listCredentialRevokes(actor);
     const changes = await this.catalog.listChanges(actor);
     const approvals = await this.catalog.listApprovals(actor);
     const gateway = this.gateway ? await this.gateway.listAudit(actor) : [];
@@ -37,6 +43,7 @@ export class AuditService {
     const events = [
       ...grants.map(fromGrant),
       ...revokes.map(fromRevoke),
+      ...credentialRevokes.map(fromCredentialRevoke),
       ...changes.map(fromChange),
       ...approvals.map(fromApproval),
       ...gateway.map(fromGateway),
@@ -71,6 +78,19 @@ function fromRevoke(record: RevokeRecord): AuditEvent {
     action: "revoke",
     subjectId: record.subjectId,
     summary: `revoke ${record.subjectId} ${record.role}`,
+  };
+}
+
+function fromCredentialRevoke(record: CredentialRevokeRecord): AuditEvent {
+  return {
+    id: record.id,
+    kind: "credential",
+    at: record.revokedAt,
+    actor: { id: record.revokedBy.id, kind: record.revokedBy.kind, role: "auditor" },
+    action: "revoke_credential",
+    subjectId: record.subjectId,
+    summary:
+      `revoke_credential ${record.subjectId} credentials=${record.credentials} sessions=${record.sessions}`,
   };
 }
 

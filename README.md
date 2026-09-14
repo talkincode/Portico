@@ -78,6 +78,18 @@ deno task cli -- catalog list \
   --session pst1_…
 ```
 
+作废登录凭证属于安全审计，不撤名册。人类审计者 `identity credential revoke` 会作废该主体尚未过期的凭证和会话（只标 `revokedAt`，仍只存哈希）；`--actor-*` 仍可用，身份还在。维护者、Agent、只读者与匿名得到 `FORBIDDEN`。没有可作废的凭证或会话得到 `INVALID_STATE`。失败不改名册、不作废他人会话。之后可重新 `credential issue`。
+
+```sh
+deno task cli -- identity credential revoke \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --actor-id human:security-auditor \
+  --actor-kind human \
+  --actor-role auditor \
+  --id human:reader
+```
+
 内部登记一条 CLI 表面并查询（stdout 为 JSON）：
 
 ```sh
@@ -116,6 +128,19 @@ deno task cli -- catalog publish \
   --actor-role maintainer \
   --id docs-writer \
   --visibility internal
+```
+
+已登记的 `draft` / `internal` 记录可由维护者更新名称、说明、版本、渠道或入口，不能直接改可见性或治理状态。待审与已公开记录必须先拒绝或撤回：
+
+```sh
+deno task cli -- catalog update \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --actor-id agent:docs-bot \
+  --actor-kind agent \
+  --actor-role maintainer \
+  --id docs-writer \
+  --input ./record.json
 ```
 
 `--visibility public` 只产生 `pending_public` 候选，匿名渠道仍不可见。独立人类审计者才能批准或拒绝：

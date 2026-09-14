@@ -8,6 +8,8 @@ export {
 export type { IdentityStore, SessionStore } from "./store.ts";
 export type {
   CredentialRecord,
+  CredentialRevokeRecord,
+  CredentialRevokeResult,
   GrantInput,
   GrantRecord,
   GrantRole,

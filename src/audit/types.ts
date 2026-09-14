@@ -1,6 +1,12 @@
 import type { ActorKind, ActorRole, EntryRef } from "../catalog/types.ts";
 
-export type AuditKind = "catalog" | "grant" | "revoke" | "approval" | "gateway";
+export type AuditKind =
+  | "catalog"
+  | "grant"
+  | "revoke"
+  | "credential"
+  | "approval"
+  | "gateway";
 
 export interface AuditActor {
   id: string;
