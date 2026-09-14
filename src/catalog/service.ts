@@ -18,6 +18,7 @@ import type {
   PublicDecision,
   PublishInput,
   RegisterInput,
+  UpdateInput,
   Visibility,
 } from "./types.ts";
 
@@ -33,6 +34,21 @@ const ALLOWED_REGISTER_KEYS = new Set([
   "maintainers",
 ]);
 const ALLOWED_PUBLISH_KEYS = new Set(["id", "visibility"]);
+const ALLOWED_UPDATE_KEYS = new Set([
+  "id",
+  "name",
+  "description",
+  "channels",
+  "version",
+  "entry",
+]);
+const UPDATE_MUTABLE_KEYS = new Set([
+  "name",
+  "description",
+  "channels",
+  "version",
+  "entry",
+]);
 const ALLOWED_APPROVAL_KEYS = new Set(["id"]);
 const SECRET_KEYS = new Set([
   "token",
@@ -189,6 +205,54 @@ export class CatalogService {
       updatedAt: now,
     };
     return await this.#commitChange(record, "publish_public_candidate", actor);
+  }
+
+  /**
+   * Governed internal update of a surface's own fields (name, description,
+   * version, channels, entry). This is deliberately narrower than register:
+   * it only ever changes fields on an existing record, never visibility or
+   * governanceState directly, and it is only allowed while the record is not
+   * yet public and not mid public-review — `draft` or `internal`. A
+   * `pending_public` candidate or an `approved_public` surface must first be
+   * rejected/withdrawn (an independent human-auditor action) before its
+   * surface can change; this keeps "update the public-facing surface" from
+   * ever being a maintainer-only side door around approval.
+   */
+  async update(actor: Actor, input: UpdateInput): Promise<AgentSurface> {
+    assertActor(actor);
+    if (actor.role !== "maintainer") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a maintainer may update a catalog surface",
+      );
+    }
+
+    const parsed = parseUpdateInput(input);
+    const existing = await this.store.get(parsed.id);
+    if (!existing) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
+    }
+    if (existing.governanceState !== "draft" && existing.governanceState !== "internal") {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "a pending public candidate or an approved public surface cannot be updated directly; " +
+          "reject or withdraw it first, then update, then resubmit for approval",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const channels = parsed.fields.channels ?? existing.channels;
+    const entry = parsed.fields.entry ?? existing.entry;
+    assertMcpChannelEntry(channels, entry);
+
+    const record: AgentSurface = {
+      ...existing,
+      ...parsed.fields,
+      channels,
+      entry,
+      updatedAt: now,
+    };
+    return await this.#commitChange(record, "update", actor);
   }
 
   async approve(actor: Actor, input: ApprovalDecisionInput): Promise<AgentSurface> {
@@ -521,6 +585,60 @@ function parsePublishInput(input: PublishInput): PublishInput {
   }
 
   return { id: input.id, visibility: input.visibility };
+}
+
+function parseUpdateInput(input: UpdateInput): { id: string; fields: Partial<UpdateInput> } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "update payload must be an object");
+  }
+
+  const keys = Object.keys(input);
+  for (const key of keys) {
+    if (SECRET_KEYS.has(key)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "plaintext secret fields are not allowed; store a reference instead",
+      );
+    }
+    if (!ALLOWED_UPDATE_KEYS.has(key)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `unknown or forbidden field '${key}'`,
+      );
+    }
+  }
+
+  if (!ID_PATTERN.test(input.id ?? "")) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "id must be 2-63 chars of lowercase kebab-case",
+    );
+  }
+
+  const mutableKeys = keys.filter((key) => UPDATE_MUTABLE_KEYS.has(key));
+  if (mutableKeys.length === 0) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "update requires at least one of: name, description, channels, version, entry",
+    );
+  }
+
+  const fields: Partial<UpdateInput> = {};
+  if ("name" in input) fields.name = requireText(input.name, "name", 120);
+  if ("description" in input) {
+    fields.description = requireText(input.description, "description", 2000);
+  }
+  if ("version" in input) {
+    const version = requireText(input.version, "version", 64);
+    if (/\s/.test(version)) {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "version must not contain whitespace");
+    }
+    fields.version = version;
+  }
+  if ("channels" in input) fields.channels = parseChannels(input.channels);
+  if ("entry" in input) fields.entry = parseEntry(input.entry);
+
+  return { id: input.id, fields };
 }
 
 function parseRegisterInput(input: RegisterInput): RegisterInput {

@@ -22,5 +22,6 @@ export type {
   PublicSubmission,
   PublishInput,
   RegisterInput,
+  UpdateInput,
   Visibility,
 } from "./types.ts";

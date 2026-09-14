@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）和身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）；未实现的模块仍是产品意图，不是现存实现。
+> **需修订（已修订）：** 原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）和 2026-09-14 新增的 Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改）；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -75,9 +75,13 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 `src/catalog/` 是目录内核。维护者可登记内部 Agent 表面（身份、名称、说明、渠道、版本、入口引用、维护者、治理状态=`internal`）。公开可见性不能通过登记“顺便成功”；未知字段或明文密钥字段被拒绝；失败不写目录。只读者可见内部记录，匿名不可见。
 
-- CLI 目录登记、草稿、发布与查询
+- Registry 受治理的表面更新
 
-`src/cli/main.ts`：`identity grant|revoke|list|grants|credential issue|login|logout|whoami`、`catalog register|draft|publish|approve|reject|withdraw|list|get`、`mcp list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名命令对照身份名册解析 `--actor-*`，或在登录后用 `--session` 代替。外部 IdP 尚未实现。
+已登记的 `draft` / `internal` 记录可由维护者 `catalog update --id <id> --input <file>` 更新名称、说明、版本、渠道、入口（不能直接改 `visibility` / `governanceState`）；渠道与入口一起改会重新校验 MCP 一致性。`pending_public`（待审）与 `approved_public`（已公开）的记录不能直接更新——必须先 `reject` / `withdraw`，改完再重新 `publish` 走独立审批，避免维护者绕过审批悄悄改变已批准或待审的公开表面。未知字段、明文密钥字段与空更新被拒；失败不写目录。
+
+- CLI 目录登记、草稿、发布、更新与查询
+
+`src/cli/main.ts`：`identity grant|revoke|list|grants|credential issue|login|logout|whoami`、`catalog register|draft|publish|update|approve|reject|withdraw|list|get`、`mcp list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。非匿名命令对照身份名册解析 `--actor-*`，或在登录后用 `--session` 代替。外部 IdP 尚未实现。
 
 - Publisher 内部发布与公开候选
 
@@ -243,6 +247,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
 | Registry 登记与目录 | 高 | ✅ 维护者登记内部表面，只读者 list/get 同一条 | ✅ 公开可见性被拒；偷写 `approved_public` 被拒；非法 id / 明文密钥字段被拒 | ✅ 只读 vs 维护者；匿名看不到内部记录 | ✅ 失败不写 Memory/File 目录 | `tests/catalog_service_test.ts`；`tests/e2e/cli_catalog_e2e_test.ts` |
+| Registry 受治理表面更新 | 高 | ✅ 维护者 `catalog update` 改 `internal`/`draft` 记录的 name/description/version/channels/entry；reader 看到同一条更新 | ✅ 待审 `pending_public` 与已公开 `approved_public` 记录更新被拒（`INVALID_STATE`）；reader/匿名更新 `FORBIDDEN`；未知字段/明文密钥/空更新被拒；渠道与入口不一致被拒 | ✅ 维护者 vs 只读/匿名 | ✅ 失败更新不改目录文件字节；已公开记录须先 `withdraw`，改后须重新 `publish`+`approve` 才能再次公开可见 | `tests/catalog_update_test.ts`；`tests/e2e/cli_update_e2e_test.ts` |
 | Publisher 内部发布 | 高 | ✅ 草稿对只读隐藏；`publish --visibility internal` 后只读者可见同一条 | ✅ 无权 draft/publish 被拒；偷写 `approved_public`/明文密钥被拒；不能把 pending_public 降回 internal | ✅ 维护者 vs 只读；匿名看不到公开候选 | ✅ 失败不写/不改目录；公开候选对匿名仍不可达 | `tests/catalog_publisher_test.ts`；`tests/e2e/cli_publish_e2e_test.ts` |
 | Approval 公开发布审批 | 高 | ✅ 独立人类审计者 approve 后匿名 list/get 同一条 `approved_public` | ✅ 自批 SELF_APPROVAL；维护者/Agent/只读 FORBIDDEN；拒绝后匿名仍不可见；密钥字段被拒 | ✅ 提交者 vs 人类审计者；维护者不能审 | ✅ 失败不写审批记录、不改公开面；已拒绝不能再 reject 改写 | `tests/catalog_approval_test.ts`；`tests/e2e/cli_approval_e2e_test.ts` |
 | 公开发布撤回 | 高 | ✅ 人类审计者 `catalog withdraw --id` 后，匿名在 CLI `list`/`get`、Portal `/api/catalog` 与 `/api/mcp`、Gateway authorize 上同时不可达；只读者仍见同一条 `internal` | ✅ 维护者/Agent/只读者/匿名撤回 FORBIDDEN；未知 id NOT_FOUND；对 `internal`/`pending_public`/`rejected` 与重复撤回 INVALID_STATE；密钥字段被拒 | ✅ 人类审计者 vs 维护者/Agent/只读者/匿名 | ✅ 失败撤回不改目录文件字节、不追加审批记录，公开面仍 `approved_public`；撤回后重发只回 `pending_public`，须重新独立审批才能再公开 | `tests/catalog_withdraw_test.ts`；`tests/e2e/cli_withdrawal_e2e_test.ts` |
