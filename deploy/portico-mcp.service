@@ -1,0 +1,32 @@
+# Portico MCP entrance.
+#
+# Install (needs root):
+#   sudo cp deploy/portico-mcp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now portico-mcp
+#
+# The other two entrances follow the same shape; this unit is the one that was
+# missing, which is why the MCP entrance ran as a detached container instead.
+[Unit]
+Description=Portico MCP entrance
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=master
+Group=master
+Restart=on-failure
+RestartSec=3
+WorkingDirectory=/home/master/src/portico
+Environment=PORTICO_DEPLOY_PORT=8790
+ExecStartPre=-/usr/bin/docker rm -f portico-mcp
+ExecStart=/home/master/src/portico/deploy/run-mcp.sh
+ExecStop=/usr/bin/docker stop portico-mcp
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=portico-mcp
+
+[Install]
+WantedBy=multi-user.target
