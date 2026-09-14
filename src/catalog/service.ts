@@ -11,6 +11,7 @@ import type {
   CatalogChangeAction,
   CatalogChangeRecord,
   Channel,
+  CliPackageInfo,
   EntryKind,
   EntryRef,
   MaintainerRef,
@@ -474,6 +475,19 @@ export class CatalogService {
     }
     return toWebConnection(record);
   }
+
+  async listCli(actor: Actor): Promise<CliPackageInfo[]> {
+    const records = await this.list(actor);
+    return records.filter(isCliSurface).map(toCliPackage);
+  }
+
+  async describeCli(actor: Actor, id: string): Promise<CliPackageInfo> {
+    const record = await this.get(actor, id);
+    if (!isCliSurface(record)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+    return toCliPackage(record);
+  }
 }
 
 function canSee(actor: Actor, record: AgentSurface): boolean {
@@ -735,6 +749,11 @@ function isWebSurface(record: AgentSurface): boolean {
     record.entry.kind === "url";
 }
 
+function isCliSurface(record: AgentSurface): boolean {
+  return record.channels.length === 1 && record.channels[0] === "cli" &&
+    record.entry.kind === "package";
+}
+
 function toMcpConnection(record: AgentSurface): McpConnectionInfo {
   return {
     id: record.id,
@@ -761,9 +780,23 @@ function toWebConnection(record: AgentSurface): WebConnectionInfo {
   };
 }
 
+function toCliPackage(record: AgentSurface): CliPackageInfo {
+  return {
+    id: record.id,
+    name: record.name,
+    description: record.description,
+    version: record.version,
+    visibility: record.visibility,
+    governanceState: record.governanceState,
+    package: { ...record.entry },
+    connect: { mode: "coordinate" },
+  };
+}
+
 function assertChannelEntry(channels: Channel[], entry: EntryRef): void {
   const hasMcp = channels.includes("mcp");
   const hasWeb = channels.includes("web");
+  const hasCli = channels.includes("cli");
   if (hasMcp && (channels.length !== 1 || entry.kind !== "mcp_endpoint")) {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
@@ -788,11 +821,46 @@ function assertChannelEntry(channels: Channel[], entry: EntryRef): void {
       "url entry requires the web channel",
     );
   }
+  if (hasCli && (channels.length !== 1 || entry.kind !== "package")) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "cli channel requires a single package entry",
+    );
+  }
+  if (entry.kind === "package" && !hasCli) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "package entry requires the cli channel",
+    );
+  }
   if (entry.kind === "mcp_endpoint") {
     parseHttpHref(entry.value, "mcp_endpoint");
   }
   if (entry.kind === "url") {
     parseHttpHref(entry.value, "url");
+  }
+  if (entry.kind === "package") {
+    parsePackageCoordinate(entry.value);
+  }
+}
+
+const JSR_PACKAGE =
+  /^jsr:@[a-z0-9][a-z0-9._-]{0,62}\/[a-z0-9][a-z0-9._-]{0,62}(@[a-z0-9][a-z0-9._+-]{0,62})?$/i;
+const NPM_PACKAGE =
+  /^npm:(@[a-z0-9][a-z0-9._-]{0,62}\/)?[a-z0-9][a-z0-9._-]{0,62}(@[a-z0-9][a-z0-9._+-]{0,62})?$/i;
+
+function parsePackageCoordinate(value: string): void {
+  if (/\s/.test(value) || /[;$`|&<>(){}]/.test(value)) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "package must be a jsr: or npm: coordinate, not a command",
+    );
+  }
+  if (!JSR_PACKAGE.test(value) && !NPM_PACKAGE.test(value)) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "package must be a jsr: or npm: coordinate; Portico does not install or fetch URLs",
+    );
   }
 }
 
