@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { gatewayPerms, LOOPBACK_HOSTNAME, netAllow, readOnlyHttpPerms } from "../src/perms.ts";
+import { gatewayPerms, netAllow, readOnlyHttpPerms } from "../src/perms.ts";
 
 /**
  * The deployment's permission allow-list used to live only on the server. When
