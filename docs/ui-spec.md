@@ -147,7 +147,7 @@ URL 短名同样被接受：`internal`、`internal-dark`、`editorial`、`editor
 | --- | --- |
 | 公开页不出现 `internal` / `draft` / `pending_public` 记录，即使请求者是维护者 | `tests/portal_ui_test.ts` |
 | 未审批记录的文章页返回 404 | `tests/portal_ui_test.ts` |
-| 匿名访问 `/internal*` 返回 404，不泄漏 403 | `tests/portal_ui_test.ts` |
+| 匿名访问 `/internal*` 返回 HTML 404，不泄漏 403，不返回 JSON 信封 | `tests/portal_ui_test.ts`；`tests/e2e/portal_ui_e2e_test.ts` |
 | 非审计者的审计页不出现在导航，也不出现在 HTML | `tests/portal_ui_test.ts` |
 | 所有 token 对比度达标 | `tests/portal_theme_test.ts` |
 | 布局 token 与 palette 名不冲突（`--tk-rail` 必须仍是长度） | `tests/portal_theme_test.ts` |

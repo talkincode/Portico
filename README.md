@@ -39,7 +39,7 @@ stdout 是一行机读 JSON，给出三个入口：
 {"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"}}}
 ```
 
-`PORTICO_PORT`（Portal，默认 8788）、`PORTICO_GATEWAY_PORT`（Gateway，默认 8789）与 `PORTICO_MCP_PORT`（MCP，默认 8790）可改端口；`PORTICO_BIND` 只接受 `127.0.0.1` / `localhost`。单个进程仍可分别用 `deno task portal` / `deno task gateway` / `deno task mcp` 起动。
+`PORTICO_PORT`（Portal，默认 8788）、`PORTICO_GATEWAY_PORT`（Gateway，默认 8789）与 `PORTICO_MCP_PORT`（MCP，默认 8790）可改端口；`PORTICO_BIND` 接受 `127.0.0.1`、`localhost`，或 RFC1918 单播 IPv4（内网监听）。拒绝 `0.0.0.0`、`::` 与公网地址。`deno.json` 的默认 task 仍只授权 `127.0.0.1`；内网绑定请用 `deno task up`（按实际地址加 `--allow-net`）或在构建时设置 `PORTICO_BIND`。单个进程仍可分别用 `deno task portal` / `deno task gateway` / `deno task mcp` 起动。
 
 `up` 是 supervisor，不是把入口合并：**Portal、Gateway、MCP 仍是三个进程，各带自己的权限集**——Portal 与 MCP 没有 `--allow-write`，这是治理属性，不是打包细节。任何一个退出，其余会被一起收走，不留半死系统。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份。
 

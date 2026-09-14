@@ -90,7 +90,7 @@ export async function handlePortalRequest(
     // caller learns nothing about which routes exist.
     if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) {
       if (actor.role === "anonymous") {
-        return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+        return htmlNotFound(request);
       }
       return await internalPage(request, url, actor, context);
     }
@@ -209,19 +209,26 @@ async function internalPage(
   if (url.pathname === "/internal/audit") {
     // The trail is a privileged surface, not an empty screen for everyone
     // else: a non-auditor must not learn that the route exists at all.
-    if (!isAuditor(actor)) return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+    if (!isAuditor(actor)) return htmlNotFound(request);
     const events = await auditTrail(actor, context);
     return html(renderAuditView({ ctx: base, events }));
   }
 
   const surfaceMatch = url.pathname.match(/^\/internal\/s\/([a-z][a-z0-9-]{1,62})$/);
   if (surfaceMatch) {
-    const surface = await context.catalog.get(actor, surfaceMatch[1]);
-    const events = await auditTrail(actor, context);
-    return html(renderSurfaceView({ ctx: base, surface, events }));
+    try {
+      const surface = await context.catalog.get(actor, surfaceMatch[1]);
+      const events = await auditTrail(actor, context);
+      return html(renderSurfaceView({ ctx: base, surface, events }));
+    } catch (error) {
+      if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
+        return htmlNotFound(request);
+      }
+      throw error;
+    }
   }
 
-  return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+  return htmlNotFound(request);
 }
 
 /* ── public editorial surface ─────────────────────────────────────────── */
@@ -252,14 +259,21 @@ async function publicPage(
 
   const storyMatch = url.pathname.match(/^\/public\/s\/([a-z][a-z0-9-]{1,62})$/);
   if (storyMatch) {
-    const surface = await context.catalog.get(actor, storyMatch[1]);
-    const page = renderPublicArticle({ ctx, surface, others: surfaces });
-    // A record that never crossed the boundary has no published page at all.
-    if (page === null) return jsonError(404, ErrorCode.NOT_FOUND, "not found");
-    return html(page);
+    try {
+      const surface = await context.catalog.get(actor, storyMatch[1]);
+      const page = renderPublicArticle({ ctx, surface, others: surfaces });
+      // A record that never crossed the boundary has no published page at all.
+      if (page === null) return htmlNotFound(request);
+      return html(page);
+    } catch (error) {
+      if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
+        return htmlNotFound(request);
+      }
+      throw error;
+    }
   }
 
-  return jsonError(404, ErrorCode.NOT_FOUND, "not found");
+  return htmlNotFound(request);
 }
 
 function jsonOk(data: unknown): Response {
@@ -298,6 +312,16 @@ function html(body: string, status = 200): Response {
     status,
     headers: securityHeaders("text/html; charset=utf-8"),
   });
+}
+
+/**
+ * Human-facing pages 404 as HTML. A JSON envelope would tell a browser this is
+ * an API, and it would disagree with the magazine shell's missing `/s/:id`
+ * page. API routes still use `jsonError`.
+ */
+function htmlNotFound(request: Request): Response {
+  const url = new URL(request.url);
+  return html(renderNotFoundPage(parseTheme(url.searchParams.get("theme"))), 404);
 }
 
 function securityHeaders(contentType: string): HeadersInit {

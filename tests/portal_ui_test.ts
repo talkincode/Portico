@@ -118,6 +118,47 @@ Deno.test("anonymous callers get 404 on every internal route, never a 403", asyn
   }
 });
 
+Deno.test("anonymous internal pages 404 as HTML, not a JSON envelope", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  for (const path of ["/internal", "/internal/c", "/internal/audit", "/internal/s/docs-writer"]) {
+    const response = await handlePortalRequest(
+      new Request(`http://portico.local${path}`),
+      context,
+    );
+    assertEquals(response.status, 404, `${path} must be 404 for anonymous`);
+    assertEquals(
+      response.headers.get("content-type"),
+      "text/html; charset=utf-8",
+      `${path} must be a page, not an API error`,
+    );
+    const body = await response.text();
+    assert(body.includes("<!DOCTYPE html>"), `${path} must render HTML`);
+    assert(!body.trimStart().startsWith("{"), `${path} must not leak a JSON envelope`);
+    assert(!body.includes("Docs Writer"), `${path} must not leak an internal record`);
+    assert(!body.includes("FORBIDDEN"), `${path} must not confirm the console exists`);
+    assert(!body.includes("内部笔记台"), `${path} must not reveal the internal shell`);
+  }
+});
+
+Deno.test("an unpublished public article 404s as HTML, not JSON", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "internal-one", name: "Internal One" }));
+  await context.catalog.publish(maintainer, { id: "internal-one", visibility: "internal" });
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/public/s/internal-one"),
+    context,
+  );
+  assertEquals(response.status, 404);
+  assertEquals(response.headers.get("content-type"), "text/html; charset=utf-8");
+  const body = await response.text();
+  assert(body.includes("<!DOCTYPE html>"));
+  assert(!body.trimStart().startsWith("{"));
+  assert(!body.includes("Internal One"));
+});
+
 Deno.test("a reader sees the console but no audit trail entry or reset of it", async () => {
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
