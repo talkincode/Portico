@@ -135,3 +135,88 @@ Deno.test("deploy contract: every entrance is told where the Gateway audit lives
     );
   }
 });
+
+/**
+ * systemd units are part of the same contract as the run scripts. The live
+ * host used to start Portal/Gateway from an unversioned copy under
+ * `/home/master/portico-runtime` and leave MCP as a detached `unless-stopped`
+ * container, so `systemctl restart portico-*` could not restart all three.
+ */
+interface UnitContract {
+  file: string;
+  script: string;
+  container: string;
+  port: number;
+}
+
+const UNITS: Record<string, UnitContract> = {
+  portal: {
+    file: "deploy/portico-portal.service",
+    script: "deploy/run-portal.sh",
+    container: "portico-portal",
+    port: 8788,
+  },
+  gateway: {
+    file: "deploy/portico-gateway.service",
+    script: "deploy/run-gateway.sh",
+    container: "portico-gateway",
+    port: 8789,
+  },
+  mcp: {
+    file: "deploy/portico-mcp.service",
+    script: "deploy/run-mcp.sh",
+    container: "portico-mcp",
+    port: 8790,
+  },
+};
+
+for (const [name, unit] of Object.entries(UNITS)) {
+  Deno.test(`deploy contract: ${name} systemd unit starts the versioned script`, async () => {
+    const text = await Deno.readTextFile(`${ROOT}${unit.file}`);
+    const start = /ExecStart=(\S+)/.exec(text)?.[1];
+    const wd = /WorkingDirectory=(\S+)/.exec(text)?.[1];
+    assert(start, `${unit.file} must declare ExecStart`);
+    assert(wd, `${unit.file} must declare WorkingDirectory`);
+    assert(
+      !start!.includes("portico-runtime") && !wd!.includes("portico-runtime"),
+      `${unit.file} must ExecStart the versioned checkout script, not portico-runtime`,
+    );
+    assert(
+      !text.includes("0.0.0.0"),
+      `${unit.file} must not bind all interfaces`,
+    );
+    assert(
+      text.includes("intranet test, not production"),
+      `${unit.file} must say this is intranet test, not production`,
+    );
+    assert(text.includes("After=docker.service"), `${unit.file} must start after docker`);
+    assert(text.includes("Restart=on-failure"), `${unit.file} must restart on failure`);
+    assert(text.includes("User=master"), `${unit.file} must run as master`);
+    assert(
+      text.includes(`ExecStartPre=-/usr/bin/docker rm -f ${unit.container}`),
+      `${unit.file} must clear a leftover ${unit.container} container`,
+    );
+    assert(
+      text.includes(`ExecStop=/usr/bin/docker stop ${unit.container}`),
+      `${unit.file} must stop ${unit.container} on unit stop`,
+    );
+    assert(
+      text.includes("Environment=PORTICO_DEPLOY_BIND=10.201.15.192"),
+      `${unit.file} must pin the intranet bind address`,
+    );
+    assert(
+      text.includes(`Environment=PORTICO_DEPLOY_PORT=${unit.port}`),
+      `${unit.file} must pin port ${unit.port}`,
+    );
+
+    assert(
+      start!.endsWith(`/${unit.script}`),
+      `${unit.file} ExecStart must be the versioned ${unit.script}`,
+    );
+    assertEquals(
+      start,
+      `${wd}/${unit.script}`,
+      `${unit.file} ExecStart must live under WorkingDirectory`,
+    );
+  });
+}
