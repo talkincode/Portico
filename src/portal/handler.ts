@@ -9,8 +9,14 @@ import {
   ErrorCode,
 } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
-import { type PageService, renderComposedPage } from "../ui/mod.ts";
-import { dashboardFrom, renderDiscoveryPage } from "./html.ts";
+import { type PageService } from "../ui/mod.ts";
+import {
+  dashboardFrom,
+  parseChannel,
+  parseTheme,
+  renderMagazinePage,
+  renderNotFoundPage,
+} from "./html.ts";
 
 export interface PortalContext {
   catalog: CatalogService;
@@ -72,14 +78,46 @@ export async function handlePortalRequest(
       if (!context.pages) return jsonOk({ components: [] });
       return jsonOk(await context.pages.get(actor));
     }
-    if (url.pathname === "/") {
-      const surfaces = await context.catalog.list(actor);
-      const dash = dashboardFrom(surfaces);
-      if (context.pages) {
-        const page = await context.pages.get(actor);
-        if (page.components.length > 0) return html(renderComposedPage(dash, page));
+    const theme = parseTheme(url.searchParams.get("theme"));
+    const channel = parseChannel(url.searchParams.get("channel"));
+    const surfacePage = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/);
+    if (url.pathname === "/" || surfacePage) {
+      let surfaces = await context.catalog.list(actor);
+      if (channel) {
+        surfaces = surfaces.filter((item) => item.channels.includes(channel));
       }
-      return html(renderDiscoveryPage(dash));
+      const dash = dashboardFrom(surfaces);
+      const page = context.pages ? await context.pages.get(actor) : undefined;
+      const picks = (page?.components ?? []).flatMap((item) => {
+        if (item.kind !== "catalog_card") return [];
+        return [{
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          governanceState: item.governanceState,
+          channels: [...item.channels],
+          version: item.version,
+        }];
+      });
+      if (surfacePage) {
+        try {
+          const selected = await context.catalog.get(actor, surfacePage[1]);
+          return html(renderMagazinePage({
+            theme,
+            channel,
+            view: dash,
+            selected,
+            picks,
+            path: url.pathname,
+          }));
+        } catch (error) {
+          if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
+            return html(renderNotFoundPage(theme), 404);
+          }
+          throw error;
+        }
+      }
+      return html(renderMagazinePage({ theme, channel, view: dash, picks, path: "/" }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
   } catch (error) {
@@ -163,9 +201,9 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-function html(body: string): Response {
+function html(body: string, status = 200): Response {
   return new Response(body, {
-    status: 200,
+    status,
     headers: securityHeaders("text/html; charset=utf-8"),
   });
 }
