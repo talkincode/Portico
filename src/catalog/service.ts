@@ -187,11 +187,12 @@ export class CatalogService {
     }
     if (
       existing.governanceState !== "draft" &&
-      existing.governanceState !== "internal"
+      existing.governanceState !== "internal" &&
+      existing.governanceState !== "rejected"
     ) {
       throw new CatalogError(
         ErrorCode.INVALID_STATE,
-        "only a draft or internal surface can be submitted for public approval",
+        "only a draft, internal or rejected surface can be submitted for public approval",
       );
     }
 
@@ -214,11 +215,17 @@ export class CatalogService {
    * version, channels, entry). This is deliberately narrower than register:
    * it only ever changes fields on an existing record, never visibility or
    * governanceState directly, and it is only allowed while the record is not
-   * yet public and not mid public-review — `draft` or `internal`. A
+   * public and not mid public-review — `draft`, `internal`, or `rejected`. A
    * `pending_public` candidate or an `approved_public` surface must first be
    * rejected/withdrawn (an independent human-auditor action) before its
    * surface can change; this keeps "update the public-facing surface" from
    * ever being a maintainer-only side door around approval.
+   *
+   * `rejected` is editable on purpose. A rejected surface never crossed the
+   * boundary, so its only outcome is "this submission failed"; leaving it
+   * uneditable made the documented reject → fix → resubmit path impossible and
+   * permanently poisoned the id. Re-publishing it still needs a fresh,
+   * independent approval, so nothing about the boundary is weakened.
    */
   async update(actor: Actor, input: UpdateInput): Promise<AgentSurface> {
     assertActor(actor);
@@ -234,7 +241,11 @@ export class CatalogService {
     if (!existing) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
     }
-    if (existing.governanceState !== "draft" && existing.governanceState !== "internal") {
+    if (
+      existing.governanceState !== "draft" &&
+      existing.governanceState !== "internal" &&
+      existing.governanceState !== "rejected"
+    ) {
       throw new CatalogError(
         ErrorCode.INVALID_STATE,
         "a pending public candidate or an approved public surface cannot be updated directly; " +

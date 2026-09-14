@@ -4,6 +4,7 @@ import {
   type Actor,
   FileIdentityStore,
   FileSessionStore,
+  type IdentityStore,
   MemoryIdentityStore,
   MemorySessionStore,
 } from "../src/access/mod.ts";
@@ -226,4 +227,44 @@ Deno.test("file store empty revoke does not rewrite identity or session files", 
   );
   assertEquals(await Deno.readTextFile(identities), identityBefore);
   assertEquals(await Deno.readTextFile(sessionsPath), sessionBefore);
+});
+
+Deno.test("a failed audit write kills no session; the revocation is not half-applied", async () => {
+  // Ordering matters and is observable: the audit record is committed first, so
+  // when it cannot be written nothing downstream has happened yet. The reverse
+  // order would leave sessions dead with no record and no way to retry — the
+  // subject would have nothing left for a retry to revoke.
+  const sessions = new MemorySessionStore();
+  const inner = new MemoryIdentityStore();
+  const refusing: IdentityStore = {
+    list: () => inner.list(),
+    get: (id) => inner.get(id),
+    listGrants: () => inner.listGrants(),
+    listRevokes: () => inner.listRevokes(),
+    listCredentialRevokes: () => inner.listCredentialRevokes(),
+    commitGrant: (identity, grant) => inner.commitGrant(identity, grant),
+    commitRevoke: (revoke) => inner.commitRevoke(revoke),
+    commitCredentialRevoke: () => Promise.reject(new Error("audit store is unavailable")),
+  };
+  const service = new AccessService(refusing, sessions);
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await service.grant(auditor, { id: reader.id, kind: "human", role: "reader" });
+  const issued = await service.issueCredential(auditor, { id: reader.id });
+  const session = await service.login({ id: reader.id, token: issued.token });
+
+  // A store failure surfaces as a rejection (a filesystem error is not a
+  // CatalogError, so entrances report it as INTERNAL); the point is that it
+  // stops here and nothing downstream has run.
+  let failed = false;
+  try {
+    await service.revokeCredentials(auditor, { id: reader.id });
+  } catch {
+    failed = true;
+  }
+  assertEquals(failed, true, "a failing audit write must fail the whole call");
+
+  // Neither the session nor the credential was touched.
+  assertEquals(await service.resolveSession(session.token), reader);
+  const stillValid = await service.login({ id: reader.id, token: issued.token });
+  assert(stillValid.token.startsWith("pst1_"));
 });

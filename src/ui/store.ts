@@ -1,4 +1,4 @@
-import { writeJsonFile } from "../fs.ts";
+import { serialize, writeJsonFile } from "../fs.ts";
 import type { PageDocument } from "./types.ts";
 
 export interface PageStore {
@@ -40,7 +40,11 @@ export class FilePageStore implements PageStore {
     }
   }
 
-  async save(document: PageDocument): Promise<void> {
+  save(document: PageDocument): Promise<void> {
+    return serialize(this.path, () => this.#saveImpl(document));
+  }
+
+  async #saveImpl(document: PageDocument): Promise<void> {
     await writeJsonFile(this.path, cloneDocument(document));
   }
 }

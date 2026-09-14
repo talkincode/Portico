@@ -1,4 +1,4 @@
-import { writeJsonFile } from "../fs.ts";
+import { serialize, writeJsonFile } from "../fs.ts";
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
 import type {
   CredentialRecord,
@@ -151,7 +151,11 @@ export class FileIdentityStore implements IdentityStore {
     return file.credentialRevokes.map(cloneCredentialRevoke);
   }
 
-  async commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
+  commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitGrantImpl(identity, grant));
+  }
+
+  async #commitGrantImpl(identity: Identity, grant: GrantRecord): Promise<void> {
     const file = await this.#load();
     if (file.grants.some((item) => item.id === grant.id)) {
       throw new CatalogError(ErrorCode.ALREADY_EXISTS, `grant '${grant.id}' already exists`);
@@ -163,7 +167,11 @@ export class FileIdentityStore implements IdentityStore {
     await this.#save(file);
   }
 
-  async commitRevoke(revoke: RevokeRecord): Promise<void> {
+  commitRevoke(revoke: RevokeRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitRevokeImpl(revoke));
+  }
+
+  async #commitRevokeImpl(revoke: RevokeRecord): Promise<void> {
     const file = await this.#load();
     if (file.revokes.some((item) => item.id === revoke.id)) {
       throw new CatalogError(ErrorCode.ALREADY_EXISTS, `revoke '${revoke.id}' already exists`);
@@ -180,7 +188,11 @@ export class FileIdentityStore implements IdentityStore {
     await this.#save(file);
   }
 
-  async commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void> {
+  commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitCredentialRevokeImpl(record));
+  }
+
+  async #commitCredentialRevokeImpl(record: CredentialRevokeRecord): Promise<void> {
     const file = await this.#load();
     if (file.credentialRevokes.some((item) => item.id === record.id)) {
       throw new CatalogError(
@@ -315,7 +327,11 @@ export class FileSessionStore implements SessionStore {
     return file.credentials.map(cloneCredential);
   }
 
-  async commitCredential(record: CredentialRecord): Promise<void> {
+  commitCredential(record: CredentialRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitCredentialImpl(record));
+  }
+
+  async #commitCredentialImpl(record: CredentialRecord): Promise<void> {
     const file = await this.#load();
     if (file.credentials.some((item) => item.id === record.id)) {
       throw new CatalogError(ErrorCode.ALREADY_EXISTS, `credential '${record.id}' already exists`);
@@ -324,7 +340,11 @@ export class FileSessionStore implements SessionStore {
     await this.#save(file);
   }
 
-  async revokeCredential(id: string, revokedAt: string): Promise<void> {
+  revokeCredential(id: string, revokedAt: string): Promise<void> {
+    return serialize(this.path, () => this.#revokeCredentialImpl(id, revokedAt));
+  }
+
+  async #revokeCredentialImpl(id: string, revokedAt: string): Promise<void> {
     const file = await this.#load();
     const record = file.credentials.find((item) => item.id === id);
     if (!record) {
@@ -339,7 +359,11 @@ export class FileSessionStore implements SessionStore {
     return file.sessions.map(cloneSession);
   }
 
-  async commitSession(record: SessionRecord): Promise<void> {
+  commitSession(record: SessionRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitSessionImpl(record));
+  }
+
+  async #commitSessionImpl(record: SessionRecord): Promise<void> {
     const file = await this.#load();
     if (file.sessions.some((item) => item.id === record.id)) {
       throw new CatalogError(ErrorCode.ALREADY_EXISTS, `session '${record.id}' already exists`);
@@ -348,7 +372,11 @@ export class FileSessionStore implements SessionStore {
     await this.#save(file);
   }
 
-  async revokeSession(id: string, revokedAt: string): Promise<void> {
+  revokeSession(id: string, revokedAt: string): Promise<void> {
+    return serialize(this.path, () => this.#revokeSessionImpl(id, revokedAt));
+  }
+
+  async #revokeSessionImpl(id: string, revokedAt: string): Promise<void> {
     const file = await this.#load();
     const record = file.sessions.find((item) => item.id === id);
     if (!record) {

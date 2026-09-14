@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "../assert.ts";
-import { actor, bootstrapRoster, ROOT, runCli, sampleMcpRecord } from "./harness.ts";
+import { actor, bootstrapRoster, ROOT, runCli, sampleMcpRecord, sessionFor } from "./harness.ts";
 import { bootEntrypoint, type JsonBody } from "./process.ts";
 
 /**
@@ -147,6 +147,52 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     ) as { ok: boolean; data?: Array<{ id: string }> };
     assertEquals(envelope.ok, true);
     assertEquals(envelope.data?.map((item) => item.id), ["docs-mcp"]);
+
+    // The Gateway just recorded an access event. `up` hands the same audit path
+    // to every entrance, so the auditor timeline must carry it on both the
+    // Portal and MCP — not just on `audit list --audit`.
+    const auditor = sessionFor("human:security-auditor")!;
+    const portalAudit = await fetch(`${portalUrl}/api/audit`, {
+      headers: { authorization: `Bearer ${auditor}` },
+    });
+    const portalEvents = (await portalAudit.json() as JsonBody<Array<{ kind: string }>>).data ?? [];
+    assert(
+      portalEvents.some((event) => event.kind === "gateway"),
+      `the Portal timeline must include the Gateway access event; got ${
+        JSON.stringify(portalEvents.map((event) => event.kind))
+      }`,
+    );
+
+    const mcpAudit = await fetch(mcpUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${auditor}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "portico_audit", arguments: {} },
+      }),
+    });
+    const mcpBody = await mcpAudit.json() as {
+      result?: { content?: Array<{ text: string }> };
+    };
+    const mcpEnvelope = JSON.parse(mcpBody.result?.content?.[0]?.text ?? "null") as {
+      ok: boolean;
+      data?: Array<{ kind: string }>;
+    };
+    assertEquals(mcpEnvelope.ok, true);
+    assert(
+      (mcpEnvelope.data ?? []).some((event) => event.kind === "gateway"),
+      "the MCP timeline must include the Gateway access event",
+    );
+    assertEquals(
+      (mcpEnvelope.data ?? []).length,
+      portalEvents.length,
+      "Portal and MCP must show the same timeline",
+    );
   } finally {
     await first.stop();
   }

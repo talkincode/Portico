@@ -263,3 +263,75 @@ Deno.test("CLI reject keeps anonymous empty; reader sees rejected", async () => 
   };
   assertEquals(gotBody.data.governanceState, "rejected");
 });
+
+Deno.test("CLI: a rejected surface can be fixed and resubmitted; the id is not poisoned", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-approval-resubmit-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const input = `${dir}/record.json`;
+  const fix = `${dir}/fix.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord())}\n`);
+  await registerAndSubmitPublic(catalog, input, env);
+
+  const rejected = await runCli([
+    "catalog",
+    "reject",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+  ], env);
+  assertEquals(rejected.code, 0, rejected.raw || rejected.stderr);
+
+  // The documented recovery path: fix it, then resubmit for a *fresh*
+  // independent review. Leaving `rejected` terminal made this impossible and
+  // permanently poisoned the id — `update` said "reject first", and rejecting
+  // was the thing that made it uneditable.
+  await Deno.writeTextFile(fix, `${JSON.stringify({ description: "Corrected description." })}\n`);
+  const updated = await runCli([
+    "catalog",
+    "update",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--id",
+    "docs-writer",
+    "--input",
+    fix,
+  ], env);
+  assertEquals(updated.code, 0, updated.raw || updated.stderr);
+
+  const resubmitted = await runCli([
+    "catalog",
+    "publish",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--id",
+    "docs-writer",
+    "--visibility",
+    "public",
+  ], env);
+  assertEquals(resubmitted.code, 0, resubmitted.raw || resubmitted.stderr);
+
+  // Still not reachable until a second, independent approval.
+  const hidden = await runCli(["catalog", "list", "--catalog", catalog], env);
+  assertEquals((hidden.stdout as { data: unknown[] }).data, []);
+
+  const approved = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+  ], env);
+  assertEquals(approved.code, 0, approved.raw || approved.stderr);
+
+  const visible = await runCli(["catalog", "list", "--catalog", catalog], env);
+  const listed = visible.stdout as { data: Array<{ id: string; description: string }> };
+  assertEquals(listed.data.length, 1);
+  assertEquals(listed.data[0].description, "Corrected description.");
+});

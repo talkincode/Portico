@@ -188,7 +188,7 @@ deno task cli -- catalog publish \
   --visibility internal
 ```
 
-已登记的 `draft` / `internal` 记录可由维护者更新名称、说明、版本、渠道或入口，不能直接改可见性或治理状态。待审与已公开记录必须先拒绝或撤回：
+已登记的 `draft` / `internal` / `rejected` 记录可由维护者更新名称、说明、版本、渠道或入口，不能直接改可见性或治理状态。`rejected` 可改是有意的——被拒绝的表面从未公开，把它做成终态会让"拒绝→修改→重新提交"这条路径走不通。待审与已公开记录仍必须先拒绝或撤回：
 
 ```sh
 deno task cli -- catalog update \
@@ -407,7 +407,7 @@ curl -s http://127.0.0.1:8788/api/page \
   -H "Authorization: Bearer $PORTICO_SESSION"
 ```
 
-人类安全审计视图只读。维护者与 Agent 不能读、不能改写。时间线合并目录变更、授权记录、公开审批，以及可选的 Gateway 访问审计。
+人类安全审计视图只读。维护者与 Agent 不能读、不能改写。CLI `audit list`、Portal `GET /api/audit` 与 MCP `portico_audit` 呈现同一份时间线：目录变更、授权记录、公开审批，以及 Gateway 访问审计。给 Portal / MCP 设置 `PORTICO_GATEWAY_AUDIT_PATH` 即并入 Gateway 事件；`deno task up` 会同时交给三个入口。
 
 ```sh
 deno task cli -- audit list \

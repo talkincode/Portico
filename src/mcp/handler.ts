@@ -2,6 +2,7 @@ import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
 import { AuditService } from "../audit/mod.ts";
 import { type Actor, CatalogError, CatalogService } from "../catalog/mod.ts";
+import type { GatewayService } from "../gateway/mod.ts";
 import { callTool, isTool, TOOLS } from "./tools.ts";
 import {
   isRecord,
@@ -26,6 +27,8 @@ import {
 export interface McpContext {
   catalog: CatalogService;
   access: AccessService;
+  /** Present when a Gateway audit path is configured; feeds `portico_audit`. */
+  gateway?: GatewayService;
 }
 
 export async function handleMcpRequest(
@@ -167,7 +170,7 @@ async function toolsCall(
   try {
     const data = await callTool(actor, name, params.arguments, {
       catalog: context.catalog,
-      audit: new AuditService(context.catalog, context.access),
+      audit: new AuditService(context.catalog, context.access, context.gateway),
     });
     return { content: [{ type: "text", text: JSON.stringify({ ok: true, data }) }] };
   } catch (error) {
