@@ -1,4 +1,4 @@
-import { writeJsonFile } from "../fs.ts";
+import { serialize, writeJsonFile } from "../fs.ts";
 import type { GatewayAuditRecord } from "./types.ts";
 
 export interface GatewayAuditStore {
@@ -35,7 +35,11 @@ export class FileGatewayAuditStore implements GatewayAuditStore {
     return file.records.map(cloneRecord);
   }
 
-  async append(record: GatewayAuditRecord): Promise<void> {
+  append(record: GatewayAuditRecord): Promise<void> {
+    return serialize(this.path, () => this.#appendImpl(record));
+  }
+
+  async #appendImpl(record: GatewayAuditRecord): Promise<void> {
     const file = await this.#load();
     file.records.push(cloneRecord(record));
     await this.#save(file);

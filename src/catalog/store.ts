@@ -1,4 +1,4 @@
-import { writeJsonFile } from "../fs.ts";
+import { serialize, writeJsonFile } from "../fs.ts";
 import { CatalogError, ErrorCode } from "./errors.ts";
 import type { AgentSurface, ApprovalRecord, CatalogChangeRecord } from "./types.ts";
 
@@ -100,7 +100,11 @@ export class FileCatalogStore implements CatalogStore {
     return record ? cloneRecord(record) : undefined;
   }
 
-  async put(record: AgentSurface): Promise<void> {
+  put(record: AgentSurface): Promise<void> {
+    return serialize(this.path, () => this.#putImpl(record));
+  }
+
+  async #putImpl(record: AgentSurface): Promise<void> {
     const file = await this.#load();
     const index = file.records.findIndex((item) => item.id === record.id);
     if (index >= 0) file.records[index] = cloneRecord(record);
@@ -118,7 +122,11 @@ export class FileCatalogStore implements CatalogStore {
     return file.changes.map(cloneChange);
   }
 
-  async commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+  commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitChangeImpl(record, change));
+  }
+
+  async #commitChangeImpl(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
     const file = await this.#load();
     if (file.changes.some((item) => item.id === change.id)) {
       throw new CatalogError(
@@ -133,7 +141,11 @@ export class FileCatalogStore implements CatalogStore {
     await this.#save(file);
   }
 
-  async commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
+  commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitApprovalImpl(record, approval));
+  }
+
+  async #commitApprovalImpl(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
     const file = await this.#load();
     if (file.approvals.some((item) => item.id === approval.id)) {
       throw new CatalogError(

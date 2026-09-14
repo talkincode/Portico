@@ -172,8 +172,14 @@ export class AccessService {
     }
 
     const revokedAt = this.clock().toISOString();
-    await this.#invalidateSubjectAccess(subject.id, revokedAt);
 
+    // The audit record is committed *before* the sessions and credentials are
+    // invalidated, matching `revoke()` and making a partial failure
+    // recoverable: if invalidation stops halfway, the caller sees an error and
+    // a retry completes it, because the subject still has live credentials for
+    // the retry to find. The opposite order could fail with nothing live left
+    // to revoke, which would leave a real revocation permanently unrecorded
+    // and the retry returning INVALID_STATE.
     const record: CredentialRevokeRecord = {
       id: credentialRevokeId(subject.id, revokedAt),
       subjectId: subject.id,
@@ -185,6 +191,8 @@ export class AccessService {
       sessions: activeSessions.length,
     };
     await this.store.commitCredentialRevoke(record);
+    await this.#invalidateSubjectAccess(subject.id, revokedAt);
+
     return {
       id: record.id,
       subjectId: record.subjectId,

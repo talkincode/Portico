@@ -237,6 +237,9 @@ if (import.meta.main) {
         PORTICO_IDENTITIES_PATH: setup.identities,
         PORTICO_SESSIONS_PATH: setup.sessions,
         PORTICO_PAGE_PATH: setup.page,
+        // All three entrances read the same Gateway audit file, so the auditor
+        // timeline is identical whichever one is asked.
+        PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
         PORTICO_BIND: setup.hostname,
         PORTICO_PORT: String(setup.portalPort),
       }),
@@ -258,6 +261,7 @@ if (import.meta.main) {
         PORTICO_CATALOG_PATH: setup.catalog,
         PORTICO_IDENTITIES_PATH: setup.identities,
         PORTICO_SESSIONS_PATH: setup.sessions,
+        PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
         PORTICO_BIND: setup.hostname,
         PORTICO_PORT: String(setup.mcpPort),
       }),

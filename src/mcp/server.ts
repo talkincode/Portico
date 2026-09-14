@@ -1,11 +1,17 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
+import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { handleMcpRequest } from "./handler.ts";
 
 export interface McpListenOptions {
   catalogPath: string;
   identitiesPath: string;
   sessionsPath?: string;
+  /**
+   * When set, `portico_audit` also merges Gateway access events, so an MCP
+   * caller sees the same timeline as `audit list --audit` and the Portal.
+   */
+  gatewayAuditPath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -18,12 +24,15 @@ export function listenMcp(options: McpListenOptions): Deno.HttpServer {
     new FileIdentityStore(options.identitiesPath),
     options.sessionsPath ? new FileSessionStore(options.sessionsPath) : undefined,
   );
+  const gateway = options.gatewayAuditPath
+    ? new GatewayService(catalog, new FileGatewayAuditStore(options.gatewayAuditPath))
+    : undefined;
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
     signal: options.signal,
     onListen: options.onListen ?? (() => {}),
-  }, (request) => handleMcpRequest(request, { catalog, access }));
+  }, (request) => handleMcpRequest(request, { catalog, access, gateway }));
 }
 
 export function mcpUrl(server: Deno.HttpServer): string {

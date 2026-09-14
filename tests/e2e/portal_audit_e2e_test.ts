@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "../assert.ts";
+import { gatewayUrl, listenGateway } from "../../src/gateway/mod.ts";
 import { listenPortal, portalUrl } from "../../src/portal/mod.ts";
 import {
   actor,
@@ -45,12 +46,14 @@ async function withPortal(
   catalog: string,
   identities: string,
   fn: (base: string) => Promise<void>,
+  gatewayAudit?: string,
 ): Promise<void> {
   const controller = new AbortController();
   const server = listenPortal({
     catalogPath: catalog,
     identitiesPath: identities,
     sessionsPath: sessionsPathFor(identities),
+    gatewayAuditPath: gatewayAudit,
     hostname: "127.0.0.1",
     port: 0,
     signal: controller.signal,
@@ -144,4 +147,57 @@ Deno.test("E2E: Portal audit writes are rejected and do not dirty catalog or ide
   assertEquals(await Deno.readTextFile(catalog), beforeCatalog);
   assertEquals(await Deno.readTextFile(identities), beforeIdentities);
   assert(beforeCatalog.includes("docs-writer"));
+});
+
+Deno.test("E2E: the Portal auditor timeline merges Gateway access events", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-portal-gateway-audit-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const gatewayAudit = `${dir}/gateway-audit.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord())}\n`);
+
+  const registered = await runCli([
+    "catalog",
+    "register",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--input",
+    input,
+  ], env);
+  assertEquals(registered.code, 0, registered.raw || registered.stderr);
+
+  // Produce one denied Gateway access event.
+  const controller = new AbortController();
+  const gateway = listenGateway({
+    catalogPath: catalog,
+    identitiesPath: identities,
+    auditPath: gatewayAudit,
+    sessionsPath: sessionsPathFor(identities),
+    hostname: "127.0.0.1",
+    port: 0,
+    signal: controller.signal,
+  });
+  const denied = await fetch(`${gatewayUrl(gateway)}/gateway/mcp/no-such-surface/authorize`, {
+    method: "POST",
+  });
+  assertEquals(denied.status, 404);
+  controller.abort();
+  await gateway.finished;
+
+  // `audit list --audit` merges it; the Portal must not show a smaller trail.
+  await withPortal(catalog, identities, async (base) => {
+    const response = await fetchJson(`${base}/api/audit`, { headers: auditorHeaders() });
+    assertEquals(response.status, 200);
+    const events = response.body.data as AuditEvent[];
+    assert(
+      events.some((event) => event.kind === "gateway"),
+      `the Gateway access event must appear on the Portal; got ${
+        JSON.stringify(events.map((event) => event.kind))
+      }`,
+    );
+    assert(events.some((event) => event.kind === "catalog"));
+  }, gatewayAudit);
 });

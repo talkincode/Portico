@@ -49,3 +49,27 @@ export async function writeJsonFile(path: string, value: unknown): Promise<void>
   await Deno.writeTextFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
   await Deno.rename(tmp, path);
 }
+
+/**
+ * Serializes one read-modify-write of `path` at a time, per process.
+ *
+ * Every store is a whole-file read → mutate → write, and `await` interleaves:
+ * two concurrent calls both load, both mutate their own copy, and the second
+ * write silently discards the first. The Gateway does exactly this — it appends
+ * to its access audit on every request, so concurrent requests lost audit
+ * records. Losing an audit record is a governance failure, not a data glitch.
+ *
+ * The temp file keeps its plain `<path>.tmp` name on purpose: the deployment
+ * grants write access to exactly that file, so a unique suffix would be
+ * refused. Cross-process writers are still unsynchronized; each file has one
+ * writer process by design (see `docs/roadmap.md`).
+ */
+const writeChains = new Map<string, Promise<unknown>>();
+
+export function serialize<T>(path: string, task: () => Promise<T>): Promise<T> {
+  const previous = writeChains.get(path) ?? Promise.resolve();
+  const result = previous.then(task, task);
+  // The chain must continue even when a task rejects.
+  writeChains.set(path, result.then(() => {}, () => {}));
+  return result;
+}
