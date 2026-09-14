@@ -10,7 +10,12 @@ import {
 } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
 import { type PageService, renderComposedPage } from "../ui/mod.ts";
-import { dashboardFrom, renderDiscoveryPage } from "./html.ts";
+import {
+  dashboardFrom,
+  renderDiscoveryPage,
+  renderNotFoundPage,
+  renderSurfacePage,
+} from "./html.ts";
 
 export interface PortalContext {
   catalog: CatalogService;
@@ -80,6 +85,18 @@ export async function handlePortalRequest(
         if (page.components.length > 0) return html(renderComposedPage(dash, page));
       }
       return html(renderDiscoveryPage(dash));
+    }
+    const surfacePage = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/);
+    if (surfacePage) {
+      try {
+        const surface = await context.catalog.get(actor, surfacePage[1]);
+        return html(renderSurfacePage(surface));
+      } catch (error) {
+        if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
+          return html(renderNotFoundPage(), 404);
+        }
+        throw error;
+      }
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
   } catch (error) {
@@ -163,9 +180,9 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-function html(body: string): Response {
+function html(body: string, status = 200): Response {
   return new Response(body, {
-    status: 200,
+    status,
     headers: securityHeaders("text/html; charset=utf-8"),
   });
 }

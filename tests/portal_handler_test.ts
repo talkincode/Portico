@@ -215,6 +215,47 @@ Deno.test("HTML discovery shows the reader the same name and hides it from anony
   assert(!anonHtml.includes("Docs Writer"), "anonymous HTML must not leak internal names");
 });
 
+Deno.test("HTML discovery presents clickable directory cards instead of a publish-log table", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  const html = await page.text();
+  assertEquals(page.status, 200);
+  assert(html.includes('href="/s/docs-writer"'), "cards must link to an in-portal detail page");
+  assert(html.includes("Docs Writer"));
+  assert(!html.includes("<th>治理状态</th>"), "homepage must not be a governance spreadsheet");
+  assert(!html.includes("<th>可见性</th>"), "homepage must not be a publish-log table");
+});
+
+Deno.test("HTML detail shows the reader the surface and hides internal from anonymous", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const readerPage = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(readerPage.status, 200);
+  assertEquals(readerPage.headers.get("content-type"), "text/html; charset=utf-8");
+  const readerHtml = await readerPage.text();
+  assert(readerHtml.includes("Docs Writer"));
+  assert(readerHtml.includes("Drafts internal documentation."));
+  assert(readerHtml.includes("jsr:@example/docs-writer"));
+
+  const anonPage = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer"),
+    context,
+  );
+  assertEquals(anonPage.status, 404);
+  const anonHtml = await anonPage.text();
+  assert(!anonHtml.includes("Docs Writer"), "anonymous detail must not leak internal names");
+  assert(!anonHtml.includes("jsr:@example/docs-writer"), "anonymous detail must not leak entries");
+});
+
 Deno.test("HTML escapes surface names so portal pages are not a CMS", async () => {
   const context = await seededContext();
   const input = internalCli();

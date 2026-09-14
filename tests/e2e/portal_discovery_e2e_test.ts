@@ -218,3 +218,42 @@ Deno.test("E2E: Portal POST does not dirty the catalog file", async () => {
 
   assertEquals(await Deno.readTextFile(catalog), before);
 });
+
+Deno.test("E2E: Portal homepage cards open an in-portal detail page for the same surface", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-portal-detail-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+  const registered = await runCli([
+    "catalog",
+    "register",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--input",
+    input,
+  ], env);
+  assertEquals(registered.code, 0, registered.raw || registered.stderr);
+
+  await withPortal(catalog, identities, async (base) => {
+    const home = await fetch(`${base}/`, { headers: readerHeaders() });
+    assertEquals(home.status, 200);
+    const homeHtml = await home.text();
+    assert(homeHtml.includes("Docs Writer"));
+    assert(homeHtml.includes('href="/s/docs-writer"'));
+    assert(!homeHtml.includes("<th>治理状态</th>"));
+
+    const detail = await fetch(`${base}/s/docs-writer`, { headers: readerHeaders() });
+    assertEquals(detail.status, 200);
+    const detailHtml = await detail.text();
+    assert(detailHtml.includes("Docs Writer"));
+    assert(detailHtml.includes("Drafts internal documentation."));
+
+    const anon = await fetch(`${base}/s/docs-writer`);
+    assertEquals(anon.status, 404);
+    const anonHtml = await anon.text();
+    assert(!anonHtml.includes("Docs Writer"));
+  });
+});
