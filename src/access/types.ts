@@ -45,6 +45,28 @@ export interface RevokeResult {
   revokedAt: string;
 }
 
+export interface CredentialRevokeRecord {
+  id: string;
+  subjectId: string;
+  kind: ActorKind;
+  role: GrantRole;
+  revokedBy: MaintainerRef;
+  revokedAt: string;
+  credentials: number;
+  sessions: number;
+}
+
+export interface CredentialRevokeResult {
+  id: string;
+  subjectId: string;
+  kind: ActorKind;
+  role: GrantRole;
+  revokedCredentials: number;
+  revokedSessions: number;
+  identityRemains: true;
+  revokedAt: string;
+}
+
 export interface IssueCredentialInput {
   id: string;
 }

@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejectsCode } from "./assert.ts";
-import { AccessService, MemoryIdentityStore } from "../src/access/mod.ts";
+import { AccessService, MemoryIdentityStore, MemorySessionStore } from "../src/access/mod.ts";
 import { AuditService } from "../src/audit/mod.ts";
 import {
   type Actor,
@@ -213,4 +213,36 @@ Deno.test("auditor timeline includes identity revoke; failed revoke does not app
   await assertRejectsCode(() => access.revoke(reader, { id: reader.id }), "FORBIDDEN");
   const again = await audit.list(auditor);
   assertEquals(again.filter((item) => item.kind === "revoke").length, 1);
+});
+
+Deno.test("auditor timeline includes credential revoke; identity stays and failed revoke is absent", async () => {
+  const sessions = new MemorySessionStore();
+  const access = new AccessService(new MemoryIdentityStore(), sessions);
+  await access.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await access.grant(auditor, {
+    id: maintainer.id,
+    kind: "agent",
+    role: "maintainer",
+  });
+  await access.grant(auditor, { id: reader.id, kind: "human", role: "reader" });
+  const catalog = new CatalogService(new MemoryCatalogStore());
+  const audit = new AuditService(catalog, access);
+
+  const issued = await access.issueCredential(auditor, { id: reader.id });
+  await access.login({ id: reader.id, token: issued.token });
+  await access.revokeCredentials(auditor, { id: reader.id });
+
+  const events = await audit.list(auditor);
+  const credential = events.find((item) => item.kind === "credential");
+  assertEquals(credential?.action, "revoke_credential");
+  assertEquals(credential?.subjectId, reader.id);
+  assertEquals(credential?.actor.id, auditor.id);
+  assertEquals(events.some((item) => item.kind === "revoke"), false);
+
+  await assertRejectsCode(
+    () => access.revokeCredentials(maintainer, { id: reader.id }),
+    "FORBIDDEN",
+  );
+  const again = await audit.list(auditor);
+  assertEquals(again.filter((item) => item.kind === "credential").length, 1);
 });

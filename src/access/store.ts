@@ -1,6 +1,7 @@
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
 import type {
   CredentialRecord,
+  CredentialRevokeRecord,
   GrantRecord,
   Identity,
   RevokeRecord,
@@ -12,8 +13,10 @@ export interface IdentityStore {
   get(id: string): Promise<Identity | undefined>;
   listGrants(): Promise<GrantRecord[]>;
   listRevokes(): Promise<RevokeRecord[]>;
+  listCredentialRevokes(): Promise<CredentialRevokeRecord[]>;
   commitGrant(identity: Identity, grant: GrantRecord): Promise<void>;
   commitRevoke(revoke: RevokeRecord): Promise<void>;
+  commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void>;
 }
 
 function cloneIdentity(record: Identity): Identity {
@@ -28,10 +31,15 @@ function cloneRevoke(record: RevokeRecord): RevokeRecord {
   return structuredClone(record);
 }
 
+function cloneCredentialRevoke(record: CredentialRevokeRecord): CredentialRevokeRecord {
+  return structuredClone(record);
+}
+
 export class MemoryIdentityStore implements IdentityStore {
   #identities = new Map<string, Identity>();
   #grants: GrantRecord[] = [];
   #revokes: RevokeRecord[] = [];
+  #credentialRevokes: CredentialRevokeRecord[] = [];
 
   list(): Promise<Identity[]> {
     return Promise.resolve([...this.#identities.values()].map(cloneIdentity));
@@ -48,6 +56,10 @@ export class MemoryIdentityStore implements IdentityStore {
 
   listRevokes(): Promise<RevokeRecord[]> {
     return Promise.resolve(this.#revokes.map(cloneRevoke));
+  }
+
+  listCredentialRevokes(): Promise<CredentialRevokeRecord[]> {
+    return Promise.resolve(this.#credentialRevokes.map(cloneCredentialRevoke));
   }
 
   commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
@@ -79,12 +91,34 @@ export class MemoryIdentityStore implements IdentityStore {
     this.#revokes.push(cloneRevoke(revoke));
     return Promise.resolve();
   }
+
+  commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void> {
+    if (this.#credentialRevokes.some((item) => item.id === record.id)) {
+      return Promise.reject(
+        new CatalogError(
+          ErrorCode.ALREADY_EXISTS,
+          `credential revoke '${record.id}' already exists`,
+        ),
+      );
+    }
+    if (!this.#identities.has(record.subjectId)) {
+      return Promise.reject(
+        new CatalogError(
+          ErrorCode.NOT_FOUND,
+          `identity '${record.subjectId}' is not in the roster`,
+        ),
+      );
+    }
+    this.#credentialRevokes.push(cloneCredentialRevoke(record));
+    return Promise.resolve();
+  }
 }
 
 interface IdentityFile {
   identities: Identity[];
   grants: GrantRecord[];
   revokes: RevokeRecord[];
+  credentialRevokes: CredentialRevokeRecord[];
 }
 
 export class FileIdentityStore implements IdentityStore {
@@ -109,6 +143,11 @@ export class FileIdentityStore implements IdentityStore {
   async listRevokes(): Promise<RevokeRecord[]> {
     const file = await this.#load();
     return file.revokes.map(cloneRevoke);
+  }
+
+  async listCredentialRevokes(): Promise<CredentialRevokeRecord[]> {
+    const file = await this.#load();
+    return file.credentialRevokes.map(cloneCredentialRevoke);
   }
 
   async commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
@@ -140,6 +179,24 @@ export class FileIdentityStore implements IdentityStore {
     await this.#save(file);
   }
 
+  async commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void> {
+    const file = await this.#load();
+    if (file.credentialRevokes.some((item) => item.id === record.id)) {
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `credential revoke '${record.id}' already exists`,
+      );
+    }
+    if (!file.identities.some((item) => item.id === record.subjectId)) {
+      throw new CatalogError(
+        ErrorCode.NOT_FOUND,
+        `identity '${record.subjectId}' is not in the roster`,
+      );
+    }
+    file.credentialRevokes.push(cloneCredentialRevoke(record));
+    await this.#save(file);
+  }
+
   async #load(): Promise<IdentityFile> {
     try {
       const text = await Deno.readTextFile(this.path);
@@ -149,14 +206,18 @@ export class FileIdentityStore implements IdentityStore {
       }
       const grants = Array.isArray(parsed.grants) ? parsed.grants : [];
       const revokes = Array.isArray(parsed.revokes) ? parsed.revokes : [];
+      const credentialRevokes = Array.isArray(parsed.credentialRevokes)
+        ? parsed.credentialRevokes
+        : [];
       return {
         identities: parsed.identities.map(cloneIdentity),
         grants: grants.map(cloneGrant),
         revokes: revokes.map(cloneRevoke),
+        credentialRevokes: credentialRevokes.map(cloneCredentialRevoke),
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { identities: [], grants: [], revokes: [] };
+        return { identities: [], grants: [], revokes: [], credentialRevokes: [] };
       }
       throw error;
     }
@@ -170,6 +231,7 @@ export class FileIdentityStore implements IdentityStore {
           identities: file.identities,
           grants: file.grants,
           revokes: file.revokes,
+          credentialRevokes: file.credentialRevokes,
         },
         null,
         2,
