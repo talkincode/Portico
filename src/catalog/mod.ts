@@ -1,4 +1,6 @@
 export { CatalogError, ErrorCode } from "./errors.ts";
+export { dashboardFrom } from "./dashboard.ts";
+export type { DashboardView } from "./dashboard.ts";
 export { CatalogService } from "./service.ts";
 export { FileCatalogStore, MemoryCatalogStore } from "./store.ts";
 export type { CatalogStore } from "./store.ts";

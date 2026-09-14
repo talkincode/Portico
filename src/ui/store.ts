@@ -1,3 +1,4 @@
+import { writeJsonFile } from "../fs.ts";
 import type { PageDocument } from "./types.ts";
 
 export interface PageStore {
@@ -40,9 +41,6 @@ export class FilePageStore implements PageStore {
   }
 
   async save(document: PageDocument): Promise<void> {
-    const tmp = `${this.path}.tmp`;
-    const json = `${JSON.stringify(cloneDocument(document), null, 2)}\n`;
-    await Deno.writeTextFile(tmp, json);
-    await Deno.rename(tmp, this.path);
+    await writeJsonFile(this.path, cloneDocument(document));
   }
 }

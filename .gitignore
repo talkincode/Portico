@@ -10,3 +10,4 @@ tmp/
 *.log
 catalog.json
 catalog.json.tmp
+dist/

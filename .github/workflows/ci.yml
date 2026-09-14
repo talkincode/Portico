@@ -17,8 +17,10 @@ jobs:
         with:
           deno-version: "2.9.6"
       - name: lint
-        run: deno lint
+        run: deno task lint
       - name: check
-        run: deno check src/cli/main.ts src/catalog/mod.ts src/access/mod.ts src/audit/mod.ts src/portal/mod.ts src/portal/main.ts src/gateway/mod.ts src/gateway/main.ts src/ui/mod.ts
+        run: deno task check
       - name: test
-        run: deno test --allow-read --allow-write --allow-env --allow-run --allow-net=127.0.0.1 tests/
+        run: deno task test
+      - name: build
+        run: deno task build

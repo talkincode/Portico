@@ -1,3 +1,4 @@
+import { writeJsonFile } from "../fs.ts";
 import type { GatewayAuditRecord } from "./types.ts";
 
 export interface GatewayAuditStore {
@@ -57,9 +58,6 @@ export class FileGatewayAuditStore implements GatewayAuditStore {
   }
 
   async #save(file: AuditFile): Promise<void> {
-    const tmp = `${this.path}.tmp`;
-    const json = `${JSON.stringify({ records: file.records }, null, 2)}\n`;
-    await Deno.writeTextFile(tmp, json);
-    await Deno.rename(tmp, this.path);
+    await writeJsonFile(this.path, { records: file.records });
   }
 }

@@ -1,16 +1,7 @@
 import type { AgentSurface, Channel } from "../catalog/mod.ts";
+import type { DashboardView } from "../catalog/dashboard.ts";
 
-export interface DashboardView {
-  counts: {
-    visible: number;
-    draft: number;
-    internal: number;
-    pending_public: number;
-    approved_public: number;
-    rejected: number;
-  };
-  surfaces: AgentSurface[];
-}
+export type { DashboardView };
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ChannelFilter = Channel | null;
@@ -212,25 +203,8 @@ export function renderDiscoveryPage(view: DashboardView): string {
   return renderMagazinePage({ theme: "system", channel: null, view, picks: [] });
 }
 
-export function dashboardFrom(surfaces: AgentSurface[]): DashboardView {
-  const counts = {
-    visible: surfaces.length,
-    draft: 0,
-    internal: 0,
-    pending_public: 0,
-    approved_public: 0,
-    rejected: 0,
-  };
-  for (const surface of surfaces) {
-    if (surface.governanceState === "draft") counts.draft += 1;
-    else if (surface.governanceState === "internal") counts.internal += 1;
-    else if (surface.governanceState === "pending_public") counts.pending_public += 1;
-    else if (surface.governanceState === "approved_public") counts.approved_public += 1;
-    else if (surface.governanceState === "rejected") counts.rejected += 1;
-  }
-  const ordered = [...surfaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  return { counts, surfaces: ordered };
-}
+// `dashboardFrom` now lives in `../catalog/dashboard.ts`: it is derived purely
+// from catalog records and the MCP entrance consumes it too.
 
 export function escapeHtml(value: string): string {
   return value

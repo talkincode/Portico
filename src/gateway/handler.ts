@@ -1,4 +1,5 @@
 import { AccessService } from "../access/mod.ts";
+import { readSessionToken } from "../access/session-header.ts";
 import {
   type Actor,
   type ActorKind,
@@ -61,23 +62,6 @@ async function resolveActor(request: Request, access: AccessService): Promise<Ac
     sessionToken: readSessionToken(request),
     claimed: readClaimedActor(request),
   });
-}
-
-function readSessionToken(request: Request): string | null {
-  const named = request.headers.get("x-portico-session");
-  const auth = request.headers.get("authorization");
-  let bearer: string | null = null;
-  if (auth) {
-    const match = /^Bearer\s+(\S+)$/i.exec(auth.trim());
-    if (!match) {
-      throw new CatalogError(ErrorCode.INVALID_INPUT, "authorization must be a Bearer token");
-    }
-    bearer = match[1];
-  }
-  if (named && bearer && named !== bearer) {
-    throw new CatalogError(ErrorCode.FORBIDDEN, "session headers do not match");
-  }
-  return named ?? bearer;
 }
 
 function readClaimedActor(request: Request): Actor | null {
