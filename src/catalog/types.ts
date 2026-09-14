@@ -66,7 +66,8 @@ export type CatalogChangeAction =
   | "register"
   | "draft"
   | "publish_internal"
-  | "publish_public_candidate";
+  | "publish_public_candidate"
+  | "update";
 
 export interface CatalogChangeRecord {
   id: string;
@@ -106,6 +107,15 @@ export interface RegisterInput {
 export interface PublishInput {
   id: string;
   visibility: Visibility;
+}
+
+export interface UpdateInput {
+  id: string;
+  name?: string;
+  description?: string;
+  channels?: Channel[];
+  version?: string;
+  entry?: EntryRef;
 }
 
 export interface ApprovalDecisionInput {

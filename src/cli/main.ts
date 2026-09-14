@@ -16,6 +16,7 @@ import {
   FileCatalogStore,
   type PublishInput,
   type RegisterInput,
+  type UpdateInput,
 } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
@@ -34,6 +35,7 @@ Commands:
   catalog register  --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
   catalog draft     --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
   catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
+  catalog update    --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role> --input <file>
   catalog approve   --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog reject    --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
   catalog withdraw  --id <id> --catalog <path> --identities <path> --actor-id <id> --actor-kind <human|agent> --actor-role <role>
@@ -60,6 +62,8 @@ The first identity grant may omit --actor-* and must be a human auditor.
 An identity cannot revoke itself; the last human auditor cannot be revoked.
 The identity that submitted public cannot approve or reject the same request.
 Withdrawing an approved public surface is reserved for a human auditor.
+A pending public candidate or an approved public surface cannot be updated
+directly; reject or withdraw it first, then update, then resubmit for approval.
 Output is always JSON.`;
 
 interface CliResult {
@@ -136,6 +140,23 @@ export async function runCli(
         visibility: flags.visibility as PublishInput["visibility"],
       };
       return ok(await service.publish(actor, payload));
+    }
+
+    if (action === "update") {
+      if (!flags.id) throw new UsageError("missing --id");
+      if (!flags.input) throw new UsageError("missing --input");
+      const raw = await Deno.readTextFile(flags.input);
+      let payload: unknown;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        throw new CatalogError(ErrorCode.INVALID_INPUT, "input file is not valid JSON");
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new CatalogError(ErrorCode.INVALID_INPUT, "update payload must be an object");
+      }
+      const merged: UpdateInput = { ...(payload as Record<string, unknown>), id: flags.id };
+      return ok(await service.update(actor, merged));
     }
 
     if (action === "approve" || action === "reject") {
