@@ -1,3 +1,4 @@
+import { writeJsonFile } from "../fs.ts";
 import { CatalogError, ErrorCode } from "./errors.ts";
 import type { AgentSurface, ApprovalRecord, CatalogChangeRecord } from "./types.ts";
 
@@ -170,19 +171,10 @@ export class FileCatalogStore implements CatalogStore {
   }
 
   async #save(file: CatalogFile): Promise<void> {
-    const tmp = `${this.path}.tmp`;
-    const json = `${
-      JSON.stringify(
-        {
-          records: file.records,
-          approvals: file.approvals,
-          changes: file.changes,
-        },
-        null,
-        2,
-      )
-    }\n`;
-    await Deno.writeTextFile(tmp, json);
-    await Deno.rename(tmp, this.path);
+    await writeJsonFile(this.path, {
+      records: file.records,
+      approvals: file.approvals,
+      changes: file.changes,
+    });
   }
 }

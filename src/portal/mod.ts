@@ -3,7 +3,6 @@ export type { PortalContext } from "./handler.ts";
 export { listenPortal, portalUrl } from "./server.ts";
 export type { PortalListenOptions } from "./server.ts";
 export {
-  dashboardFrom,
   escapeHtml,
   parseChannel,
   parseTheme,
@@ -11,4 +10,9 @@ export {
   renderMagazinePage,
   renderNotFoundPage,
 } from "./html.ts";
-export type { ChannelFilter, DashboardView, MagazinePageInput, ThemeMode } from "./html.ts";
+export type { ChannelFilter, MagazinePageInput, ThemeMode } from "./html.ts";
+// The governance summary lives in the catalog layer: it is derived purely from
+// catalog records and the MCP entrance consumes it too, so it must not sit
+// inside one presentation layer.
+export { dashboardFrom } from "../catalog/dashboard.ts";
+export type { DashboardView } from "../catalog/dashboard.ts";

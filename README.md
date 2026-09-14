@@ -25,6 +25,47 @@ deno task check
 deno task test
 ```
 
+## 起动整套系统
+
+一条命令把 Portal 与 Gateway 一起点着。只需一个数据目录，其余路径从这里派生；空目录会在首次写入时自动建好：
+
+```sh
+PORTICO_DATA_DIR=./data deno task up
+```
+
+stdout 是一行机读 JSON，给出三个入口：
+
+```json
+{"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"}}}
+```
+
+`PORTICO_PORT`（Portal，默认 8788）、`PORTICO_GATEWAY_PORT`（Gateway，默认 8789）与 `PORTICO_MCP_PORT`（MCP，默认 8790）可改端口；`PORTICO_BIND` 只接受 `127.0.0.1` / `localhost`。单个进程仍可分别用 `deno task portal` / `deno task gateway` / `deno task mcp` 起动。
+
+`up` 是 supervisor，不是把入口合并：**Portal、Gateway、MCP 仍是三个进程，各带自己的权限集**——Portal 与 MCP 没有 `--allow-write`，这是治理属性，不是打包细节。任何一个退出，其余会被一起收走，不留半死系统。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份。
+
+可分发产物：
+
+```sh
+deno task build
+```
+
+产到 `dist/`：`portico`（CLI）、`portico-portal`、`portico-gateway`、`portico-mcp`，各自内嵌自己的权限集，启动不依赖 `node`。`deno task build <target>` 可只构建一个。
+
+### MCP 入口
+
+Portal、CLI、MCP 是同一治理状态的三个入口。MCP 是**只读**服务端（JSON-RPC 2.0 over HTTP），暴露五个工具：`portico_list`、`portico_describe`、`portico_entry`、`portico_dashboard`、`portico_audit`。它们只是目录查询的投影，不执行、不代理、不编排任何外部工具。
+
+鉴权只认会话，不接受 `X-Portico-Actor-*` 自称头：
+
+```sh
+curl -s -X POST http://127.0.0.1:8790 \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer $PORTICO_SESSION" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"portico_list","arguments":{}}}'
+```
+
+匿名调用只会看到 `approved_public`；结果载荷与 CLI 是同一个 `{ok,data}` 信封。
+
 角色来自身份名册，不能靠 `--actor-role` 自封。空名册只能引导第一位人类审计者；之后由审计者授予 reader / maintainer / auditor。Agent 不能被授予 auditor。非匿名 catalog 命令会对照名册校验 `--actor-*`。
 
 ```sh

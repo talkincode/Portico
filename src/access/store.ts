@@ -1,3 +1,4 @@
+import { writeJsonFile } from "../fs.ts";
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
 import type {
   CredentialRecord,
@@ -224,21 +225,12 @@ export class FileIdentityStore implements IdentityStore {
   }
 
   async #save(file: IdentityFile): Promise<void> {
-    const tmp = `${this.path}.tmp`;
-    const json = `${
-      JSON.stringify(
-        {
-          identities: file.identities,
-          grants: file.grants,
-          revokes: file.revokes,
-          credentialRevokes: file.credentialRevokes,
-        },
-        null,
-        2,
-      )
-    }\n`;
-    await Deno.writeTextFile(tmp, json);
-    await Deno.rename(tmp, this.path);
+    await writeJsonFile(this.path, {
+      identities: file.identities,
+      grants: file.grants,
+      revokes: file.revokes,
+      credentialRevokes: file.credentialRevokes,
+    });
   }
 }
 
@@ -386,11 +378,9 @@ export class FileSessionStore implements SessionStore {
   }
 
   async #save(file: SessionFile): Promise<void> {
-    const tmp = `${this.path}.tmp`;
-    const json = `${
-      JSON.stringify({ credentials: file.credentials, sessions: file.sessions }, null, 2)
-    }\n`;
-    await Deno.writeTextFile(tmp, json);
-    await Deno.rename(tmp, this.path);
+    await writeJsonFile(this.path, {
+      credentials: file.credentials,
+      sessions: file.sessions,
+    });
   }
 }

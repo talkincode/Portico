@@ -71,6 +71,10 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 `deno.json` + `.github/workflows/ci.yml`。检查与测试走 `deno lint` / `deno check` / `deno test`。产品命令不使用 `--allow-all`，CLI 仅 `--allow-read --allow-write --allow-env`，Portal 仅 `--allow-read --allow-env --allow-net=127.0.0.1`（无 `--allow-write`），Gateway 仅 `--allow-read --allow-write --allow-env --allow-net=127.0.0.1`（写权限只为访问审计文件）。无 `package.json`、无 Node/Bun 锁文件。
 
+- 一键起动与可分发产物
+
+`src/up/main.ts`（`deno task up`）用一条 `PORTICO_DATA_DIR` 起动整套系统：Portal 与 Gateway 是**两个子进程**，各自带自己的权限集（Portal 仍无 `--allow-write`），任一退出则另一个一起收走，不留半死系统；stdout 为一行机读 JSON，给出 `portal` / `gateway` 两个入口 URL。`src/build/main.ts`（`deno task build`）用 `deno compile` 产出 `dist/` 下三个产物（`portico` / `portico-portal` / `portico-gateway`），各自内嵌权限集，启动不依赖 `node`。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份，不会各写一套。
+
 - Registry 内部目录
 
 `src/catalog/` 是目录内核。维护者可登记内部 Agent 表面（身份、名称、说明、渠道、版本、入口引用、维护者、治理状态=`internal`）。公开可见性不能通过登记“顺便成功”；未知字段或明文密钥字段被拒绝；失败不写目录。只读者可见内部记录，匿名不可见。
@@ -110,6 +114,10 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 - MCP 渠道登记与访问
 
 维护者可登记 `channels=["mcp"]` 且 `entry.kind=mcp_endpoint` 的外部 MCP Server。端点必须是绝对 http(s) URL，禁止 userinfo、查询串密钥和命令式入口。`mcp list` / `mcp describe` 与 Portal `GET /api/mcp` 对同一身份返回连接信息 `{endpoint, connect:{mode:"direct"}}`，由客户端直连；Portico 不执行工具、不代理流量。可见性与目录相同：内部对匿名不可见，公开须审批。CLI 表面不会出现在 MCP 列表。失败登记不写目录。
+
+- MCP 协议入口（只读治理发现）
+
+`src/mcp/` 是 MCP（JSON-RPC 2.0 over HTTP）**服务端**，暴露五个只读工具：`portico_list`、`portico_describe`、`portico_entry`、`portico_dashboard`、`portico_audit`。每个工具都是 `CatalogService` / `AuditService` 已有调用的薄投影，因此可见性、审批与角色规则不会分叉——同一身份在 MCP、CLI、Portal 上看到的是同一批记录、同一顺序。工具结果是 CLI 同一个 `{ok,data}` / `{ok,error:{code,message}}` 信封，所以"三入口一致"可以靠比对载荷验证，而不是靠读三份实现。鉴权**只认会话**（`Authorization: Bearer` / `X-Portico-Session`）：网络调用者不得靠自称头证明身份。协议层错误（未知方法 `-32601`、未知工具 `-32602`、批量请求 `-32600`、解析失败 `-32700`）与工具层失败（in-band `isError`）分开；非 POST 返回 405。`portico_audit` 仍只对人类审计者开放。MCP 进程只读（无 `--allow-write`），不执行、不代理、不编排任何外部工具。
 
 - Web 渠道登记与已授权入口
 
@@ -275,6 +283,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | 登录凭证作废 | 高 | ✅ 人类审计者 `identity credential revoke --id` 后，原 login token 与 `--session` / Portal 会话头立即 FORBIDDEN；名册仍有该身份，`--actor-*` 仍能 list 同一条内部记录；`audit list` 出现 `revoke_credential` | ✅ 维护者/只读/匿名 FORBIDDEN；未知主体 NOT_FOUND；无活动凭证/会话与重复作废 INVALID_STATE；密钥字段被拒 | ✅ 人类审计者 vs 维护者；被作废主体 vs 仍可用的 `--actor-*` | ✅ 失败作废不改 identities/sessions 文件字节、不追加 credentialRevokes；成功后可重新 issue 新凭证 | `tests/access_credential_revoke_test.ts`；`tests/audit_service_test.ts`；`tests/e2e/cli_credential_revoke_e2e_test.ts` |
 | CLI 发布与查询 | 高 | ✅ `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败；未授权身份 FORBIDDEN | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件、approvals 与 identities | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | MCP 渠道登记与访问 | 高 | ✅ 维护者登记 mcp_endpoint；只读者 `mcp list`/`describe` 与 Portal `/api/mcp` 同一连接信息 | ✅ 密钥查询/userinfo/命令式入口被拒；CLI 表面不出现在 MCP 列表；匿名看不到内部 MCP；未审批公开 MCP 对匿名不可达 | ✅ 只读 vs 匿名；维护者可登记、只读者可描述 | ✅ 失败登记不写 catalog 文件；Portal POST `/api/mcp` 不改目录 | `tests/mcp_channel_test.ts`；`tests/e2e/cli_mcp_e2e_test.ts`；`tests/e2e/portal_mcp_e2e_test.ts`；`tests/portal_handler_test.ts` |
+| MCP 协议入口（只读治理发现） | 高 | ✅ 同一身份经 CLI `catalog list`、Portal `GET /api/catalog` 与 MCP `portico_list` 得到同一批记录与同一顺序；匿名经 Portal 与 MCP 都只看到 `approved_public` 且严格少于只读者 | ✅ 伪造 `X-Portico-Actor-*` 头不产生审计者身份（`portico_audit` 仍 FORBIDDEN）；非审计者 `portico_audit` FORBIDDEN；未知方法 `-32601`；未知工具 `-32602`；批量请求 `-32600`；非法 channel/state 过滤 `INVALID_INPUT`；非 POST 405 | ✅ 匿名 vs 只读会话；人类审计者 vs 其他角色 | ✅ 工具失败只回 in-band `{ok:false,error}`，不改目录、不追加审计；MCP 进程无 `--allow-write`；`up` 停止后端口关闭 | `tests/mcp_protocol_test.ts`；`tests/e2e/mcp_http_e2e_test.ts`；`tests/e2e/entrypoint_boot_e2e_test.ts`；`tests/e2e/system_up_e2e_test.ts` |
 | Web 渠道登记与已授权入口 | 高 | ✅ 维护者登记 url；只读者 `web list`/`describe` 与 Portal `/api/web`、HTML 同一 href（`connect.mode=direct`） | ✅ 密钥查询/userinfo/`javascript:` 入口被拒；CLI 表面不出现在 Web 列表；匿名看不到内部 Web；未审批公开 Web 对匿名不可达 | ✅ 只读 vs 匿名；维护者可登记、只读者可描述 | ✅ 失败登记不写 catalog 文件；Portal POST `/api/web` 不改目录 | `tests/web_channel_test.ts`；`tests/e2e/cli_web_e2e_test.ts`；`tests/e2e/portal_web_e2e_test.ts`；`tests/portal_handler_test.ts` |
 | CLI 渠道登记与已授权包坐标 | 高 | ✅ 维护者登记 package；只读者 `cli list`/`describe` 与 Portal `/api/cli`、HTML 同一 `jsr:`/`npm:` 坐标（`connect.mode=coordinate`） | ✅ 命令式/`npx`/URL/未知 registry 被拒；MCP/Web 表面不出现在 CLI 列表；匿名看不到内部包坐标；未审批公开 CLI 对匿名不可达 | ✅ 只读 vs 匿名；维护者可登记、只读者可描述 | ✅ 失败登记不写 catalog 文件；Portal POST `/api/cli` 不改目录 | `tests/cli_channel_test.ts`；`tests/e2e/cli_package_e2e_test.ts`；`tests/e2e/portal_cli_e2e_test.ts`；`tests/portal_handler_test.ts` |
 | MCP Gateway 鉴权与路由 | 高 | ✅ 维护者登记 MCP 后，只读者 `gateway authorize` 与 HTTP `POST /gateway/mcp/:id/authorize` 得到同一 `connect.mode=direct` 路由；审计者可读到 allowed 记录 | ✅ 匿名内部/待审公开 NOT_FOUND 且不泄漏端点；CLI 表面不可授权；`tools/call` 返回 405 且不执行 | ✅ 已授权 reader vs 匿名；维护者不能读审计 | ✅ 失败授权不改 catalog 文件；拒绝工具调用不脏写目录 | `tests/gateway_service_test.ts`；`tests/gateway_handler_test.ts`；`tests/e2e/cli_gateway_e2e_test.ts`；`tests/e2e/gateway_http_e2e_test.ts` |
@@ -282,3 +291,5 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | Agent 维护与人类安全审计 | 高 | ✅ 维护者登记并提交公开后，人类审计者 `audit list` 与 Portal `GET /api/audit` 看到同一条目录变更、授权、撤回与审批时间线 | ✅ 维护者/只读/匿名 FORBIDDEN；Portal PATCH/POST `/api/audit` 405；失败公开登记不出现 catalog 事件 | ✅ 维护 Agent vs 人类审计者；维护者不能读、不能改写 | ✅ 失败登记不写 catalog 文件与变更日志；读审计不改授权/审批记录 | `tests/catalog_change_test.ts`；`tests/audit_service_test.ts`；`tests/portal_handler_test.ts`；`tests/e2e/cli_audit_e2e_test.ts`；`tests/e2e/portal_audit_e2e_test.ts` |
 
 缺口的最低期望：每行至少先有一条跨入口的 Happy Path（发布或发现能在 CLI 与 Portal 对上）；所有高风险行必须再有失败路径（未审批公开、越权、自批）；权限行必须打两种身份；写操作必须证明失败后公开面与目录不被脏写。
+
+三个入口各有**进程级**启动烟测（`tests/e2e/entrypoint_boot_e2e_test.ts`）：spawn 真实的 `src/portal/main.ts` / `src/gateway/main.ts` / `src/cli/main.ts`，读它播报的那行 JSON，再打一次请求。`up` 整机起动另有系统级 E2E（`tests/e2e/system_up_e2e_test.ts`）：空数据目录 → `up` → 治理动作 → 重启 → 断言状态仍在，并断言停下后端口真的关闭。这两条覆盖的是**产物进程本身**，不是直接 import 的 `listen*` 函数——`src/gateway/main.ts` 曾经在 275 个测试全绿的情况下完全无法启动，原因就是当时没有任何用例执行过它。

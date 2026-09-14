@@ -1,4 +1,4 @@
-import type { DashboardView } from "../portal/html.ts";
+import type { DashboardView } from "../catalog/dashboard.ts";
 import type {
   ApprovalStatusView,
   AuditSnippetView,
