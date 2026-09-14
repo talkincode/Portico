@@ -167,7 +167,17 @@ deno task cli -- catalog list \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
   --session pst1_…
+
+# 只在当前身份可见的 id / 名称 / 说明里过滤；不搜索入口 URL 或包坐标。
+deno task cli -- catalog list \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --session pst1_… \
+  --q Writer --channel cli --state internal
 ```
+
+Portal `GET /api/catalog?q=&channel=&state=` 与 MCP `portico_list` 使用同一过滤器。匿名仍然只看得到 `approved_public`。
 
 草稿与发布：
 

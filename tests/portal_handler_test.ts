@@ -555,3 +555,44 @@ Deno.test("portal cannot rewrite audit conclusions", async () => {
   );
   assertEquals(after.body.data, before.body.data);
 });
+
+Deno.test("catalog query filters visible records and does not leak internals to anonymous", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  await context.catalog.register(maintainer, internalWeb());
+  await context.catalog.publish(maintainer, { id: "docs-web", visibility: "public" });
+  await context.catalog.approve(auditor, { id: "docs-web" });
+
+  const readerHit = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog?q=Writer", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(readerHit.status, 200);
+  const readerIds = (readerHit.body.data as Array<{ id: string }>).map((item) => item.id);
+  assertEquals(readerIds, ["docs-writer"]);
+
+  const anonMiss = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/catalog?q=Writer"), context),
+  );
+  assertEquals(anonMiss.status, 200);
+  assertEquals(anonMiss.body.data, []);
+
+  const anonPublic = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/catalog?q=Web"), context),
+  );
+  assertEquals(
+    (anonPublic.body.data as Array<{ id: string }>).map((item) => item.id),
+    ["docs-web"],
+  );
+
+  const bad = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog?channel=carrier-pigeon"),
+      context,
+    ),
+  );
+  assertEquals(bad.status, 400);
+  assertEquals(bad.body.error?.code, "INVALID_INPUT");
+});

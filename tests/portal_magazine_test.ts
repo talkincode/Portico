@@ -255,3 +255,36 @@ Deno.test("magazine index keeps dual-surface /internal and /public routes", asyn
   assert(!anonPublicHtml.includes("Docs Writer"));
   assert(!anonPublicHtml.includes("jsr:@example/docs-writer"));
 });
+
+Deno.test("magazine search is a GET form over authorized surfaces, not a CMS article search", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  await context.catalog.register(maintainer, publicWeb());
+  await context.catalog.publish(maintainer, { id: "docs-web", visibility: "public" });
+  await context.catalog.approve(auditor, { id: "docs-web" });
+
+  const home = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const homeHtml = await home.text();
+  assert(homeHtml.includes('<form'), "search must submit without script");
+  assert(homeHtml.includes('name="q"'));
+  assert(homeHtml.includes("搜索已授权入口"));
+  assert(!homeHtml.includes("搜索文章、报告或主题"));
+  assert(!homeHtml.includes('aria-hidden="true"'));
+
+  const readerHit = await handlePortalRequest(
+    new Request("http://portico.local/?q=Writer", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(readerHit.status, 200);
+  const readerHtml = await readerHit.text();
+  assert(readerHtml.includes("Docs Writer"));
+  assert(!readerHtml.includes("Docs Web"), "q must not mix unrelated visible records");
+  assert(readerHtml.includes('value="Writer"'), "the form must echo the query");
+
+  const anonMiss = await handlePortalRequest(new Request("http://portico.local/?q=Writer"), context);
+  const anonHtml = await anonMiss.text();
+  assertEquals(anonMiss.status, 200);
+  assert(!anonHtml.includes("Docs Writer"));
+  assert(!anonHtml.includes("jsr:@example/docs-writer"));
+  assert(anonHtml.includes("没有可见的 Agent 表面。") || !anonHtml.includes("data-id="));
+});

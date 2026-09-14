@@ -262,3 +262,51 @@ Deno.test("the mcp entrance only accepts POST and returns 405 otherwise", async 
   );
   assertEquals(response.status, 405);
 });
+
+Deno.test("portico_list q filters visible records and does not search endpoints", async () => {
+  const { context } = await seeded();
+  const asReader = {
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${SESSION_TOKENS.get("human:reader")!}`,
+    },
+  };
+
+  const writer = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_list", arguments: { q: "Writer" } },
+  }, asReader);
+  assertEquals(writer.status, 200, JSON.stringify(writer.body));
+  assertEquals(writer.body.result?.isError, undefined, JSON.stringify(writer.body));
+  assertEquals(
+    (envelope(writer.body).data as Array<{ id: string }>).map((item) => item.id),
+    ["docs-writer"],
+  );
+
+  const endpoint = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_list", arguments: { q: "mcp.example.test" } },
+  }, asReader);
+  assertEquals(envelope(endpoint.body).data, []);
+
+  const anon = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_list", arguments: { q: "Writer" } },
+  });
+  assertEquals(envelope(anon.body).data, []);
+
+  const tooLong = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: { name: "portico_list", arguments: { q: "a".repeat(121) } },
+  });
+  assertEquals(tooLong.body.result?.isError, true);
+  assertEquals(envelope(tooLong.body).error?.code, "INVALID_INPUT");
+});

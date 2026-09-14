@@ -1,12 +1,14 @@
 import type { AuditService } from "../audit/mod.ts";
 import {
   type Actor,
+  applyCatalogQuery,
   CatalogError,
   CatalogService,
-  type Channel,
+  CATALOG_CHANNELS,
+  CATALOG_GOVERNANCE_STATES,
   dashboardFrom,
   ErrorCode,
-  type GovernanceState,
+  parseCatalogQuery,
 } from "../catalog/mod.ts";
 import { isRecord } from "./types.ts";
 
@@ -37,15 +39,6 @@ export interface McpToolDeps {
   audit: AuditService;
 }
 
-const CHANNELS: readonly Channel[] = ["cli", "mcp", "web"];
-const GOVERNANCE_STATES: readonly GovernanceState[] = [
-  "draft",
-  "internal",
-  "pending_public",
-  "approved_public",
-  "rejected",
-];
-
 export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_list",
@@ -54,10 +47,18 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        channel: { type: "string", enum: [...CHANNELS], description: "只返回该渠道的表面" },
+        q: {
+          type: "string",
+          description: "在当前身份可见的 id / 名称 / 说明里做子串过滤；不搜索入口 URL 或包坐标",
+        },
+        channel: {
+          type: "string",
+          enum: [...CATALOG_CHANNELS],
+          description: "只返回该渠道的表面",
+        },
         governanceState: {
           type: "string",
-          enum: [...GOVERNANCE_STATES],
+          enum: [...CATALOG_GOVERNANCE_STATES],
           description: "只返回该治理状态的表面",
         },
       },
@@ -113,13 +114,8 @@ export async function callTool(
   const input = readArguments(args);
   switch (name) {
     case "portico_list": {
-      const channel = optionalChannel(input.channel);
-      const state = optionalGovernanceState(input.governanceState);
-      const surfaces = await deps.catalog.list(actor);
-      return surfaces.filter((surface) =>
-        (channel === undefined || surface.channels.includes(channel)) &&
-        (state === undefined || surface.governanceState === state)
-      );
+      const query = parseCatalogQuery(input);
+      return applyCatalogQuery(await deps.catalog.list(actor), query);
     }
     case "portico_describe":
       return await deps.catalog.get(actor, requireId(input.id));
@@ -165,24 +161,3 @@ function requireId(value: unknown): string {
   return value;
 }
 
-function optionalChannel(value: unknown): Channel | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || !CHANNELS.includes(value as Channel)) {
-    throw new CatalogError(
-      ErrorCode.INVALID_INPUT,
-      `channel must be one of: ${CHANNELS.join(", ")}`,
-    );
-  }
-  return value as Channel;
-}
-
-function optionalGovernanceState(value: unknown): GovernanceState | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string" || !GOVERNANCE_STATES.includes(value as GovernanceState)) {
-    throw new CatalogError(
-      ErrorCode.INVALID_INPUT,
-      `governanceState must be one of: ${GOVERNANCE_STATES.join(", ")}`,
-    );
-  }
-  return value as GovernanceState;
-}

@@ -3,10 +3,12 @@ import { readSessionToken } from "../access/session-header.ts";
 import { AuditService } from "../audit/mod.ts";
 import {
   type Actor,
+  applyCatalogQuery,
   CatalogError,
   CatalogService,
   type Channel,
   ErrorCode,
+  parseCatalogQuery,
 } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
 import { type PageService } from "../ui/mod.ts";
@@ -45,7 +47,12 @@ export async function handlePortalRequest(
       return jsonError(405, ErrorCode.USAGE, "method not allowed");
     }
     if (url.pathname === "/api/catalog") {
-      return jsonOk(await context.catalog.list(actor));
+      const query = parseCatalogQuery({
+        q: url.searchParams.get("q"),
+        channel: url.searchParams.get("channel"),
+        state: url.searchParams.get("state"),
+      });
+      return jsonOk(applyCatalogQuery(await context.catalog.list(actor), query));
     }
     const catalogItem = url.pathname.match(/^\/api\/catalog\/([a-z][a-z0-9-]{1,62})$/);
     if (catalogItem) {
@@ -104,10 +111,9 @@ export async function handlePortalRequest(
     const channel = parseChannel(url.searchParams.get("channel"));
     const surfacePage = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/);
     if (url.pathname === "/" || surfacePage) {
-      let surfaces = await context.catalog.list(actor);
-      if (channel) {
-        surfaces = surfaces.filter((item) => item.channels.includes(channel));
-      }
+      const query = parseCatalogQuery({ q: url.searchParams.get("q") });
+      if (channel) query.channel = channel;
+      const surfaces = applyCatalogQuery(await context.catalog.list(actor), query);
       const dash = dashboardFrom(surfaces);
       const page = context.pages ? await context.pages.get(actor) : undefined;
       const picks = (page?.components ?? []).flatMap((item) => {
@@ -127,6 +133,7 @@ export async function handlePortalRequest(
           return html(renderMagazinePage({
             theme,
             channel,
+            q: query.q,
             view: dash,
             selected,
             picks,
@@ -139,7 +146,14 @@ export async function handlePortalRequest(
           throw error;
         }
       }
-      return html(renderMagazinePage({ theme, channel, view: dash, picks, path: "/" }));
+      return html(renderMagazinePage({
+        theme,
+        channel,
+        q: query.q,
+        view: dash,
+        picks,
+        path: "/",
+      }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
   } catch (error) {
