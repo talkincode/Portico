@@ -258,3 +258,118 @@ Deno.test("E2E: reading-page chrome keeps all-channels and search query", async 
     assert(!searchedHtml.includes(">MCP 服务<"));
   });
 });
+
+Deno.test("E2E: mismatched reading-page filters redirect instead of rendering zero entries plus a detail", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-magazine-canonical-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const webInput = `${dir}/web.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+  await Deno.writeTextFile(webInput, `${JSON.stringify(sampleWebRecord(), null, 2)}\n`);
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      webInput,
+    ], env)).code,
+    0,
+  );
+
+  const catalogBefore = await Deno.readTextFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const mismatch = await fetch(`${base}/s/docs-writer?channel=mcp`, {
+      headers: readerHeaders(),
+      redirect: "manual",
+    });
+    assertEquals(mismatch.status, 302);
+    const location = mismatch.headers.get("location");
+    if (!location) throw new Error("mismatched channel must send Location");
+    const redirected = new URL(location, base);
+    assertEquals(`${redirected.pathname}${redirected.search}`, "/s/docs-writer?channel=cli");
+
+    const canonical = await fetch(redirected, { headers: readerHeaders() });
+    assertEquals(canonical.status, 200);
+    const html = await canonical.text();
+    assert(html.includes("Docs Writer"));
+    assert(html.includes('class="detail"'));
+    assert(html.includes("1 个入口"));
+    assert(!html.includes("0 个入口"));
+
+    const qMismatch = await fetch(`${base}/s/docs-writer?q=zzz`, {
+      headers: readerHeaders(),
+      redirect: "manual",
+    });
+    assertEquals(qMismatch.status, 302);
+    const qLocation = qMismatch.headers.get("location");
+    if (!qLocation) throw new Error("unmatched q must send Location");
+    const qRedirected = new URL(qLocation, base);
+    assertEquals(`${qRedirected.pathname}${qRedirected.search}`, "/s/docs-writer");
+
+    const anon = await fetch(`${base}/s/docs-writer?channel=mcp`, { redirect: "manual" });
+    assertEquals(anon.status, 404);
+    assertEquals(anon.headers.get("location"), null);
+    const anonHtml = await anon.text();
+    assert(!anonHtml.includes("jsr:@example/docs-writer"));
+  });
+
+  assertEquals(
+    await Deno.readTextFile(catalog),
+    catalogBefore,
+    "canonicalization is a read; it must not rewrite the catalog",
+  );
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-web",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-web",
+    ], env)).code,
+    0,
+  );
+
+  await withPortal(catalog, identities, async (base) => {
+    const anon = await fetch(`${base}/s/docs-web?channel=mcp`, { redirect: "manual" });
+    assertEquals(anon.status, 302);
+    const location = anon.headers.get("location");
+    if (!location) throw new Error("anonymous may canonicalize an approved public record");
+    const redirected = new URL(location, base);
+    assertEquals(`${redirected.pathname}${redirected.search}`, "/s/docs-web?channel=web");
+  });
+});

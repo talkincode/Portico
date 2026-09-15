@@ -3,6 +3,7 @@ import { readSessionToken } from "../access/session-header.ts";
 import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
 import {
   type Actor,
+  type AgentSurface,
   applyCatalogQuery,
   CatalogError,
   CatalogService,
@@ -147,6 +148,13 @@ export async function handlePortalRequest(
       if (surfacePage) {
         try {
           const selected = await context.catalog.get(actor, surfacePage[1]);
+          const canonical = canonicalMagazineReadingUrl(url, selected);
+          if (canonical) {
+            return new Response(null, {
+              status: 302,
+              headers: { location: `${canonical.pathname}${canonical.search}` },
+            });
+          }
           return html(renderMagazinePage({
             theme,
             channel,
@@ -176,6 +184,32 @@ export async function handlePortalRequest(
   } catch (error) {
     return fail(error);
   }
+}
+
+/**
+ * `/s/:id` may be opened with a `channel` / `q` that does not include the
+ * selected record. That is a stale navigation state, not a permission miss:
+ * rewrite the query so the filtered list contains the record the caller can
+ * already see. Unknown or unauthorized ids still 404 before this runs.
+ */
+function canonicalMagazineReadingUrl(url: URL, selected: AgentSurface): URL | null {
+  const channel = parseChannel(url.searchParams.get("channel"));
+  const query = parseCatalogQuery({ q: url.searchParams.get("q") });
+  if (channel) query.channel = channel;
+  if (applyCatalogQuery([selected], query).length > 0) return null;
+
+  const next = new URL(url);
+  if (query.channel && !selected.channels.includes(query.channel)) {
+    const own = selected.channels[0];
+    if (own) next.searchParams.set("channel", own);
+    else next.searchParams.delete("channel");
+  }
+  const remainingQ = parseCatalogQuery({ q: next.searchParams.get("q") }).q;
+  if (remainingQ && applyCatalogQuery([selected], { q: remainingQ }).length === 0) {
+    next.searchParams.delete("q");
+  }
+  if (next.search === url.search) return null;
+  return next;
 }
 
 /**
