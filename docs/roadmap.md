@@ -4,7 +4,7 @@
 
 Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通过这里被登记、发布、发现、授权和访问。它提供 Web Portal、CLI、MCP 三类入口，把内部可见与公开可见分成两条信任边界；公开必须经过审批。系统按 CMS 式分级权限运转，但日常维护委派给 Agent，人类只做安全审计。
 
-- 需修订（已修订）：原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面），以及 CLI 包坐标发现（`cli list`/`cli describe`、Portal `GET /api/cli`，只返回 `jsr:`/`npm:` 坐标，不安装不执行），以及 Portal 双平面页面层（内部笔记台与公开发布页、四个颜色主题预设、纯 CSS 主题切换），以及 `GET /` 社论杂志风发现壳（渠道过滤、明暗 `data-theme`、`/s/:id` 阅读栏，不是 CMS，不替代 `/internal` 与 `/public`），以及目录过滤查询（CLI `catalog list --q/--channel/--state`、Portal `GET /api/catalog` 与 MCP `portico_list` 共用同一过滤器，只匹配当前身份可见的 id/名称/说明，不搜索入口 URL 或包坐标），以及治理仪表盘（CLI `catalog dashboard`、Portal `GET /api/dashboard` 与 MCP `portico_dashboard` 共用 `dashboardFrom`，按当前身份可见性计数，不是运行指标大盘），以及审计时间线过滤查询（CLI `audit list --q/--kind/--action/--subject`、Portal `GET /api/audit` 与 MCP `portico_audit` 共用同一过滤器，只匹配当前审计者可见时间线的 id/主体/摘要/动作，不搜索入口 URL 或包坐标），以及身份名册只读查询（CLI `identity list`、Portal `GET /api/identities` 与 MCP `portico_identities` 共用 `AccessService.list`，返回 id/kind/role 与可选的人类 email，不泄漏凭证或会话，只读与匿名 FORBIDDEN），以及名册可选邮箱（人类审计者 `identity grant --email` 给人类身份绑定唯一地址，大小写归一；Agent 不可带邮箱；邮箱不是第二身份证明；外部 IdP 仍未实现）；未实现的模块仍是产品意图，不是现存实现。
+- 需修订（已修订）：原文写“当前仓库几乎是空的……没有运行时代码、测试或 CI”。2026-09-13 起仓库已有 Deno 运行时骨架、内部 Registry 目录、Publisher 草稿/内部发布/公开候选、Approval 公开发布审批、Access Control 身份名册、只读 Portal 发现、MCP 渠道登记与授权连接信息、MCP Gateway 鉴权/路由/访问审计（只做门卫，不执行工具、不代理流量）、人类安全审计视图、受约束的 UI Components 门户组件盒（固定种类，不能当 CMS），以及一次性下发的登录会话（哈希存储，非外部 IdP）、身份授权撤回（人类审计者撤回名册主体，不能自撤、不能撤最后一位审计者）、Registry 受治理表面更新（`catalog update`，只能改 `draft`/`internal` 记录，待审与已公开记录须先撤回/拒绝才能改），2026-09-14 的登录凭证作废（`identity credential revoke`，人类审计者作废凭证与会话但不撤名册），和 Web 渠道登记与已授权入口发现（`web list`/`web describe`、Portal `GET /api/web`，直连 http(s) 链接，不代理页面），以及 CLI 包坐标发现（`cli list`/`cli describe`、Portal `GET /api/cli`，只返回 `jsr:`/`npm:` 坐标，不安装不执行），以及 Portal 双平面页面层（内部笔记台与公开发布页、四个颜色主题预设、纯 CSS 主题切换），以及 `GET /` 社论杂志风发现壳（渠道过滤、明暗 `data-theme`、`/s/:id` 阅读栏，不是 CMS，不替代 `/internal` 与 `/public`），以及目录过滤查询（CLI `catalog list --q/--channel/--state`、Portal `GET /api/catalog` 与 MCP `portico_list` 共用同一过滤器，只匹配当前身份可见的 id/名称/说明，不搜索入口 URL 或包坐标），以及治理仪表盘（CLI `catalog dashboard`、Portal `GET /api/dashboard` 与 MCP `portico_dashboard` 共用 `dashboardFrom`，按当前身份可见性计数，不是运行指标大盘），以及审计时间线过滤查询（CLI `audit list --q/--kind/--action/--subject`、Portal `GET /api/audit` 与 MCP `portico_audit` 共用同一过滤器，只匹配当前审计者可见时间线的 id/主体/摘要/动作，不搜索入口 URL 或包坐标），以及身份名册只读查询（CLI `identity list`、Portal `GET /api/identities` 与 MCP `portico_identities` 共用 `AccessService.list`，返回 id/kind/role 与可选的人类 email，不泄漏凭证或会话，只读与匿名 FORBIDDEN），以及名册可选邮箱（人类审计者 `identity grant --email` 给人类身份绑定唯一地址，大小写归一；Agent 不可带邮箱；邮箱不是第二身份证明），以及 Portal 可选的 Cloudflare Access JWT 映射（默认关闭；只校验 `Cf-Access-Jwt-Assertion` 的签名与 aud/iss/exp，再用已校验 email 命中名册人类身份；明文邮箱头不是证明；失败为匿名且不写 identities/sessions；CLI / Gateway / MCP 仍只认会话）；未实现的模块仍是产品意图，不是现存实现。
 
 - 架构图
 
@@ -85,7 +85,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - CLI 目录登记、草稿、发布、更新与查询
 
-`src/cli/main.ts`：`identity grant|revoke|list|grants|credential issue|credential revoke|login|logout|whoami`、`catalog register|draft|publish|update|approve|reject|withdraw|dashboard|list|get`、`mcp list|describe`、`web list|describe`、`cli list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。`catalog dashboard` 与 Portal `GET /api/dashboard`、MCP `portico_dashboard` 共用 `src/catalog/dashboard.ts`：只对当前身份可见的记录计数，读操作不写目录。`catalog list` 接受 `--q` / `--channel` / `--state`，与 Portal `GET /api/catalog`、MCP `portico_list` 共用 `src/catalog/query.ts`：过滤发生在可见性判定之后，只匹配 id / 名称 / 说明，不搜索入口 URL 或包坐标；非法过滤器 `INVALID_INPUT`，失败不写目录。非匿名命令必须用登录后的 `--session` 证明身份；`--actor-*` 单独出现会被拒绝（`USAGE`），不带任何身份参数即匿名。外部 IdP 尚未实现。
+`src/cli/main.ts`：`identity grant|revoke|list|grants|credential issue|credential revoke|login|logout|whoami`、`catalog register|draft|publish|update|approve|reject|withdraw|dashboard|list|get`、`mcp list|describe`、`web list|describe`、`cli list|describe`、`gateway authorize|audit`、`audit list` 与 `page set|get`，一次调用结束，stdout 为 `{ok,data}` / `{ok,error:{code,message}}`。`catalog dashboard` 与 Portal `GET /api/dashboard`、MCP `portico_dashboard` 共用 `src/catalog/dashboard.ts`：只对当前身份可见的记录计数，读操作不写目录。`catalog list` 接受 `--q` / `--channel` / `--state`，与 Portal `GET /api/catalog`、MCP `portico_list` 共用 `src/catalog/query.ts`：过滤发生在可见性判定之后，只匹配 id / 名称 / 说明，不搜索入口 URL 或包坐标；非法过滤器 `INVALID_INPUT`，失败不写目录。非匿名命令必须用登录后的 `--session` 证明身份；`--actor-*` 单独出现会被拒绝（`USAGE`），不带任何身份参数即匿名。Portal 在显式启用时可把已校验的 Cloudflare Access JWT 映射到名册 email；CLI / Gateway / MCP 没有这条路径。
 
 - Publisher 内部发布与公开候选
 
@@ -101,7 +101,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - Access Control 身份名册
 
-`src/access/` 保存身份与追加式授权记录。空名册只能引导第一位人类审计者；之后仅人类审计者可 grant。Agent 不能被授予 auditor；主体不能给自己提权。失败不写名册。catalog CLI 用名册解析角色。`identity list`、Portal `GET /api/identities` 与 MCP `portico_identities` 共用 `AccessService.list`：维护者与人类审计者看到同一批 `{id,kind,role}`，只读者与匿名得到 `FORBIDDEN`，载荷不含凭证、会话或哈希。名册是**被委派主体的登记簿**，不是凭证：没有会话时任何 `--actor-*` 都不构成证明。名册与 `sessions.json` 仍是本地信任根——对数据目录有写权限的主体可以重置它，因此文件权限属于部署的一部分，不属于代码。这不是外部 IdP。
+`src/access/` 保存身份与追加式授权记录。空名册只能引导第一位人类审计者；之后仅人类审计者可 grant。Agent 不能被授予 auditor；主体不能给自己提权。失败不写名册。catalog CLI 用名册解析角色。`identity list`、Portal `GET /api/identities` 与 MCP `portico_identities` 共用 `AccessService.list`：维护者与人类审计者看到同一批 `{id,kind,role}`，只读者与匿名得到 `FORBIDDEN`，载荷不含凭证、会话或哈希。名册是**被委派主体的登记簿**，不是凭证：没有会话时任何 `--actor-*` 都不构成证明。名册与 `sessions.json` 仍是本地信任根——对数据目录有写权限的主体可以重置它，因此文件权限属于部署的一部分，不属于代码。外部断言不能创建名册记录。
 
 - 本地持久化与写序
 
@@ -109,7 +109,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 身份证明与信任根
 
-非匿名操作**只能**由登录会话证明。CLI `--actor-*` 单独出现即拒绝（`USAGE`，不写任何文件）；Portal / Gateway / MCP 完全不接受 `X-Portico-Actor-*`，伪造头只得到匿名视图。空名册的引导路径有且只有两条：第一位人类审计者的 `identity grant`（无 actor），以及**一次性**的首张凭证 `identity credential issue`（无 actor，仅当系统从未签发过任何凭证、且主体是人类审计者）。凭证 token 只显示一次、只存 SHA-256，因此它是数据目录中唯一无法被读者还原的秘密；把它交给人类审计者属于运维动作。首个凭证签发后，bootstrap 永久关闭，之后每一次签发都必须由现有审计者会话发起。信任根的边界是诚实的：对数据目录有写权限的主体可以重置名册，因此文件权限属于部署的一部分。
+非匿名写操作与 CLI / Gateway / MCP **只能**由登录会话证明。CLI `--actor-*` 单独出现即拒绝（`USAGE`，不写任何文件）；Portal / Gateway / MCP 完全不接受 `X-Portico-Actor-*`，伪造头只得到匿名视图。Portal 在显式启用时可以把已校验的 Cloudflare Access JWT 映射到名册，仍然不是自称头，也不会签发会话。空名册的引导路径有且只有两条：第一位人类审计者的 `identity grant`（无 actor），以及**一次性**的首张凭证 `identity credential issue`（无 actor，仅当系统从未签发过任何凭证、且主体是人类审计者）。凭证 token 只显示一次、只存 SHA-256，因此它是数据目录中唯一无法被读者还原的秘密；把它交给人类审计者属于运维动作。首个凭证签发后，bootstrap 永久关闭，之后每一次签发都必须由现有审计者会话发起。信任根的边界是诚实的：对数据目录有写权限的主体可以重置名册，因此文件权限属于部署的一部分。
 
 - 身份授权撤回
 
@@ -117,7 +117,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - Portal 发现与治理仪表盘
 
-`src/portal/` 是只读 HTTP 入口，消费同一 `CatalogService`。`GET /api/catalog`、`GET /api/catalog/:id`、`GET /api/dashboard`（与 CLI `catalog dashboard`、MCP `portico_dashboard` 同一载荷）、`GET /api/mcp`、`GET /api/mcp/:id`、`GET /api/web`、`GET /api/web/:id`、`GET /api/cli`、`GET /api/cli/:id`、`GET /api/audit`、`GET /api/identities`（与 CLI `identity list`、MCP `portico_identities` 同一载荷，仅维护者与人类审计者）与 HTML `GET /`、`GET /s/:id` 对同一身份呈现与 CLI 相同的可见性（审计面仅人类审计者）。`GET /` 是社论杂志风发现壳（PORTICO 顶栏、内容/专题/收藏展示、渠道过滤、明暗 `data-theme`、精选 hero），映射的仍是 Agent 表面目录，不是文章 CMS；`GET /s/:id` 是阅读栏。匿名只能看见 `approved_public`；内部详情对匿名为 HTML 404 且不泄漏入口。收藏为展示项，无写入。发现页对可见记录展示已授权入口：Web 为直连 http(s) 链接，CLI 为转义后的包坐标，其它渠道为转义后的引用，不代理页面。`/internal` 与 `/public` 双平面仍是正式页面层，杂志壳不替代它们。无会话为匿名；`X-Portico-Actor-*` 不构成证明，Portal 不再读取，伪造头只得到匿名视图。`Authorization: Bearer` / `X-Portico-Session` 解析已登录会话且角色以名册为准。人看的页面（`/internal*`、`/public*`、`/`、`/s/:id`）找不到或无权看见时返回 HTML 404，不返回 JSON 信封，也不泄漏记录名；`/api/*` 仍是 `{ok,error}` JSON。默认绑定 `127.0.0.1`，也接受 RFC1918 单播 IPv4。POST/PUT/PATCH/DELETE 返回 405，不写目录。登录在 CLI 完成；Portal 只读消费会话文件。
+`src/portal/` 是只读 HTTP 入口，消费同一 `CatalogService`。`GET /api/catalog`、`GET /api/catalog/:id`、`GET /api/dashboard`（与 CLI `catalog dashboard`、MCP `portico_dashboard` 同一载荷）、`GET /api/mcp`、`GET /api/mcp/:id`、`GET /api/web`、`GET /api/web/:id`、`GET /api/cli`、`GET /api/cli/:id`、`GET /api/audit`、`GET /api/identities`（与 CLI `identity list`、MCP `portico_identities` 同一载荷，仅维护者与人类审计者）与 HTML `GET /`、`GET /s/:id` 对同一身份呈现与 CLI 相同的可见性（审计面仅人类审计者）。`GET /` 是社论杂志风发现壳（PORTICO 顶栏、内容/专题/收藏展示、渠道过滤、明暗 `data-theme`、精选 hero），映射的仍是 Agent 表面目录，不是文章 CMS；`GET /s/:id` 是阅读栏。匿名只能看见 `approved_public`；内部详情对匿名为 HTML 404 且不泄漏入口。收藏为展示项，无写入。发现页对可见记录展示已授权入口：Web 为直连 http(s) 链接，CLI 为转义后的包坐标，其它渠道为转义后的引用，不代理页面。`/internal` 与 `/public` 双平面仍是正式页面层，杂志壳不替代它们。无会话且无已校验 JWT 为匿名；`X-Portico-Actor-*` 不构成证明，Portal 不再读取，伪造头只得到匿名视图。`Authorization: Bearer` / `X-Portico-Session` 解析已登录会话且角色以名册为准；会话优先于 JWT。人看的页面（`/internal*`、`/public*`、`/`、`/s/:id`）找不到或无权看见时返回 HTML 404，不返回 JSON 信封，也不泄漏记录名；`/api/*` 仍是 `{ok,error}` JSON。默认绑定 `127.0.0.1`，也接受 RFC1918 单播 IPv4。POST/PUT/PATCH/DELETE 返回 405，不写目录。登录在 CLI 完成；Portal 只读消费会话文件，JWT 映射也不写会话。
 
 - MCP 渠道登记与访问
 
@@ -149,19 +149,23 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 登录会话
 
-人类审计者可 `identity credential issue` 一次性下发登录凭证；主体 `identity login` 换会话。凭证与会话只存 SHA-256，不落明文密钥或口令。CLI `--session` 与 Portal / Gateway `Authorization: Bearer`（或 `X-Portico-Session`）解析同一会话，角色始终从名册读取，不能靠会话头自封 auditor。失败登录不写会话；logout 后原令牌不可用。`--actor-*` 只能与 `--session` 同时出现且必须与之一致，单独出现被拒。Portal 仍无 `--allow-write`。这不是外部 IdP、口令库或 OAuth。
+人类审计者可 `identity credential issue` 一次性下发登录凭证；主体 `identity login` 换会话。凭证与会话只存 SHA-256，不落明文密钥或口令。CLI `--session` 与 Portal / Gateway `Authorization: Bearer`（或 `X-Portico-Session`）解析同一会话，角色始终从名册读取，不能靠会话头自封 auditor。失败登录不写会话；logout 后原令牌不可用。`--actor-*` 只能与 `--session` 同时出现且必须与之一致，单独出现被拒。Portal 仍无 `--allow-write`。这不是口令库，也不在 Portico 里跑 OAuth。
 
 - 登录凭证作废
 
-已签发的登录凭证与活动会话可由独立人类审计者 `identity credential revoke --id <subject>` 作废：该主体的未过期凭证和会话立即标 `revokedAt`（仍只存哈希），CLI `--session` 与 Portal / Gateway 会话头变为 `FORBIDDEN`；名册身份仍在，重新 `credential issue` + `login` 即可再次进入；目录记录不变。这与 `identity revoke` 不同：后者撤走主体；前者只切断登录面，主体留在名册中，可重新签发。**由于身份只能靠会话证明，切断登录面即切断该主体的全部访问**，不再有绕过登录的旁路。维护者、Agent、只读者与匿名得到 `FORBIDDEN`。未知主体 `NOT_FOUND`。没有活动凭证或会话、以及重复作废得到 `INVALID_STATE`。明文密钥字段被拒。作废审计记录**先写入**，随后才失效会话与凭证（与 `identity revoke` 同序）：`commitCredentialRevoke` 失败则什么都没发生，不会出现"会话已死但无记录"；若随后的失效步骤部分失败，调用方得到错误，重试可以补齐（主体仍有可作废的活动凭证可供重试）。反向顺序可能在"已无活动凭证"时失败，导致真实作废永久无记录且重试只会得到 `INVALID_STATE`。成功后审计者可重新 `credential issue`。作废轨迹进入人类安全审计视图（`kind=credential`），维护者不能读、不能改写。
+已签发的登录凭证与活动会话可由独立人类审计者 `identity credential revoke --id <subject>` 作废：该主体的未过期凭证和会话立即标 `revokedAt`（仍只存哈希），CLI `--session` 与 Portal / Gateway 会话头变为 `FORBIDDEN`；名册身份仍在，重新 `credential issue` + `login` 即可再次进入；目录记录不变。这与 `identity revoke` 不同：后者撤走主体；前者只切断登录面，主体留在名册中，可重新签发。切断登录面即切断 CLI / Gateway / MCP 与默认 Portal 会话路径。若 Portal 启用了 Cloudflare Access JWT 映射，名册上仍有 email 的人类身份仍可能经已校验 JWT 只读进入 Portal，直到 `identity revoke` 或关闭该功能。维护者、Agent、只读者与匿名得到 `FORBIDDEN`。未知主体 `NOT_FOUND`。没有活动凭证或会话、以及重复作废得到 `INVALID_STATE`。明文密钥字段被拒。作废审计记录**先写入**，随后才失效会话与凭证（与 `identity revoke` 同序）：`commitCredentialRevoke` 失败则什么都没发生，不会出现"会话已死但无记录"；若随后的失效步骤部分失败，调用方得到错误，重试可以补齐（主体仍有可作废的活动凭证可供重试）。反向顺序可能在"已无活动凭证"时失败，导致真实作废永久无记录且重试只会得到 `INVALID_STATE`。成功后审计者可重新 `credential issue`。作废轨迹进入人类安全审计视图（`kind=credential`），维护者不能读、不能改写。
 
 - Portal 双平面 UI（内部笔记台 / 公开发布）
 
 `src/portal/design/` 是页面层。同一套语义 token 支撑两个平面：内部笔记台（`/internal`、`/internal/c`、`/internal/audit`、`/internal/s/:id`）面向只读及以上身份，呈治理状态、入口、维护者与治理路径；公开发布页（`/public`、`/public/t/:channel`、`/public/s/:id`）面向任何人，把已过审批的登记当作稿件呈现。公开发布页在视图层再筛一次，只渲染 `visibility=public` 且 `governanceState=approved_public` 的记录——即使请求者是维护者，草稿与待审公开也不进入公开页。颜色主题为四个固定预设（内部/公开 × 浅色/深色），解析顺序是 `?theme=` → 操作系统提示 → 平面默认；非法或跨平面取值静默降级。主题与模式是纯 CSS 属性，页面不含脚本、不引用远程字体或图片，CSP 仍为 `default-src 'none'`。审计路由只对人类审计者存在，其他身份得到 404。`/` 是社论杂志风发现索引（渠道过滤、`/s/:id` 阅读栏），不是两个新平面的替代品。规范见 [`ui-spec.md`](ui-spec.md)。
 
+- Portal Cloudflare Access JWT 映射
+
+`src/access/cf-access.ts` 用 Web Crypto 校验 RS256 JWT（`aud` / `iss` / `exp` / 签名）。默认关闭：`PORTICO_CF_ACCESS_ENABLED` 未显式打开，或缺少合法 team/aud 时，现有会话路径不变。启用后 Portal 在没有会话时读取 `Cf-Access-Jwt-Assertion`，用已校验 email 查名册人类身份；明文 `Cf-Access-Authenticated-User-Email` 不是证明。命中则与该身份的会话看到同一治理状态；失败为匿名（`/internal` HTML 404）。不写 `identities.json` / `sessions.json`，不签发 `pst1_` 会话。CLI / Gateway / MCP 不读该头。JWKS URL 只允许 loopback 测试地址或该 team 的 Cloudflare certs 路径。这不是 GitHub OAuth 客户端，也不托管 Tunnel。
+
 - 尚未实现
 
-外部 IdP / 联邦登录。标为待核验以外的“已有能力”一律不应被写出。
+GitHub OAuth / 邮箱 OTP 登录界面，以及 Cloudflare Tunnel / `cloudflared` 配置。它们属于边缘 IdP 与基础设施，不进本仓库。标为待核验以外的“已有能力”一律不应被写出。
 
 ## 目标功能清单
 
@@ -274,7 +278,7 @@ Portal、CLI、MCP 看到同一可见性与同一审批状态。一个入口公�
 > 4. 每个会修改系统状态的操作至少验证一次失败后的恢复或回滚。
 > 5. 每次新增一级业务功能，必须同步新增对应的 E2E 并更新本矩阵。
 
-Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份名册只读查询、名册可选邮箱、身份授权撤回、登录会话、登录凭证作废、Portal 发现/仪表盘、Portal 双平面 UI 与颜色主题、目录过滤查询、审计时间线过滤查询、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、CLI 渠道登记/已授权包坐标、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。外部 IdP 仍为缺口：邮箱只是名册上的可选映射字段，不能代替会话。三个非匿名入口都只认会话：CLI `--session`，Portal / Gateway / MCP 的 `Authorization: Bearer` 或 `X-Portico-Session`。`--actor-*` 与 `X-Portico-Actor-*` 不构成证明，Portal / Gateway / MCP 已不接受，CLI 单独给出即拒绝。
+Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval 通过/拒绝、公开发布撤回、Access Control 身份名册、身份名册只读查询、名册可选邮箱、身份授权撤回、登录会话、登录凭证作废、Portal 可选 Cloudflare Access JWT 映射、Portal 发现/仪表盘、Portal 双平面 UI 与颜色主题、目录过滤查询、审计时间线过滤查询、MCP 渠道登记/连接信息、Web 渠道登记/已授权入口、CLI 渠道登记/已授权包坐标、MCP Gateway 鉴权路由、人类安全审计视图、UI Components 门户页维护，以及 CLI 对应命令已有测试证据。邮箱仍不是第二身份证明。三个非匿名入口里，CLI / Gateway / MCP 仍只认会话：CLI `--session`，Gateway / MCP 的 `Authorization: Bearer` 或 `X-Portico-Session`。Portal 在默认关闭时同样只认会话；显式启用 Cloudflare Access 后，校验通过的 JWT 只映射名册，不签发会话。`--actor-*` 与 `X-Portico-Actor-*` 不构成证明，Portal / Gateway / MCP 已不接受，CLI 单独给出即拒绝。GitHub OAuth / 邮箱 OTP 界面与 Tunnel 仍是边缘基础设施，不在本仓库。
 
 | 一级功能 | 风险级别 | Happy Path E2E | 失败路径 | 权限角色覆盖 | 失败恢复/回滚 | 证据（测试路径/用例） |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -291,6 +295,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | 名册可选邮箱 | 高 | ✅ 人类审计者 `identity grant --email` 给人类身份绑定唯一地址；同一维护者经 CLI `identity list`、Portal `GET /api/identities` 与 MCP `portico_identities` 看到同一规范化 email | ✅ Agent 带 email `INVALID_INPUT`；非法或重复邮箱 `INVALID_INPUT`；只读/匿名仍 FORBIDDEN；密钥字段被拒 | ✅ 人类审计者可写 vs 维护者只读 vs 只读/匿名不可见名册 | ✅ 失败 grant 不改 identities 文件字节；省略 email 的再次 grant 保留已绑定地址 | `tests/access_service_test.ts`；`tests/e2e/identity_roster_e2e_test.ts` |
 | 身份授权撤回 | 高 | ✅ 人类审计者 `identity revoke --id` 后，被撤维护者不能再 register；只读者仍见其留下的目录记录；`audit list` 出现 `revoke` | ✅ 维护者/Agent/只读 FORBIDDEN；自撤 FORBIDDEN；最后一位人类审计者 INVALID_STATE；未知或重复撤回 NOT_FOUND；密钥字段被拒 | ✅ 人类审计者 vs 维护者；被撤主体 vs 仍在名册的只读者 | ✅ 失败撤回不改 identities 文件字节、不追加 revoke、不作废会话/凭证；成功撤回后原 session 立即 FORBIDDEN | `tests/access_revoke_test.ts`；`tests/audit_service_test.ts`；`tests/e2e/cli_identity_revoke_e2e_test.ts` |
 | 登录会话 | 高 | ✅ 审计者一次性下发凭证；主体 login 后 CLI `--session` list 与 Portal 会话头看到同一条内部记录 | ✅ 错误 token 登录 FORBIDDEN；会话上伪造 auditor 头 FORBIDDEN；无效 session 不能 approve | ✅ 只读 session 不能 register；维护者 session 不能审公开 | ✅ 失败登录不写 session 记录；logout 后原令牌不可用且不改 catalog | `tests/access_session_test.ts`；`tests/e2e/cli_session_e2e_test.ts`；`tests/e2e/portal_session_e2e_test.ts` |
+| Portal Cloudflare Access JWT 映射 | 高 | ✅ 显式启用后，合法 RS256 JWT（aud/iss/exp 通过）且名册 email 命中时，Portal `/api/catalog` 与 `/internal` 与该人类会话看到同一内部记录 | ✅ 伪造签名、过期、AUD 不匹配、名册未登记、明文 `Cf-Access-Authenticated-User-Email` 头全部匿名（`/internal` HTML 404）；未启用时 JWT 被忽略；Gateway 不接受该 JWT | ✅ 映射后的只读者不能读 `/api/audit`；匿名/失败 JWT 看不到内部记录 | ✅ 成功或失败都不写 identities/sessions 文件字节；不签发 Portico 会话 | `tests/access_cf_access_test.ts`；`tests/portal_handler_test.ts`；`tests/gateway_handler_test.ts`；`tests/e2e/portal_cf_access_e2e_test.ts` |
 | 身份证明与信任根 | 高 | ✅ 会话可完成各自角色的操作：审计者 approve、维护者 register、只读者 list 同一条；空名册 bootstrap 签发首张凭证后 login 成功 | ✅ `--actor-*` 单独出现被拒且不写文件；Portal / MCP 伪造 `X-Portico-Actor-*` 只得到匿名视图（审计面 403）；非审计者会话 approve FORBIDDEN；首个凭证签发后再次无会话 `credential issue` FORBIDDEN；非人类审计者 bootstrap FORBIDDEN | ✅ 匿名 / 只读 / 维护者 / 人类审计者四种会话；伪造头 vs 真会话 | ✅ 被拒的冒名不写 identities/catalog/approvals；bootstrap 被拒不改 sessions 文件 | `tests/e2e/cli_access_e2e_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/portal_session_e2e_test.ts`；`tests/e2e/cli_session_e2e_test.ts` |
 | 登录凭证作废 | 高 | ✅ 人类审计者 `identity credential revoke --id` 后，原 login token 与 `--session` / Portal 会话头立即 FORBIDDEN；名册仍有该身份，重新 `credential issue` + `login` 后仍能 list 同一条内部记录；`audit list` 出现 `revoke_credential` | ✅ 维护者/只读/匿名 FORBIDDEN；未知主体 NOT_FOUND；无活动凭证/会话与重复作废 INVALID_STATE；密钥字段被拒 | ✅ 人类审计者 vs 维护者；被作废主体 vs 重新签发后的同一主体 | ✅ 审计记录先写、失效后做：`commitCredentialRevoke` 失败则 sessions/credentials 文件字节不变；部分失败可重试补齐；成功后可重新 issue 新凭证 | `tests/access_credential_revoke_test.ts`；`tests/audit_service_test.ts`；`tests/e2e/cli_credential_revoke_e2e_test.ts` |
 | CLI 发布与查询 | 高 | ✅ `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见 | ✅ reader 登记/draft/publish FORBIDDEN；公开登记 PUBLIC_REQUIRES_APPROVAL；公开 publish 后匿名 list 为空；自批/维护者 approve 失败；未授权身份 FORBIDDEN | ✅ 维护者 vs 只读 vs 人类审计者；匿名看不到内部、待审与审批记录 | ✅ 失败不创建/不改 catalog 文件、approvals 与 identities | `tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/cli_publish_e2e_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |

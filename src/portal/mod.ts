@@ -1,5 +1,5 @@
 export { handlePortalRequest } from "./handler.ts";
-export type { PortalContext } from "./handler.ts";
+export type { PortalCfAccess, PortalContext } from "./handler.ts";
 export { listenPortal, portalUrl } from "./server.ts";
 export type { PortalListenOptions } from "./server.ts";
 export {

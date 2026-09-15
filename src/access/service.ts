@@ -224,6 +224,22 @@ export class AccessService {
     return records.map(publicIdentity);
   }
 
+  /**
+   * Maps a *already verified* email onto a human roster identity.
+   *
+   * This is not a login and not a second proof: the caller must have checked
+   * a signature first. Misses, invalid input, and non-human records are
+   * `null`. The roster is not written.
+   */
+  async lookupHumanByEmail(email: string): Promise<Actor | null> {
+    const normalized = normalizeLookupEmail(email);
+    if (!normalized) return null;
+    const roster = await this.store.list();
+    const match = roster.find((item) => item.kind === "human" && item.email === normalized);
+    if (!match) return null;
+    return { id: match.id, kind: match.kind, role: match.role };
+  }
+
   async listGrants(actor: Actor): Promise<GrantRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listGrants();
@@ -605,6 +621,13 @@ function parseGrantInput(input: GrantInput): GrantInput {
   return email
     ? { id: input.id, kind: input.kind, role: input.role, email }
     : { id: input.id, kind: input.kind, role: input.role };
+}
+
+function normalizeLookupEmail(value: string): string | null {
+  if (!nonEmpty(value) || value.length > MAX_EMAIL_LENGTH) return null;
+  const email = value.toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) return null;
+  return email;
 }
 
 function parseOptionalEmail(value: unknown, kind: ActorKind): string | undefined {

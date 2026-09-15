@@ -172,3 +172,26 @@ Deno.test("gateway refuses MCP tool calls and does not mutate the catalog", asyn
   );
   assertEquals(JSON.stringify(await context.catalogStore.list()), before);
 });
+
+Deno.test("a CF Access JWT does not prove identity on the gateway", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalMcp());
+  await context.access.grant(auditor, {
+    id: reader.id,
+    kind: "human",
+    role: "reader",
+    email: "reader@example.invalid",
+  });
+
+  const response = await handleGatewayRequest(
+    new Request("http://portico.local/gateway/mcp/docs-mcp/authorize", {
+      method: "POST",
+      headers: { "cf-access-jwt-assertion": "valid-assertion" },
+    }),
+    context,
+  );
+  const { status, body } = await jsonOf(response);
+  assertEquals(status, 404);
+  assertEquals(body.error?.code, "NOT_FOUND");
+  assertEquals(JSON.stringify(body).includes(MCP_ENDPOINT), false);
+});

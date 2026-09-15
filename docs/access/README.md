@@ -7,7 +7,7 @@ Portico 的访问控制（Access Control）系统旨在为**人与 Agent 共存�
 ## 核心设计理念
 
 1. **真实证明，拒绝自称**：
-   在没有中心化 IdP 的场景下，系统严禁信任客户端自定义的请求头（如 `X-Portico-Actor-*` 或 CLI 参数 `--actor-*`）。调用者必须出示经由服务端校验的**登录会话（Session）**作为唯一的身份证明。
+   系统严禁信任客户端自定义的请求头（如 `X-Portico-Actor-*` 或 CLI 参数 `--actor-*`）。CLI、Gateway 与 MCP 必须出示经由服务端校验的**登录会话（Session）**。Portal 在显式启用时可把已校验的 Cloudflare Access JWT 映射到名册人类身份，这不是会话，也不会写入 `sessions.json`。
 2. **零明文密码与密钥**：
    所有凭证（Credentials）在下发后服务端仅保存加盐后的 SHA-256 哈希值。即便数据文件遭读取，攻击者也无法复原凭证或伪造未授权会话。
 3. **不可逾越的角色边界**：

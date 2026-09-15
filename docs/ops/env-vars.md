@@ -18,6 +18,10 @@ Portico 支持通过环境变量对各进程的监听地址、端口与数据文
 | **`PORTICO_SESSIONS_PATH`** | 全局 | `${DATA_DIR}/sessions.json` | 凭证与会话数据文件路径。 |
 | **`PORTICO_GATEWAY_AUDIT_PATH`**| GW/Portal/MCP| `${DATA_DIR}/gateway-audit.json`| 网关访问流水文件路径。若给 Portal/MCP 配置，则其审计视图会并入网关流水。 |
 | **`PORTICO_PAGE_PATH`** | Portal/CLI | `${DATA_DIR}/page.json` | 自定义门户组件盒布局配置文件路径（可选）。 |
+| **`PORTICO_CF_ACCESS_ENABLED`** | Portal | 关闭 | 是否启用 Cloudflare Access JWT 映射。未设为 `true`/`yes`/`on`/`1` 时忽略 JWT，现有会话路径不变。 |
+| **`PORTICO_CF_ACCESS_TEAM`** | Portal | （无） | Cloudflare Access team 名，只允许 `[a-z0-9-]`。用于拼 ISS 与默认 JWKS URL。缺省则功能保持关闭。 |
+| **`PORTICO_CF_ACCESS_AUD`** | Portal | （无） | Access Application audience。缺省则功能保持关闭。 |
+| **`PORTICO_CF_ACCESS_JWKS_URL`** | Portal | team 默认证书 URL | 可选覆盖。只允许 `http://127.0.0.1/...`（测试）或该 team 的 `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`。其它 URL 会使功能保持关闭。 |
 
 ---
 
