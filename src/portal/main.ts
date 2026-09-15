@@ -1,3 +1,4 @@
+import { CfAccessVerifier, parseCfAccessEnv } from "../access/mod.ts";
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
 import { listenPortal } from "./server.ts";
@@ -20,12 +21,14 @@ if (import.meta.main) {
   try {
     const env = Deno.env.toObject();
     const { hostname, port } = readBind(env, 8788);
+    const cfAccess = parseCfAccessEnv(env);
     const server = listenPortal({
       catalogPath: readPath("PORTICO_CATALOG_PATH", env),
       identitiesPath: readPath("PORTICO_IDENTITIES_PATH", env),
       sessionsPath: env.PORTICO_SESSIONS_PATH,
       pagePath: env.PORTICO_PAGE_PATH,
       gatewayAuditPath: env.PORTICO_GATEWAY_AUDIT_PATH,
+      cfAccess: cfAccess.enabled ? new CfAccessVerifier(cfAccess) : undefined,
       hostname,
       port,
       onListen: (addr) => {

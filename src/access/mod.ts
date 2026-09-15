@@ -1,5 +1,19 @@
 export { AccessService } from "./service.ts";
 export {
+  CfAccessVerifier,
+  fetchJwksDocument,
+  parseCfAccessEnv,
+  verifyCfAccessJwt,
+} from "./cf-access.ts";
+export type {
+  CfAccessConfig,
+  CfAccessSettings,
+  JwkRsa,
+  Jwks,
+  VerifiedCfAccess,
+  VerifyCfAccessDeps,
+} from "./cf-access.ts";
+export {
   FileIdentityStore,
   FileSessionStore,
   MemoryIdentityStore,

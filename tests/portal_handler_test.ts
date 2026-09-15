@@ -671,9 +671,10 @@ Deno.test("maintainer and auditor list the same roster on portal; reader and ano
   );
   assertEquals(asMaintainer.status, 200);
   assertEquals(asMaintainer.body.ok, true);
-  const maintainerIds = (asMaintainer.body.data as Array<{ id: string; kind: string; role: string }>)
-    .slice()
-    .sort((a, b) => a.id.localeCompare(b.id));
+  const maintainerIds =
+    (asMaintainer.body.data as Array<{ id: string; kind: string; role: string }>)
+      .slice()
+      .sort((a, b) => a.id.localeCompare(b.id));
   assertEquals(maintainerIds, expected);
   assertEquals(
     JSON.stringify(asMaintainer.body.data).includes("secretHash") ||
@@ -708,4 +709,119 @@ Deno.test("maintainer and auditor list the same roster on portal; reader and ano
   );
   assertEquals(asAnon.status, 403);
   assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+});
+
+async function withMappedEmail() {
+  const context = await seededContext();
+  await context.access.grant(auditor, {
+    id: reader.id,
+    kind: "human",
+    role: "reader",
+    email: "reader@example.invalid",
+  });
+  await context.catalog.register(maintainer, internalCli());
+  return context;
+}
+
+function cfAccessThatMaps(token = "valid-assertion", email = "reader@example.invalid") {
+  return {
+    verify: (assertion: string) => Promise.resolve(assertion === token ? { email } : null),
+  };
+}
+
+Deno.test("a verified CF Access JWT maps a roster email to the same internal catalog as a session", async () => {
+  const context = await withMappedEmail();
+  const viaJwt = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog", {
+        headers: { "cf-access-jwt-assertion": "valid-assertion" },
+      }),
+      { ...context, cfAccess: cfAccessThatMaps() },
+    ),
+  );
+  const viaSession = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(viaJwt.status, 200);
+  assertEquals(viaJwt.body.data, viaSession.body.data);
+
+  const internal = await handlePortalRequest(
+    new Request("http://portico.local/internal", {
+      headers: { "cf-access-jwt-assertion": "valid-assertion" },
+    }),
+    { ...context, cfAccess: cfAccessThatMaps() },
+  );
+  assertEquals(internal.status, 200);
+  assert((await internal.text()).includes("Docs Writer"));
+});
+
+Deno.test("CF Access JWT failures and the plaintext email header stay anonymous", async () => {
+  const context = await withMappedEmail();
+  const cfAccess = cfAccessThatMaps();
+  const cases: HeadersInit[] = [
+    { "cf-access-jwt-assertion": "forged" },
+    { "cf-access-authenticated-user-email": "reader@example.invalid" },
+    {
+      "cf-access-authenticated-user-email": "reader@example.invalid",
+      "cf-access-jwt-assertion": "forged",
+    },
+  ];
+  for (const headers of cases) {
+    const catalog = await jsonOf(
+      await handlePortalRequest(
+        new Request("http://portico.local/api/catalog", { headers }),
+        { ...context, cfAccess },
+      ),
+    );
+    assertEquals(catalog.status, 200);
+    assertEquals(catalog.body.data, []);
+
+    const internal = await handlePortalRequest(
+      new Request("http://portico.local/internal", { headers }),
+      { ...context, cfAccess },
+    );
+    assertEquals(internal.status, 404);
+    assert(!(await internal.text()).includes("Docs Writer"));
+  }
+});
+
+Deno.test("a Portico session wins over a CF Access JWT; disabled CF Access ignores the assertion", async () => {
+  const context = await withMappedEmail();
+  await context.access.grant(auditor, {
+    id: "human:mapped-auditor",
+    kind: "human",
+    role: "auditor",
+    email: "auditor@example.invalid",
+  });
+
+  const mixed = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/audit", {
+        headers: {
+          ...actorHeaders(reader),
+          "cf-access-jwt-assertion": "auditor-assertion",
+        },
+      }),
+      {
+        ...context,
+        cfAccess: cfAccessThatMaps("auditor-assertion", "auditor@example.invalid"),
+      },
+    ),
+  );
+  assertEquals(mixed.status, 403);
+  assertEquals(mixed.body.error?.code, "FORBIDDEN");
+
+  const ignored = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/catalog", {
+        headers: { "cf-access-jwt-assertion": "valid-assertion" },
+      }),
+      context,
+    ),
+  );
+  assertEquals(ignored.status, 200);
+  assertEquals(ignored.body.data, []);
 });

@@ -3,7 +3,7 @@ import { AuditService } from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
-import { handlePortalRequest } from "./handler.ts";
+import { handlePortalRequest, type PortalCfAccess } from "./handler.ts";
 
 export interface PortalListenOptions {
   catalogPath: string;
@@ -19,6 +19,7 @@ export interface PortalListenOptions {
   port?: number;
   signal?: AbortSignal;
   onListen?: (addr: { hostname: string; port: number }) => void;
+  cfAccess?: PortalCfAccess;
 }
 
 export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
@@ -42,7 +43,14 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
     port: options.port ?? 0,
     signal: options.signal,
     onListen: options.onListen ?? (() => {}),
-  }, (request) => handlePortalRequest(request, { catalog, access, gateway, pages }));
+  }, (request) =>
+    handlePortalRequest(request, {
+      catalog,
+      access,
+      gateway,
+      pages,
+      cfAccess: options.cfAccess,
+    }));
 }
 
 export function portalUrl(server: Deno.HttpServer): string {

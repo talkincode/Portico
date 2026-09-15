@@ -1,6 +1,6 @@
 # 凭证签发与登录会话
 
-在 Portico 中，会话（Session）是主体身份与权限的**唯一有效证明**。
+在 Portico 中，会话（Session）是 CLI、Gateway 与 MCP 的**唯一有效证明**。Portal 默认同样只认会话；仅当显式启用 Cloudflare Access 时，校验通过的 JWT 可以映射到名册上的人类身份，且不会签发会话。
 
 ---
 
@@ -30,7 +30,7 @@ deno task cli -- catalog list \
 ```
 
 ### 2. Web Portal 与 REST API
-支持标准 HTTP Header：
+支持标准 HTTP Header。可选的 Cloudflare Access JWT（`Cf-Access-Jwt-Assertion`）只在 Portal 进程、且环境变量显式启用时生效；明文 `Cf-Access-Authenticated-User-Email` 不是证明。Gateway 与 MCP 忽略该头。
 ```bash
 # 推荐方式：标准 Authorization Bearer
 curl -s -H "Authorization: Bearer pst1_1a2b3c4d5e..." http://127.0.0.1:8788/api/catalog

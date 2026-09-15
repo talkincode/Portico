@@ -29,11 +29,21 @@ import {
 import { parseChannel, parseTheme, renderMagazinePage, renderNotFoundPage } from "./html.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
 
+export interface PortalCfAccess {
+  verify(assertion: string): Promise<{ email: string } | null>;
+}
+
 export interface PortalContext {
   catalog: CatalogService;
   access: AccessService;
   gateway?: GatewayService;
   pages?: PageService;
+  /**
+   * Optional Portal-only Cloudflare Access mapping. Absent means the feature
+   * is off: `Cf-Access-Jwt-Assertion` is ignored. CLI / Gateway / MCP must
+   * not grow an equivalent field.
+   */
+  cfAccess?: PortalCfAccess;
 }
 
 export async function handlePortalRequest(
@@ -42,7 +52,7 @@ export async function handlePortalRequest(
 ): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const actor = await resolveActor(request, context.access);
+    const actor = await resolveActor(request, context);
     if (request.method !== "GET") {
       return jsonError(405, ErrorCode.USAGE, "method not allowed");
     }
@@ -169,11 +179,31 @@ export async function handlePortalRequest(
  * Portal callers prove who they are with a session, or they are anonymous.
  * There is deliberately no `X-Portico-Actor-*` path: a header is not proof of
  * an identity, and the roster ids are published in the README.
+ *
+ * A verified Cloudflare Access JWT is a Portal-only fallback: it never writes
+ * a session, never outranks a presented Portico session, and the plaintext
+ * `Cf-Access-Authenticated-User-Email` header is not proof.
  */
-async function resolveActor(request: Request, access: AccessService): Promise<Actor> {
-  return await access.resolveRequestActor({
-    sessionToken: readSessionToken(request),
-  });
+async function resolveActor(request: Request, context: PortalContext): Promise<Actor> {
+  const sessionToken = readSessionToken(request);
+  if (sessionToken) {
+    return await context.access.resolveRequestActor({ sessionToken });
+  }
+  if (context.cfAccess) {
+    const assertion = request.headers.get("cf-access-jwt-assertion");
+    if (assertion) {
+      try {
+        const verified = await context.cfAccess.verify(assertion);
+        if (verified?.email) {
+          const mapped = await context.access.lookupHumanByEmail(verified.email);
+          if (mapped) return mapped;
+        }
+      } catch {
+        // Fail closed to anonymous. A thrown verifier must not 500-open /internal.
+      }
+    }
+  }
+  return await context.access.resolveRequestActor({ sessionToken: null });
 }
 
 function auditService(context: PortalContext): AuditService {

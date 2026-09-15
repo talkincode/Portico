@@ -377,3 +377,28 @@ Deno.test("identity list projects only id, kind, role and optional email", async
   assertEquals(Object.keys(listed[0]).sort(), ["email", "id", "kind", "role"]);
   assertEquals(JSON.stringify(listed).includes("literal-secret"), false);
 });
+
+Deno.test("lookupHumanByEmail maps a roster address and does not write", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-access-lookup-email-" });
+  const path = `${dir}/identities.json`;
+  const service = new AccessService(new FileIdentityStore(path));
+  await service.grant(null, {
+    id: auditor.id,
+    kind: "human",
+    role: "auditor",
+    email: "auditor@example.invalid",
+  });
+  await service.grant(auditor, {
+    id: reader.id,
+    kind: "human",
+    role: "reader",
+    email: "Reader@example.invalid",
+  });
+  const before = await Deno.readFile(path);
+
+  const mapped = await service.lookupHumanByEmail("READER@example.invalid");
+  assertEquals(mapped, { id: reader.id, kind: "human", role: "reader" });
+  assertEquals(await service.lookupHumanByEmail("nobody@example.invalid"), null);
+  assertEquals(await service.lookupHumanByEmail("not-an-email"), null);
+  assertEquals(await Deno.readFile(path), before);
+});
