@@ -248,9 +248,13 @@ Deno.test("E2E: reading-page chrome keeps all-channels and search query", async 
     const searchedHtml = await searched.text();
     assert(searchedHtml.includes('<a class="active" href="/?channel=cli&amp;q=Writer">专题</a>'));
     assert(searchedHtml.includes('href="/?q=Writer">首页</a>'));
+    assert(searchedHtml.includes('href="/?channel=cli&amp;q=Writer">CLI</a>'));
     assert(searchedHtml.includes('class="rail-link active" href="/?channel=cli&amp;q=Writer"'));
     assert(searchedHtml.includes('class="rail-link" href="/?q=Writer"'));
     assert(!searchedHtml.includes("专题分类"));
     assert(!searchedHtml.includes('class="topics"'));
+    assert(!searchedHtml.includes(">CLI 工具<"));
+    assert(!searchedHtml.includes(">Web 渠道<"));
+    assert(!searchedHtml.includes(">MCP 服务<"));
   });
 });
