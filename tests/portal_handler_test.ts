@@ -774,6 +774,67 @@ Deno.test("auditor lists the same grant trail on portal; maintainer, reader and 
   assertEquals(await context.access.listGrants(auditor), expected);
 });
 
+Deno.test("signed-in callers see their own identity on portal whoami; anonymous cannot", async () => {
+  const context = await seededContext();
+  const expectedReader = await context.access.whoami(reader);
+  assertEquals(expectedReader, { id: reader.id, kind: "human", role: "reader" });
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/whoami", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 200);
+  assertEquals(asReader.body.ok, true);
+  assertEquals(asReader.body.data, expectedReader);
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/whoami", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 200);
+  assertEquals(asMaintainer.body.data, await context.access.whoami(maintainer));
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/whoami", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.data, await context.access.whoami(auditor));
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "whoami must not leak credential or session secrets",
+  );
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/whoami"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/whoami", {
+        method: "POST",
+        headers: actorHeaders(reader),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.access.whoami(reader), expectedReader);
+});
+
 Deno.test("signed-in callers see the same approval records on portal; anonymous sees none", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());

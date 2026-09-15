@@ -32,7 +32,8 @@ import { isRecord } from "./types.ts";
  * AuditService or AccessService call, so visibility, approval and role rules
  * cannot fork: an MCP caller sees exactly what the same identity sees on the
  * CLI and the Portal. Nothing here executes, proxies or orchestrates anything
- * — Portico still does not run other people's tools.
+ * — Portico still does not run other people's tools. `portico_whoami` is the
+ * current session identity, not a login.
  */
 
 export interface McpTool {
@@ -149,6 +150,12 @@ export const TOOLS: readonly McpTool[] = [
       "列出追加式授权轨迹（谁在何时授予了哪个角色）。等价于 CLI `identity grants` 与 Portal `GET /api/grants`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。读操作不写名册。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "portico_whoami",
+    description:
+      "返回当前已证明身份的 id / kind / role。等价于 CLI `identity whoami` 与 Portal `GET /api/whoami`。已登录会话看到自己；匿名得到 FORBIDDEN。不返回邮箱、凭证或会话。读操作不写名册。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
 export function isTool(name: string): boolean {
@@ -199,6 +206,8 @@ export async function callTool(
       return await deps.access.list(actor);
     case "portico_grants":
       return await deps.access.listGrants(actor);
+    case "portico_whoami":
+      return await deps.access.whoami(actor);
     default:
       throw new CatalogError(ErrorCode.NOT_FOUND, `unknown tool '${name}'`);
   }

@@ -454,7 +454,7 @@ async function runIdentity(
   }
 
   if (action === "whoami") {
-    return ok(await service.resolveSession(readSessionToken(flags, env)));
+    return ok(await service.whoami(await service.resolveSession(readSessionToken(flags, env))));
   }
 
   const actor = await resolveFlagsActor(flags, env);

@@ -130,6 +130,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_approvals",
     "portico_identities",
     "portico_grants",
+    "portico_whoami",
   ]);
 });
 
@@ -264,6 +265,74 @@ Deno.test("portico_grants is the same trail for auditor; maintainer, reader and 
     id: 4,
     method: "tools/call",
     params: { name: "portico_grants", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, true);
+  assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
+});
+
+Deno.test("portico_whoami is the same identity for a session; anonymous is FORBIDDEN", async () => {
+  const { context } = await seeded();
+  const expected = await context.access.whoami({
+    id: "human:reader",
+    kind: "human",
+    role: "reader",
+  });
+  assertEquals(expected, { id: "human:reader", kind: "human", role: "reader" });
+
+  const readerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_whoami", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(readerCall.body.result?.isError, undefined);
+  assertEquals(envelope(readerCall.body).data, expected);
+  assertEquals(
+    JSON.stringify(envelope(readerCall.body).data).includes("secretHash") ||
+      JSON.stringify(envelope(readerCall.body).data).includes("tokenHash") ||
+      JSON.stringify(envelope(readerCall.body).data).includes("pct1_") ||
+      JSON.stringify(envelope(readerCall.body).data).includes("pst1_"),
+    false,
+  );
+
+  const maintainerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_whoami", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("agent:docs-bot")!,
+    },
+  });
+  assertEquals(maintainerCall.body.result?.isError, undefined);
+  assertEquals(envelope(maintainerCall.body).data, await context.access.whoami(maintainer));
+
+  const auditorCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_whoami", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(auditorCall.body.result?.isError, undefined);
+  assertEquals(envelope(auditorCall.body).data, await context.access.whoami(auditor));
+
+  const anonCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: { name: "portico_whoami", arguments: {} },
   });
   assertEquals(anonCall.body.result?.isError, true);
   assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");

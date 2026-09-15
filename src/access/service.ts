@@ -246,6 +246,23 @@ export class AccessService {
     return records.map(publicGrant);
   }
 
+  /**
+   * Current proven identity. Anonymous is not an identity. Extra roster
+   * fields (email, unknown keys) stay off this projection so CLI / Portal /
+   * MCP cannot disagree about who is calling.
+   */
+  async whoami(actor: Actor): Promise<Actor> {
+    if (actor.role === "anonymous") {
+      throw new CatalogError(ErrorCode.FORBIDDEN, "anonymous has no proven identity");
+    }
+    assertClaimedActor(actor);
+    const record = await this.store.get(actor.id);
+    if (!record) {
+      throw new CatalogError(ErrorCode.FORBIDDEN, "session is not valid");
+    }
+    return { id: record.id, kind: record.kind, role: record.role };
+  }
+
   async listRevokes(actor: Actor): Promise<RevokeRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listRevokes();
