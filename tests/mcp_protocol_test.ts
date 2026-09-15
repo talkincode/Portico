@@ -127,7 +127,80 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_entry",
     "portico_dashboard",
     "portico_audit",
+    "portico_identities",
   ]);
+});
+
+Deno.test("portico_identities is the same roster for maintainer and auditor; reader and anonymous are FORBIDDEN", async () => {
+  const { context } = await seeded();
+  const expected = [
+    { id: "agent:docs-bot", kind: "agent", role: "maintainer" },
+    { id: "human:reader", kind: "human", role: "reader" },
+    { id: "human:security-auditor", kind: "human", role: "auditor" },
+  ];
+
+  const maintainerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_identities", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("agent:docs-bot")!,
+    },
+  });
+  assertEquals(maintainerCall.body.result?.isError, undefined);
+  const maintainerData = envelope(maintainerCall.body).data as Array<{
+    id: string;
+    kind: string;
+    role: string;
+  }>;
+  assertEquals(
+    maintainerData.slice().sort((a, b) => a.id.localeCompare(b.id)),
+    expected,
+  );
+  assertEquals(
+    JSON.stringify(maintainerData).includes("secretHash") ||
+      JSON.stringify(maintainerData).includes("tokenHash"),
+    false,
+  );
+
+  const auditorCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_identities", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(envelope(auditorCall.body).data, maintainerData);
+
+  const readerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_identities", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(readerCall.body.result?.isError, true);
+  assertEquals(envelope(readerCall.body).error?.code, "FORBIDDEN");
+
+  const anonCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: { name: "portico_identities", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, true);
+  assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
 });
 
 Deno.test("anonymous sees only approved-public surfaces through MCP", async () => {
