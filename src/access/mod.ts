@@ -36,6 +36,7 @@ export type {
   RevokeInput,
   RevokeRecord,
   RevokeResult,
+  SessionAuditView,
   SessionRecord,
   SessionView,
 } from "./types.ts";

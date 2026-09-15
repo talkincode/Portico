@@ -95,3 +95,15 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/whoami
 
 > [!NOTE]
 > 已登录会话（含 Portal 上已校验的 Cloudflare Access 映射）看到自己。匿名得到 `403 Forbidden`。这不是登录入口；`POST` 返回 `405`。载荷不含邮箱、凭证或会话令牌。
+
+---
+
+### 7. 登录会话轨迹 (`GET /api/sessions`)
+列出登录会话轨迹（id / 主体 / 创建与过期时间，作废则含 `revokedAt`）。与 CLI `identity sessions`、MCP `portico_sessions` 同一载荷。
+
+```bash
+curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/sessions
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是登录或作废入口；`POST` 返回 `405`。载荷不含令牌或哈希。
