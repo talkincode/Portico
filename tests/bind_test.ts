@@ -21,13 +21,13 @@ Deno.test("parseBindHostname defaults to loopback", () => {
   assertEquals(parseBindHostname("localhost"), "localhost");
 });
 
-Deno.test("parseBindHostname allows RFC1918 unicast including 10.201.15.192", () => {
-  assertEquals(parseBindHostname("10.201.15.192"), "10.201.15.192");
+Deno.test("parseBindHostname allows RFC1918 unicast addresses", () => {
   assertEquals(parseBindHostname("10.0.0.1"), "10.0.0.1");
   assertEquals(parseBindHostname("10.255.255.254"), "10.255.255.254");
   assertEquals(parseBindHostname("172.16.0.1"), "172.16.0.1");
   assertEquals(parseBindHostname("172.31.255.254"), "172.31.255.254");
   assertEquals(parseBindHostname("192.168.0.1"), "192.168.0.1");
+  assertEquals(parseBindHostname("192.168.1.10"), "192.168.1.10");
   assertEquals(parseBindHostname("192.168.255.254"), "192.168.255.254");
 });
 
@@ -48,10 +48,10 @@ Deno.test("parseBindHostname refuses wildcard, IPv6, and public addresses", () =
       "255.255.255.255",
       "example.com",
       "",
-      " 10.201.15.192",
-      "10.201.15.192 ",
-      "010.201.15.192",
-      "::ffff:10.201.15.192",
+      " 10.0.0.1",
+      "10.0.0.1 ",
+      "010.0.0.1",
+      "::ffff:10.0.0.1",
     ]
   ) {
     assertBindRejected(value);
@@ -75,8 +75,8 @@ Deno.test("parseBindPort accepts 0-65535 and rejects other values", () => {
 Deno.test("readBind uses PORTICO_BIND and PORTICO_PORT together", () => {
   assertEquals(readBind({}, 8788), { hostname: "127.0.0.1", port: 8788 });
   assertEquals(
-    readBind({ PORTICO_BIND: "10.201.15.192", PORTICO_PORT: "8788" }, 8788),
-    { hostname: "10.201.15.192", port: 8788 },
+    readBind({ PORTICO_BIND: "192.168.1.10", PORTICO_PORT: "8788" }, 8788),
+    { hostname: "192.168.1.10", port: 8788 },
   );
 });
 
@@ -87,7 +87,11 @@ Deno.test("deno.json default tasks still only allow 127.0.0.1", async () => {
   for (const name of ["test", "portal", "gateway"]) {
     const task = config.tasks[name];
     assert(task.includes("--allow-net=127.0.0.1"), `${name} must allow 127.0.0.1`);
-    assert(!task.includes("10.201.15.192"), `${name} must not bake in the intranet bind`);
+    assert(
+      !/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/
+        .test(task),
+      `${name} must not bake an RFC1918 bind into the default task`,
+    );
     assert(!task.includes("0.0.0.0"), `${name} must not allow 0.0.0.0`);
     assert(!task.includes("--allow-all"), `${name} must not use --allow-all`);
   }
