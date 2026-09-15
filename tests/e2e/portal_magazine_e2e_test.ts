@@ -373,3 +373,103 @@ Deno.test("E2E: mismatched reading-page filters redirect instead of rendering ze
     assertEquals(`${redirected.pathname}${redirected.search}`, "/s/docs-web?channel=web");
   });
 });
+
+Deno.test("E2E: magazine and public surfaces reach each other; anonymous still 404s /internal", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-magazine-cross-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/web.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleWebRecord(), null, 2)}\n`);
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-web",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-web",
+    ], env)).code,
+    0,
+  );
+
+  const catalogBefore = await Deno.readTextFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const anonHome = await fetch(`${base}/`);
+    assertEquals(anonHome.status, 200);
+    const anonHomeHtml = await anonHome.text();
+    assert(anonHomeHtml.includes('href="/public"'));
+    assert(anonHomeHtml.includes(">公开发布</a>"));
+    assert(!anonHomeHtml.includes('href="/internal"'));
+
+    const readerHome = await fetch(`${base}/`, { headers: readerHeaders() });
+    assertEquals(readerHome.status, 200);
+    const readerHomeHtml = await readerHome.text();
+    assert(readerHomeHtml.includes('href="/internal"'));
+    assert(readerHomeHtml.includes(">内部笔记</a>"));
+
+    const publicPage = await fetch(`${base}/public`);
+    assertEquals(publicPage.status, 200);
+    const publicHtml = await publicPage.text();
+    assert(publicHtml.includes('href="/"'));
+    assert(publicHtml.includes(">发现</a>"));
+    assert(!publicHtml.includes('href="/internal"'));
+    assert(publicHtml.includes("Docs Web"));
+
+    const article = await fetch(`${base}/public/s/docs-web`);
+    assertEquals(article.status, 200);
+    const articleHtml = await article.text();
+    assert(articleHtml.includes('href="/s/docs-web"'));
+
+    const reading = await fetch(`${base}/s/docs-web?channel=web&q=Docs`);
+    assertEquals(reading.status, 200);
+    const readingHtml = await reading.text();
+    assert(
+      readingHtml.includes(
+        '<a class="back-to-list" href="/?channel=web&amp;q=Docs">返回列表</a>',
+      ),
+    );
+
+    const list = await fetch(`${base}/?channel=web&q=Docs`);
+    assertEquals(list.status, 200);
+    const listHtml = await list.text();
+    assert(listHtml.includes("Docs Web"));
+    assert(listHtml.includes('value="Docs"'));
+
+    const anonInternal = await fetch(`${base}/internal`);
+    assertEquals(anonInternal.status, 404);
+    const anonInternalHtml = await anonInternal.text();
+    assert(!anonInternalHtml.includes("Docs Web"));
+    assert(!anonInternalHtml.includes("https://docs.example.test"));
+  });
+
+  assertEquals(await Deno.readTextFile(catalog), catalogBefore);
+});

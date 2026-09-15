@@ -56,6 +56,7 @@ function renderPublicPage(input: PublicShellInput): string {
           <span class="tk-brand__mark">Portico</span>
         </a>
         <nav class="pub-nav" aria-label="公开发布">
+          <a class="pub-nav__link" href="/">发现</a>
           <a class="pub-nav__link" href="/public"${
     input.section === "recommend" ? ' aria-current="page"' : ""
   }>推荐</a>
@@ -360,11 +361,15 @@ export function renderPublicArticle(input: PublicArticleInput): string | null {
 
   const body = `    <main class="tk-shell pub-article">
       <nav class="pub-crumb int-crumb" aria-label="面包屑">
+        <a href="/">发现</a>
+        <span class="int-crumb__sep">›</span>
         <a href="/public">首发</a>
         <span class="int-crumb__sep">›</span>
         <a href="/public/t/${esc(channels[0])}">${esc(CHANNEL_LABEL[channels[0]])}</a>
         <span class="int-crumb__sep">›</span>
         <span>${esc(surface.id)}</span>
+        <span class="int-crumb__sep">›</span>
+        <a href="/s/${esc(surface.id)}">杂志详情</a>
       </nav>
 
       <header class="pub-article__head">

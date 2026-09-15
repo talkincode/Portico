@@ -601,3 +601,78 @@ Deno.test("following a canonicalized reading URL never shows zero entries with a
   assert(html.includes("1 个入口"));
   assert(!html.includes("0 个入口"));
 });
+
+function hasHref(html: string, href: string): boolean {
+  return html.includes(`href="${href}"`);
+}
+
+Deno.test("anonymous magazine chrome links to /public but not /internal", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, publicWeb());
+  await context.catalog.publish(maintainer, { id: "docs-web", visibility: "public" });
+  await context.catalog.approve(auditor, { id: "docs-web" });
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+
+  const home = await handlePortalRequest(new Request("http://portico.local/"), context);
+  assertEquals(home.status, 200);
+  const homeHtml = await home.text();
+  assert(hasHref(homeHtml, "/public"), "magazine index must reach the public surface");
+  assert(homeHtml.includes(">公开发布</a>"));
+  assert(!hasHref(homeHtml, "/internal"), "anonymous magazine must not advertise /internal");
+  assert(!homeHtml.includes(">内部笔记</a>"));
+
+  const reading = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-web?channel=web"),
+    context,
+  );
+  assertEquals(reading.status, 200);
+  const readingHtml = await reading.text();
+  assert(hasHref(readingHtml, "/public"));
+  assert(!hasHref(readingHtml, "/internal"));
+  assert(
+    readingHtml.includes('<a class="back-to-list" href="/?channel=web">返回列表</a>'),
+    "reading page must return to the filtered list",
+  );
+  assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
+});
+
+Deno.test("signed-in magazine chrome links to /internal without bypassing anonymous 404", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+
+  const readerHome = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(readerHome.status, 200);
+  const readerHtml = await readerHome.text();
+  assert(hasHref(readerHtml, "/public"));
+  assert(hasHref(readerHtml, "/internal"), "a signed-in reader may reach the internal workbench");
+  assert(readerHtml.includes(">内部笔记</a>"));
+
+  const reading = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(reading.status, 200);
+  const readingHtml = await reading.text();
+  assert(hasHref(readingHtml, "/internal"));
+  assert(
+    readingHtml.includes(
+      '<a class="back-to-list" href="/?channel=cli&amp;q=Writer">返回列表</a>',
+    ),
+    "return-to-list must keep channel and q",
+  );
+
+  const anonInternal = await handlePortalRequest(
+    new Request("http://portico.local/internal"),
+    context,
+  );
+  assertEquals(anonInternal.status, 404);
+  const anonInternalHtml = await anonInternal.text();
+  assert(!anonInternalHtml.includes("Docs Writer"));
+  assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
+});
