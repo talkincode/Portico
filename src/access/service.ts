@@ -243,7 +243,7 @@ export class AccessService {
   async listGrants(actor: Actor): Promise<GrantRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listGrants();
-    return records.map((record) => structuredClone(record));
+    return records.map(publicGrant);
   }
 
   async listRevokes(actor: Actor): Promise<RevokeRecord[]> {
@@ -656,6 +656,17 @@ function publicIdentity(record: Identity): Identity {
   };
   if (record.email) identity.email = record.email;
   return identity;
+}
+
+function publicGrant(record: GrantRecord): GrantRecord {
+  return {
+    id: record.id,
+    subjectId: record.subjectId,
+    kind: record.kind,
+    role: record.role,
+    grantedBy: { id: record.grantedBy.id, kind: record.grantedBy.kind },
+    grantedAt: record.grantedAt,
+  };
 }
 
 function assertClaimedActor(actor: Actor): void {

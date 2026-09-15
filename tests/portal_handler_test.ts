@@ -711,6 +711,69 @@ Deno.test("maintainer and auditor list the same roster on portal; reader and ano
   assertEquals(asAnon.body.error?.code, "FORBIDDEN");
 });
 
+Deno.test("auditor lists the same grant trail on portal; maintainer, reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  const expected = await context.access.listGrants(auditor);
+  assertEquals(expected.length >= 2, true);
+  assertEquals(expected.some((row) => row.subjectId === "human:security-auditor"), true);
+  assertEquals(expected.some((row) => row.subjectId === "agent:docs-bot"), true);
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/grants", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "grant trail must not leak credential or session secrets",
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/grants", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/grants", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/grants"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/grants", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.access.listGrants(auditor), expected);
+});
+
 Deno.test("signed-in callers see the same approval records on portal; anonymous sees none", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());

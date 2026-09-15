@@ -71,3 +71,15 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/
 
 > [!NOTE]
 > 仅限具备 `auditor` 角色的人类会话可成功调用。维护者、普通只读者或匿名调用将收到 `403 Forbidden`。
+
+---
+
+### 5. 授权轨迹接口 (`GET /api/grants`)
+列出追加式身份授权记录。与 CLI `identity grants`、MCP `portico_grants` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/grants
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是授权写入入口；`POST` 返回 `405`。

@@ -53,6 +53,9 @@ portico identity logout --sessions <path> --session <pst1_...>
 
 # 查看当前会话所属身份与角色
 portico identity whoami --identities <path> --sessions <path> --session <pst1_...>
+
+# 列出追加式授权轨迹（仅人类审计者）
+portico identity grants --identities <path> --sessions <path> --session <token>
 ```
 
 ---
