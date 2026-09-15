@@ -30,6 +30,7 @@ Portico MCP 服务端暴露了 13 个经过安全收敛的只读治理工具：
 | **`portico_whoami`** | `{}` | 已登录会话；匿名 `FORBIDDEN` | 返回当前已证明身份的 id / kind / role。与 CLI `identity whoami`、Portal `GET /api/whoami` 同一载荷。不返回邮箱、凭证或会话。 |
 | **`portico_sessions`** | `{}` | **仅限人类审计者** | 列出登录会话轨迹（id / 主体 / 时间，作废则含 revokedAt）。与 CLI `identity sessions`、Portal `GET /api/sessions` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回令牌或哈希。 |
 | **`portico_credentials`** | `{}` | **仅限人类审计者** | 列出登录凭证轨迹（id / 主体 / credentialRef / 签发者 / 时间，作废则含 revokedAt）。与 CLI `identity credentials`、Portal `GET /api/credentials` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回令牌或哈希。 |
+| **`portico_credential_revokes`** | `{}` | **仅限人类审计者** | 列出追加式登录凭证作废轨迹。与 CLI `identity credential revokes`、Portal `GET /api/credential-revokes` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回令牌或哈希。读操作不写名册。 |
 | **`portico_page`** | `{}` | 匿名或持会话 | 读取维护者排布的门户组件盒。与 CLI `page get`、Portal `GET /api/page` 同一载荷。匿名看不到内部卡片。读操作不写 page 或目录。 |
 
 ---

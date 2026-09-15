@@ -303,7 +303,7 @@ export class AccessService {
   async listCredentialRevokes(actor: Actor): Promise<CredentialRevokeRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listCredentialRevokes();
-    return records.map((record) => structuredClone(record));
+    return records.map(publicCredentialRevoke);
   }
 
   async resolve(claimed: Actor): Promise<Actor> {
@@ -725,6 +725,19 @@ function publicRevoke(record: RevokeRecord): RevokeRecord {
     role: record.role,
     revokedBy: { id: record.revokedBy.id, kind: record.revokedBy.kind },
     revokedAt: record.revokedAt,
+  };
+}
+
+function publicCredentialRevoke(record: CredentialRevokeRecord): CredentialRevokeRecord {
+  return {
+    id: record.id,
+    subjectId: record.subjectId,
+    kind: record.kind,
+    role: record.role,
+    revokedBy: { id: record.revokedBy.id, kind: record.revokedBy.kind },
+    revokedAt: record.revokedAt,
+    credentials: record.credentials,
+    sessions: record.sessions,
   };
 }
 

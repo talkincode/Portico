@@ -131,3 +131,15 @@ curl -s -H "Authorization: Bearer pst1_..." http://127.0.0.1:8788/api/credential
 
 > [!NOTE]
 > 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是签发或作废入口；`POST` 返回 `405`。载荷不含令牌或哈希。
+
+---
+
+### 8a. 登录凭证作废轨迹 (`GET /api/credential-revokes`)
+列出追加式登录凭证作废记录。与 CLI `identity credential revokes`、MCP `portico_credential_revokes` 同一载荷。
+
+```bash
+curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/credential-revokes
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是作废写入入口；`POST` 返回 `405`。载荷不含凭证或会话令牌。
