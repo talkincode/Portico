@@ -74,6 +74,18 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/
 
 ---
 
+### 4a. Gateway 访问审计 (`GET /api/gateway-audit`)
+列出 Gateway 允许与拒绝的直连授权记录。与 CLI `gateway audit`、MCP `portico_gateway_audit` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/gateway-audit
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是授权写入入口；`POST` 返回 `405`。读操作不改目录或审计文件。
+
+---
+
 ### 5. 授权轨迹接口 (`GET /api/grants`)
 列出追加式身份授权记录。与 CLI `identity grants`、MCP `portico_grants` 同一载荷。
 

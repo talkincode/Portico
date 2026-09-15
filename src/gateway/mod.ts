@@ -1,4 +1,4 @@
-export { GatewayService } from "./service.ts";
+export { GatewayService, listGatewayAudit } from "./service.ts";
 export { FileGatewayAuditStore, MemoryGatewayAuditStore } from "./store.ts";
 export type { GatewayAuditStore } from "./store.ts";
 export type { GatewayAuditRecord, GatewayDecision, GatewayRoute } from "./types.ts";

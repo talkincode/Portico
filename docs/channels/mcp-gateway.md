@@ -83,4 +83,4 @@ deno task cli -- gateway authorize \
 }
 ```
 
-人类审计者可通过 `deno task cli -- gateway audit` 实时回溯所有 MCP 服务的调用放行记录。
+人类审计者可通过 CLI `gateway audit`、Portal `GET /api/gateway-audit` 与 MCP `portico_gateway_audit` 看到同一批访问放行记录。维护者不能读、也不能改写。

@@ -176,6 +176,7 @@ async function toolsCall(
       audit: new AuditService(context.catalog, context.access, context.gateway),
       access: context.access,
       pages: context.pages,
+      gateway: context.gateway,
     });
     return { content: [{ type: "text", text: JSON.stringify({ ok: true, data }) }] };
   } catch (error) {

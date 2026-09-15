@@ -17,6 +17,7 @@ import {
   ErrorCode,
   parseCatalogQuery,
 } from "../catalog/mod.ts";
+import { type GatewayService, listGatewayAudit } from "../gateway/mod.ts";
 import type { PageService } from "../ui/mod.ts";
 import { isRecord } from "./types.ts";
 
@@ -53,6 +54,7 @@ export interface McpToolDeps {
   audit: AuditService;
   access: AccessService;
   pages?: PageService;
+  gateway?: GatewayService;
 }
 
 export const TOOLS: readonly McpTool[] = [
@@ -188,6 +190,12 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_gateway_audit",
+    description:
+      "列出 Gateway 访问审计（允许与拒绝的直连授权）。等价于 CLI `gateway audit` 与 Portal `GET /api/gateway-audit`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写目录或审计文件。这不是授权入口，也不执行工具。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_page",
     description:
       "读取维护者排布的门户组件盒（当前身份可见的卡片与提示）。等价于 CLI `page get` 与 Portal `GET /api/page`。匿名看不到内部卡片；读操作不写 page 或目录。Portico 不是 CMS，不能通过此工具改页面。",
@@ -253,6 +261,8 @@ export async function callTool(
       return await deps.access.listCredentials(actor);
     case "portico_credential_revokes":
       return await deps.access.listCredentialRevokes(actor);
+    case "portico_gateway_audit":
+      return await listGatewayAudit(deps.gateway, actor);
     case "portico_page":
       if (!deps.pages) return { components: [] };
       return await deps.pages.get(actor);
