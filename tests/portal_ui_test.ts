@@ -418,3 +418,47 @@ Deno.test("the public channel topic lists only that channel's approved surfaces"
 
   assertEquals((await get(context, "/public/t/nope")).status, 404);
 });
+
+Deno.test("public and internal planes link back to magazine discovery without leaking /internal on the public page", async () => {
+  const context = await seeded();
+  await publishPublic(
+    context,
+    surface({
+      id: "docs-web",
+      name: "Docs Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://docs.example.test/portals/docs-writer" },
+    }),
+  );
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+
+  const anonPublic = await get(context, "/public");
+  assertEquals(anonPublic.status, 200);
+  assert(anonPublic.html.includes('href="/"'), "public index must reach magazine discovery");
+  assert(anonPublic.html.includes(">发现</a>"));
+  assert(
+    !anonPublic.html.includes('href="/internal"'),
+    "the public surface must not advertise the internal workbench",
+  );
+
+  const article = await get(context, "/public/s/docs-web");
+  assertEquals(article.status, 200);
+  assert(
+    article.html.includes('href="/s/docs-web"'),
+    "an approved public article may point at the magazine reading page",
+  );
+  assert(!article.html.includes('href="/internal"'));
+
+  const readerInternal = await get(context, "/internal", reader);
+  assertEquals(readerInternal.status, 200);
+  assert(
+    readerInternal.html.includes('href="/"'),
+    "internal console must reach magazine discovery",
+  );
+  assert(readerInternal.html.includes(">发现</a>"));
+
+  const anonInternal = await get(context, "/internal");
+  assertEquals(anonInternal.status, 404);
+  assert(!anonInternal.html.includes("Docs Web"));
+  assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
+});

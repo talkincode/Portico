@@ -153,13 +153,15 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
   if (ctx.actor.kind === "human" && ctx.actor.role === "auditor") {
     items.push({ id: "audit", href: "/internal/audit", label: "审计" });
   }
-  return items.map((item) =>
-    `<a class="tk-tab" href="${item.href}"${
-      item.id === screen || (screen === "surface" && item.id === "content")
-        ? ' aria-current="true"'
-        : ""
-    }>${esc(item.label)}${item.count === undefined ? "" : countBadge(item.count)}</a>`
-  ).join("");
+  const discovery = `<a class="tk-tab" href="/">发现</a>`;
+  return discovery +
+    items.map((item) =>
+      `<a class="tk-tab" href="${item.href}"${
+        item.id === screen || (screen === "surface" && item.id === "content")
+          ? ' aria-current="true"'
+          : ""
+      }>${esc(item.label)}${item.count === undefined ? "" : countBadge(item.count)}</a>`
+    ).join("");
 }
 
 function renderRail(ctx: ViewContext, screen: InternalScreen): string {

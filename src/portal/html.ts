@@ -24,6 +24,8 @@ export interface MagazinePageInput {
   selected?: AgentSurface;
   picks?: MagazinePick[];
   path?: string;
+  /** Signed-in identities may reach `/internal`. Anonymous chrome must not. */
+  showInternal?: boolean;
 }
 
 const TITLE_FONT =
@@ -665,8 +667,13 @@ const MAGAZINE_CSS = `
         gap: 0.45rem;
         font-size: 0.82rem;
         color: var(--muted);
-        margin-bottom: 1.25rem;
+        margin-bottom: 0.55rem;
       }
+      .reading-exit {
+        margin: 0 0 1.25rem;
+        font-size: 0.82rem;
+      }
+      .back-to-list { color: var(--accent); font-weight: 600; }
       .detail-header {
         border-bottom: 1px solid var(--rule);
         padding-bottom: 1.5rem;
@@ -919,6 +926,7 @@ export function renderMagazinePage(input: MagazinePageInput): string {
     q: input.q,
     path,
     title: selected ? selected.name : "Portico",
+    showInternal: input.showInternal === true,
     body: `<div class="${frameClass}">${main}${side}</div>`,
   });
 }
@@ -956,6 +964,7 @@ function renderChrome(input: {
   path: string;
   title: string;
   body: string;
+  showInternal?: boolean;
 }): string {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
   const q = input.q;
@@ -963,6 +972,9 @@ function renderChrome(input: {
   const topicHref = withQuery("/", input.theme, input.channel, q);
   const contentActive = input.channel === null ? " active" : "";
   const topicActive = input.channel !== null ? " active" : "";
+  const internalLink = input.showInternal === true
+    ? `\n        <a class="" href="/internal">内部笔记</a>`
+    : "";
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>
@@ -985,6 +997,7 @@ function renderChrome(input: {
       <nav class="nav">
         <a class="${contentActive.trim()}" href="${escapeHtml(contentHref)}">内容</a>
         <a class="${topicActive.trim()}" href="${escapeHtml(topicHref)}">专题</a>
+        <a class="" href="/public">公开发布</a>${internalLink}
         <span aria-disabled="true">收藏</span>
       </nav>
       <div class="topbar-right">
@@ -1129,6 +1142,9 @@ function renderReading(
     escapeHtml(CHANNEL_LABEL[crumbChannel])
   }</a> &gt; <span>${escapeHtml(selected.name)}</span>
       </nav>
+      <p class="reading-exit"><a class="back-to-list" href="${
+    escapeHtml(withQuery("/", theme, channel, q))
+  }">返回列表</a></p>
 
       <div class="detail-header">
         <div class="detail-kicker-row">

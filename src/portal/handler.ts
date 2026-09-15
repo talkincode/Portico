@@ -163,6 +163,7 @@ export async function handlePortalRequest(
             selected,
             picks,
             path: url.pathname,
+            showInternal: actor.role !== "anonymous",
           }));
         } catch (error) {
           if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
@@ -178,6 +179,7 @@ export async function handlePortalRequest(
         view: dash,
         picks,
         path: "/",
+        showInternal: actor.role !== "anonymous",
       }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
