@@ -59,6 +59,9 @@ portico identity grants --identities <path> --sessions <path> --session <token>
 
 # 列出登录会话轨迹（仅人类审计者；不含令牌或哈希）
 portico identity sessions --identities <path> --sessions <path> --session <token>
+
+# 列出登录凭证轨迹（仅人类审计者；不含令牌或哈希）
+portico identity credentials --identities <path> --sessions <path> --session <token>
 ```
 
 ---

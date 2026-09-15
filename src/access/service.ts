@@ -2,6 +2,7 @@ import { CatalogError, ErrorCode } from "../catalog/errors.ts";
 import type { Actor, ActorKind, ActorRole } from "../catalog/types.ts";
 import type { IdentityStore, SessionStore } from "./store.ts";
 import type {
+  CredentialAuditView,
   CredentialRecord,
   CredentialRevokeRecord,
   CredentialRevokeResult,
@@ -257,6 +258,18 @@ export class AccessService {
     const sessions = this.#requireSessions();
     const records = await sessions.listSessions();
     return records.map(publicSession);
+  }
+
+  /**
+   * Issued-credential trail for a human auditor. The one-time token and its
+   * hash stay in the store; this projection is id / subject / issuer /
+   * timestamps only. Reading does not rewrite the session file.
+   */
+  async listCredentials(actor: Actor): Promise<CredentialAuditView[]> {
+    await this.#requireHumanAuditor(actor);
+    const sessions = this.#requireSessions();
+    const records = await sessions.listCredentials();
+    return records.map(publicCredential);
   }
 
   /**
@@ -705,6 +718,18 @@ function publicSession(record: SessionRecord): SessionAuditView {
     subjectId: record.subjectId,
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
+  };
+  if (record.revokedAt) view.revokedAt = record.revokedAt;
+  return view;
+}
+
+function publicCredential(record: CredentialRecord): CredentialAuditView {
+  const view: CredentialAuditView = {
+    id: record.id,
+    subjectId: record.subjectId,
+    credentialRef: record.credentialRef,
+    issuedBy: { id: record.issuedBy.id, kind: record.issuedBy.kind },
+    issuedAt: record.issuedAt,
   };
   if (record.revokedAt) view.revokedAt = record.revokedAt;
   return view;
