@@ -65,6 +65,9 @@ portico identity sessions --identities <path> --sessions <path> --session <token
 
 # 列出登录凭证轨迹（仅人类审计者；不含令牌或哈希）
 portico identity credentials --identities <path> --sessions <path> --session <token>
+
+# 列出追加式登录凭证作废轨迹（仅人类审计者；不含令牌或哈希）
+portico identity credential revokes --identities <path> --sessions <path> --session <token>
 ```
 
 ---

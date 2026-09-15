@@ -28,6 +28,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **登录凭证与会话** | 高 | 一次性凭证签发；SHA-256 哈希比对；伪造请求头全面拒绝。 | `tests/access_session_test.ts`、`tests/e2e/cli_session_e2e_test.ts` |
 | **登录会话只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一会话轨迹；维护者/只读/匿名拒绝；不泄漏令牌或哈希。 | `tests/access_session_test.ts`、`tests/e2e/identity_sessions_e2e_test.ts` |
 | **登录凭证只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一凭证轨迹；维护者/只读/匿名拒绝；不泄漏令牌或哈希。 | `tests/access_session_test.ts`、`tests/e2e/identity_credentials_e2e_test.ts` |
+| **登录凭证作废轨迹只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一凭证作废轨迹；维护者/只读/匿名拒绝；读操作不改名册。 | `tests/access_credential_revoke_test.ts`、`tests/e2e/identity_credential_revokes_e2e_test.ts` |
 | **身份撤回轨迹只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一撤回轨迹；维护者/只读/匿名拒绝；读操作不改名册。 | `tests/access_revoke_test.ts`、`tests/e2e/identity_revokes_e2e_test.ts` |
 | **凭证作废与回滚** | 高 | 人类审计者作废泄露凭证；已作废凭证与会话瞬间失效；失败原子回滚。 | `tests/access_credential_revoke_test.ts`、`tests/e2e/cli_credential_revoke_e2e_test.ts` |
 | **Portal 发现与双平面** | 中 | `/internal` 内部笔记台；`/public` 公开发布目录；主题平滑降级；零 JS。 | `tests/portal_ui_test.ts`、`tests/portal_theme_test.ts`、`tests/e2e/portal_ui_e2e_test.ts` |

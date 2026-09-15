@@ -70,6 +70,14 @@ curl -s -X POST http://127.0.0.1:8790 \
 
 三者返回同一批 `id` / `subjectId` / `credentialRef` / `issuedBy` / `issuedAt`（已作废则含 `revokedAt`）。维护者、只读者与匿名得到 `FORBIDDEN`。读操作不改 `sessions.json`。这不是签发或作废入口。
 
+凭证作废轨迹（谁在何时切断了哪个主体的登录面）走另一条只读合同：
+
+- CLI：`identity credential revokes`
+- Portal：`GET /api/credential-revokes`
+- MCP：`portico_credential_revokes`
+
+三者返回同一批 `id` / `subjectId` / `kind` / `role` / `revokedBy` / `revokedAt` / `credentials` / `sessions`。维护者、只读者与匿名得到 `FORBIDDEN`。读操作不改 `identities.json` 或 `sessions.json`。这不是作废入口。
+
 ---
 
 ## 伪造头全面拦截机制

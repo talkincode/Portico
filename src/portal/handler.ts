@@ -113,6 +113,9 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/credentials") {
       return jsonOk(await context.access.listCredentials(actor));
     }
+    if (url.pathname === "/api/credential-revokes") {
+      return jsonOk(await context.access.listCredentialRevokes(actor));
+    }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));
     }

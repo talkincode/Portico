@@ -37,6 +37,7 @@ Portico 采用精简而刚性的基于角色的访问控制（RBAC）模型，�
 | 注销主体 (`identity revoke`) | ❌ | ❌ | ❌ | **✅** |
 | 签发新凭证 (`credential issue`) | ❌ | ❌ | ❌ | **✅** |
 | 作废凭证 (`credential revoke`) | ❌ | ❌ | ❌ | **✅** |
+| 列出凭证作废轨迹 (`credential revokes`) | ❌ | ❌ | ❌ | **✅** |
 | 查看完整系统审计时间线 | ❌ | ❌ | ❌ | **✅** |
 
 > [!CAUTION]

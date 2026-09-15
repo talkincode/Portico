@@ -36,6 +36,7 @@ Commands:
   identity credentials --identities <path> --session <token> --sessions <path>
   identity credential issue --identities <path> --sessions <path> --id <subject> [--session <token>]
   identity credential revoke --identities <path> --sessions <path> --id <subject> --session <token>
+  identity credential revokes --identities <path> --session <token> --sessions <path>
   identity login    --identities <path> --sessions <path> --id <id> --token <issued>
   identity logout   --identities <path> --sessions <path> --session <token>
   identity whoami   --identities <path> --sessions <path> --session <token>
@@ -427,6 +428,10 @@ async function runIdentity(
   }
 
   if (action === "credential") {
+    if (subaction === "revokes") {
+      const actor = await resolveFlagsActor(flags, env);
+      return ok(await service.listCredentialRevokes(actor));
+    }
     if (subaction !== "issue" && subaction !== "revoke") {
       throw new UsageError(
         subaction ? `unknown credential action '${subaction}'` : "missing credential action",

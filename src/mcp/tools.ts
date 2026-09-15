@@ -37,8 +37,9 @@ import { isRecord } from "./types.ts";
  * current session identity, not a login. `portico_sessions` is the auditor
  * session trail, not a way to mint or revoke tokens. `portico_credentials`
  * is the auditor credential inventory, not a way to issue tokens.
- * `portico_revokes` is the auditor identity-revoke trail, not a way to
- * remove a roster identity.
+ * `portico_credential_revokes` is the auditor credential-revoke trail, not a
+ * way to invalidate tokens. `portico_revokes` is the auditor identity-revoke
+ * trail, not a way to remove a roster identity.
  */
 
 export interface McpTool {
@@ -181,6 +182,12 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_credential_revokes",
+    description:
+      "列出追加式登录凭证作废轨迹（谁在何时作废了哪个主体的凭证与会话）。等价于 CLI `identity credential revokes` 与 Portal `GET /api/credential-revokes`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回令牌或哈希。读操作不写名册或会话文件。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_page",
     description:
       "读取维护者排布的门户组件盒（当前身份可见的卡片与提示）。等价于 CLI `page get` 与 Portal `GET /api/page`。匿名看不到内部卡片；读操作不写 page 或目录。Portico 不是 CMS，不能通过此工具改页面。",
@@ -244,6 +251,8 @@ export async function callTool(
       return await deps.access.listSessions(actor);
     case "portico_credentials":
       return await deps.access.listCredentials(actor);
+    case "portico_credential_revokes":
+      return await deps.access.listCredentialRevokes(actor);
     case "portico_page":
       if (!deps.pages) return { components: [] };
       return await deps.pages.get(actor);
