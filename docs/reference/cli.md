@@ -34,7 +34,7 @@ Portico CLI (`src/cli/main.ts`) 是系统运维与 Agent 自动化的核心工�
 ### 1. `identity` 身份与会话管理
 ```bash
 # 授予主体角色
-portico identity grant --identities <path> [--sessions <path> --session <token>] --id <id> --kind <human|agent> --role <auditor|maintainer|reader>
+portico identity grant --identities <path> [--sessions <path> --session <token>] --id <id> --kind <human|agent> --role <auditor|maintainer|reader> [--email <address>]
 
 # 注销主体
 portico identity revoke --identities <path> --sessions <path> --session <token> --id <id>

@@ -32,7 +32,9 @@ const SECRET_KEYS = new Set([
   "credential",
   "credentials",
 ]);
-const ALLOWED_GRANT_KEYS = new Set(["id", "kind", "role"]);
+const ALLOWED_GRANT_KEYS = new Set(["id", "kind", "role", "email"]);
+const EMAIL_PATTERN = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+const MAX_EMAIL_LENGTH = 254;
 const ALLOWED_REVOKE_KEYS = new Set(["id"]);
 const ALLOWED_CREDENTIAL_KEYS = new Set(["id"]);
 const ALLOWED_LOGIN_KEYS = new Set(["id", "token", "ttlSeconds"]);
@@ -66,6 +68,7 @@ export class AccessService {
           "bootstrap actor must match the first human auditor",
         );
       }
+      await this.#assertUniqueEmail(parsed);
       return await this.#commit(parsed, { id: "bootstrap", kind: "human" });
     }
 
@@ -83,6 +86,7 @@ export class AccessService {
       );
     }
 
+    await this.#assertUniqueEmail(parsed);
     return await this.#commit(parsed, { id: reviewer.id, kind: reviewer.kind });
   }
 
@@ -217,7 +221,7 @@ export class AccessService {
       );
     }
     const records = await this.store.list();
-    return records.map((record) => structuredClone(record));
+    return records.map(publicIdentity);
   }
 
   async listGrants(actor: Actor): Promise<GrantRecord[]> {
@@ -501,16 +505,39 @@ export class AccessService {
     }
   }
 
+  async #assertUniqueEmail(parsed: GrantInput): Promise<void> {
+    if (!parsed.email) return;
+    const roster = await this.store.list();
+    const clash = roster.find((item) =>
+      item.id !== parsed.id && item.email?.toLowerCase() === parsed.email
+    );
+    if (clash) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "email is already bound to another identity",
+      );
+    }
+  }
+
   async #commit(
     parsed: GrantInput,
     grantedBy: { id: string; kind: ActorKind },
   ): Promise<Identity> {
+    const existing = await this.store.get(parsed.id);
+    const email = parsed.email ?? existing?.email?.toLowerCase();
+    if (email && parsed.kind !== "human") {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "email is only allowed on human identities",
+      );
+    }
     const now = new Date().toISOString();
     const identity: Identity = {
       id: parsed.id,
       kind: parsed.kind,
       role: parsed.role,
     };
+    if (email) identity.email = email;
     const grant: GrantRecord = {
       id: grantId(parsed.id, now),
       subjectId: parsed.id,
@@ -520,7 +547,7 @@ export class AccessService {
       grantedAt: now,
     };
     await this.store.commitGrant(identity, grant);
-    return structuredClone(identity);
+    return publicIdentity(identity);
   }
 }
 
@@ -574,7 +601,38 @@ function parseGrantInput(input: GrantInput): GrantInput {
     );
   }
 
-  return { id: input.id, kind: input.kind, role: input.role };
+  const email = parseOptionalEmail(input.email, input.kind);
+  return email
+    ? { id: input.id, kind: input.kind, role: input.role, email }
+    : { id: input.id, kind: input.kind, role: input.role };
+}
+
+function parseOptionalEmail(value: unknown, kind: ActorKind): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !nonEmpty(value) || value.length > MAX_EMAIL_LENGTH) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "email is invalid");
+  }
+  if (kind !== "human") {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "email is only allowed on human identities",
+    );
+  }
+  const email = value.toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "email is invalid");
+  }
+  return email;
+}
+
+function publicIdentity(record: Identity): Identity {
+  const identity: Identity = {
+    id: record.id,
+    kind: record.kind,
+    role: record.role,
+  };
+  if (record.email) identity.email = record.email;
+  return identity;
 }
 
 function assertClaimedActor(actor: Actor): void {

@@ -27,7 +27,7 @@ import { FilePageStore, PageService } from "../ui/mod.ts";
 const USAGE = `portico <command>
 
 Commands:
-  identity grant    --identities <path> --id <id> --kind <human|agent> --role <reader|maintainer|auditor> [--session <token> --sessions <path>]
+  identity grant    --identities <path> --id <id> --kind <human|agent> --role <reader|maintainer|auditor> [--email <address>] [--session <token> --sessions <path>]
   identity revoke   --identities <path> --id <id> --session <token> --sessions <path>
   identity list     --identities <path> [--session <token> --sessions <path>]
   identity grants   --identities <path> --session <token> --sessions <path>
@@ -413,6 +413,7 @@ async function runIdentity(
       kind: flags.kind as GrantInput["kind"],
       role: flags.role as GrantInput["role"],
     };
+    if (flags.email !== undefined) payload.email = flags.email;
     return ok(await service.grant(await tryResolveActor(flags, env), payload));
   }
 

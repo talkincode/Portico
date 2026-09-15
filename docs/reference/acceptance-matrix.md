@@ -23,6 +23,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **Approval 公开审批** | 高 | 人类审计者通过/驳回；严格触发 SELF_APPROVAL 拦截；禁止 Agent 审批。 | `tests/catalog_approval_test.ts`、`tests/e2e/cli_approval_e2e_test.ts` |
 | **公开发布撤回** | 高 | 仅限审计者执行；撤回后多端瞬间切断；重提需重新走全流程审批。 | `tests/catalog_withdraw_test.ts`、`tests/e2e/cli_withdrawal_e2e_test.ts` |
 | **Access Control 名册** | 高 | 空名册 Bootstrap 引导；禁止 Agent 担任 auditor；禁止注销唯一审计者。 | `tests/access_service_test.ts`、`tests/e2e/cli_access_e2e_test.ts` |
+| **名册可选邮箱** | 高 | 人类身份可绑定唯一 email；Agent 不可带邮箱；列表不泄漏未知字段；邮箱不是第二证明。 | `tests/access_service_test.ts`、`tests/e2e/identity_roster_e2e_test.ts` |
 | **登录凭证与会话** | 高 | 一次性凭证签发；SHA-256 哈希比对；伪造请求头全面拒绝。 | `tests/access_session_test.ts`、`tests/e2e/cli_session_e2e_test.ts` |
 | **凭证作废与回滚** | 高 | 人类审计者作废泄露凭证；已作废凭证与会话瞬间失效；失败原子回滚。 | `tests/access_credential_revoke_test.ts`、`tests/e2e/cli_credential_revoke_e2e_test.ts` |
 | **Portal 发现与双平面** | 中 | `/internal` 内部笔记台；`/public` 公开发布目录；主题平滑降级；零 JS。 | `tests/portal_ui_test.ts`、`tests/portal_theme_test.ts`、`tests/e2e/portal_ui_e2e_test.ts` |

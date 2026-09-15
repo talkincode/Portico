@@ -251,3 +251,129 @@ Deno.test("auditor can read append-only grant records; maintainer cannot rewrite
 
   await assertRejectsCode(() => service.listGrants(maintainer), "FORBIDDEN");
 });
+
+Deno.test("auditor grants a human with unique email; list returns it without secrets", async () => {
+  const service = await bootstrapped();
+  const granted = await service.grant(auditor, {
+    id: "human:mapped",
+    kind: "human",
+    role: "reader",
+    email: "Mapped@example.invalid",
+  });
+  assertEquals(granted.id, "human:mapped");
+  assertEquals(granted.email, "mapped@example.invalid");
+  assertEquals("token" in granted, false);
+
+  const listed = await service.list(auditor);
+  const mapped = listed.find((item) => item.id === "human:mapped");
+  assertEquals(mapped?.email, "mapped@example.invalid");
+  assertEquals(mapped?.kind, "human");
+  assertEquals(mapped?.role, "reader");
+});
+
+Deno.test("agent cannot be granted an email; roster is unchanged", async () => {
+  const store = new MemoryIdentityStore();
+  const service = new AccessService(store);
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+
+  await assertRejectsCode(
+    () =>
+      service.grant(auditor, {
+        id: maintainer.id,
+        kind: "agent",
+        role: "maintainer",
+        email: "bot@example.invalid",
+      }),
+    "INVALID_INPUT",
+  );
+  assertEquals((await store.list()).map((item) => item.id), [auditor.id]);
+});
+
+Deno.test("duplicate email is rejected and does not write", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-access-email-" });
+  const path = `${dir}/identities.json`;
+  const store = new FileIdentityStore(path);
+  const service = new AccessService(store);
+  await service.grant(null, {
+    id: auditor.id,
+    kind: "human",
+    role: "auditor",
+    email: "auditor@example.invalid",
+  });
+  await service.grant(auditor, {
+    id: "human:reader",
+    kind: "human",
+    role: "reader",
+  });
+  const before = await Deno.readFile(path);
+
+  await assertRejectsCode(
+    () =>
+      service.grant(auditor, {
+        id: "human:reader",
+        kind: "human",
+        role: "reader",
+        email: "AUDITOR@example.invalid",
+      }),
+    "INVALID_INPUT",
+  );
+  assertEquals(await Deno.readFile(path), before);
+});
+
+Deno.test("invalid email is rejected; re-grant without email keeps the bound address", async () => {
+  const service = await bootstrapped();
+  await service.grant(auditor, {
+    id: "human:mapped",
+    kind: "human",
+    role: "reader",
+    email: "mapped@example.invalid",
+  });
+
+  await assertRejectsCode(
+    () =>
+      service.grant(auditor, {
+        id: "human:other",
+        kind: "human",
+        role: "reader",
+        email: "not-an-email",
+      }),
+    "INVALID_INPUT",
+  );
+
+  const kept = await service.grant(auditor, {
+    id: "human:mapped",
+    kind: "human",
+    role: "maintainer",
+  });
+  assertEquals(kept.role, "maintainer");
+  assertEquals(kept.email, "mapped@example.invalid");
+});
+
+Deno.test("identity list projects only id, kind, role and optional email", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-access-project-" });
+  const path = `${dir}/identities.json`;
+  await Deno.writeTextFile(
+    path,
+    `${
+      JSON.stringify({
+        identities: [{
+          id: auditor.id,
+          kind: "human",
+          role: "auditor",
+          email: "auditor@example.invalid",
+          token: "literal-secret",
+        }],
+        grants: [],
+        revokes: [],
+        credentialRevokes: [],
+      })
+    }\n`,
+  );
+  const service = new AccessService(new FileIdentityStore(path));
+  const listed = await service.list(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].id, auditor.id);
+  assertEquals(listed[0].email, "auditor@example.invalid");
+  assertEquals(Object.keys(listed[0]).sort(), ["email", "id", "kind", "role"]);
+  assertEquals(JSON.stringify(listed).includes("literal-secret"), false);
+});
