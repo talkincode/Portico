@@ -69,6 +69,7 @@ function runFlags(source: string, entry: string): string[] {
 for (const [name, contract] of Object.entries(CONTRACTS)) {
   Deno.test(`deploy contract: ${name} grants exactly what the code needs`, async () => {
     const bind = declaredBind(await rawScript(contract.file));
+    assertEquals(bind, "127.0.0.1");
     const source = await script(contract.file);
     const flags = runFlags(source, contract.entry);
 
@@ -81,10 +82,17 @@ for (const [name, contract] of Object.entries(CONTRACTS)) {
       );
     }
 
-    // Loopback plus the configured intranet address, and nothing else.
-    assertEquals(flags.includes(netAllow(bind)), true);
+    // Loopback is always granted. A distinct RFC1918 bind is added next to it.
+    // The scripts expand `"$BIND"` even when the default is loopback, so the
+    // allow-list may repeat 127.0.0.1 rather than collapsing to netAllow().
     const net = flags.find((flag) => flag.startsWith("--allow-net"));
-    assertEquals(net, netAllow(bind));
+    assertEquals(net?.startsWith("--allow-net=127.0.0.1"), true);
+    assertEquals(net?.includes("0.0.0.0"), false);
+    if (bind === "127.0.0.1" || bind === "localhost") {
+      assertEquals(net === netAllow(bind) || net === `--allow-net=127.0.0.1,${bind}`, true);
+    } else {
+      assertEquals(net, netAllow(bind));
+    }
     // The read-only entrances must never be able to write.
     assert(
       flags.includes("--allow-read") || flags.some((flag) => flag.startsWith("--allow-read=")),
@@ -138,9 +146,9 @@ Deno.test("deploy contract: every entrance is told where the Gateway audit lives
 
 /**
  * systemd units are part of the same contract as the run scripts. The live
- * host used to start Portal/Gateway from an unversioned copy under
- * `/home/master/portico-runtime` and leave MCP as a detached `unless-stopped`
- * container, so `systemctl restart portico-*` could not restart all three.
+ * host used to start Portal/Gateway from an unversioned extra checkout and
+ * leave MCP as a detached `unless-stopped` container, so
+ * `systemctl restart portico-*` could not restart all three.
  */
 interface UnitContract {
   file: string;
@@ -179,7 +187,7 @@ for (const [name, unit] of Object.entries(UNITS)) {
     assert(wd, `${unit.file} must declare WorkingDirectory`);
     assert(
       !start!.includes("portico-runtime") && !wd!.includes("portico-runtime"),
-      `${unit.file} must ExecStart the versioned checkout script, not portico-runtime`,
+      `${unit.file} must ExecStart the versioned checkout script, not an unreviewed extra copy`,
     );
     assert(
       !text.includes("0.0.0.0"),
@@ -201,8 +209,17 @@ for (const [name, unit] of Object.entries(UNITS)) {
       `${unit.file} must stop ${unit.container} on unit stop`,
     );
     assert(
-      text.includes("Environment=PORTICO_DEPLOY_BIND=10.201.15.192"),
-      `${unit.file} must pin the intranet bind address`,
+      text.includes("Environment=PORTICO_DEPLOY_BIND=127.0.0.1"),
+      `${unit.file} must default the bind address to loopback; the real intranet address is injected at install time`,
+    );
+    assert(
+      !/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/
+        .test(text),
+      `${unit.file} must not embed an RFC1918 address`,
+    );
+    assert(
+      !text.includes("/home/"),
+      `${unit.file} must use the example checkout path, not a host home directory`,
     );
     assert(
       text.includes(`Environment=PORTICO_DEPLOY_PORT=${unit.port}`),

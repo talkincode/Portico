@@ -6,9 +6,13 @@
 #   sudo systemctl enable --now portico-mcp
 #
 # ExecStart must be this checkout's versioned run script. Do not point at
-# /home/master/portico-runtime — that copy is not reviewed with the code.
-# MCP used to run as a detached unless-stopped container, so restarting
-# portal/gateway left it on an old process.
+# an unreviewed extra copy of the tree. MCP used to run as a detached
+# unless-stopped container, so restarting portal/gateway left it on an
+# old process.
+#
+# The unit defaults to loopback. Set PORTICO_DEPLOY_BIND to an RFC1918
+# unicast address at install time (drop-in or EnvironmentFile). Never bind
+# every interface.
 [Unit]
 Description=Portico MCP entrance (intranet test, not production)
 After=docker.service network-online.target
@@ -20,11 +24,11 @@ User=master
 Group=master
 Restart=on-failure
 RestartSec=3
-WorkingDirectory=/home/master/src/portico
-Environment=PORTICO_DEPLOY_BIND=10.201.15.192
+WorkingDirectory=/opt/portico
+Environment=PORTICO_DEPLOY_BIND=127.0.0.1
 Environment=PORTICO_DEPLOY_PORT=8790
 ExecStartPre=-/usr/bin/docker rm -f portico-mcp
-ExecStart=/home/master/src/portico/deploy/run-mcp.sh
+ExecStart=/opt/portico/deploy/run-mcp.sh
 ExecStop=/usr/bin/docker stop portico-mcp
 TimeoutStopSec=20
 StandardOutput=journal

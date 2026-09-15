@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIND="${PORTICO_DEPLOY_BIND:-10.201.15.192}"
+BIND="${PORTICO_DEPLOY_BIND:-127.0.0.1}"
 PORT="${PORTICO_DEPLOY_PORT:-8788}"
 IMAGE="${PORTICO_DENO_IMAGE:-denoland/deno:2.9.6}"
 DOCKER="${PORTICO_DOCKER:-/usr/bin/docker}"

@@ -73,7 +73,7 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 一键起动与可分发产物
 
-`src/up/main.ts`（`deno task up`）用一条 `PORTICO_DATA_DIR` 起动整套系统：Portal、Gateway 与 MCP 是**三个子进程**，各自带自己的权限集（Portal 与 MCP 仍无 `--allow-write`），任一退出则其余一起收走，不留半死系统；stdout 为一行机读 JSON，给出 `portal` / `gateway` / `mcp` 三个入口 URL。`src/build/main.ts`（`deno task build`）用 `deno compile` 产出 `dist/` 下四个产物（`portico` / `portico-portal` / `portico-gateway` / `portico-mcp`），各自内嵌权限集，启动不依赖 `node`。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份，不会各写一套。内网测试部署的三份 `deploy/run-*.sh` 与三份 `deploy/portico-*.service` 版本化：systemd 必须 ExecStart 仓库脚本，绑定 `10.201.15.192:8788/8789/8790`，不得指向未审查的 `portico-runtime` 副本；这是测试环境，不是生产上线。
+`src/up/main.ts`（`deno task up`）用一条 `PORTICO_DATA_DIR` 起动整套系统：Portal、Gateway 与 MCP 是**三个子进程**，各自带自己的权限集（Portal 与 MCP 仍无 `--allow-write`），任一退出则其余一起收走，不留半死系统；stdout 为一行机读 JSON，给出 `portal` / `gateway` / `mcp` 三个入口 URL。`src/build/main.ts`（`deno task build`）用 `deno compile` 产出 `dist/` 下四个产物（`portico` / `portico-portal` / `portico-gateway` / `portico-mcp`），各自内嵌权限集，启动不依赖 `node`。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份，不会各写一套。内网测试部署的三份 `deploy/run-*.sh` 与三份 `deploy/portico-*.service` 版本化：systemd 必须 ExecStart 仓库脚本，仓库默认绑定 `127.0.0.1:8788/8789/8790`，真实 RFC1918 地址只在安装现场注入，不得指向未审查的额外副本；这是测试环境，不是生产上线。
 
 - Registry 内部目录
 
