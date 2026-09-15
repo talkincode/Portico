@@ -17,6 +17,7 @@ import type {
   RevokeInput,
   RevokeRecord,
   RevokeResult,
+  SessionAuditView,
   SessionRecord,
   SessionView,
 } from "./types.ts";
@@ -244,6 +245,18 @@ export class AccessService {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listGrants();
     return records.map(publicGrant);
+  }
+
+  /**
+   * Login-session trail for a human auditor. Hashes and tokens stay in the
+   * store; this projection is id / subject / timestamps only. Reading does
+   * not rewrite the session file.
+   */
+  async listSessions(actor: Actor): Promise<SessionAuditView[]> {
+    await this.#requireHumanAuditor(actor);
+    const sessions = this.#requireSessions();
+    const records = await sessions.listSessions();
+    return records.map(publicSession);
   }
 
   /**
@@ -684,6 +697,17 @@ function publicGrant(record: GrantRecord): GrantRecord {
     grantedBy: { id: record.grantedBy.id, kind: record.grantedBy.kind },
     grantedAt: record.grantedAt,
   };
+}
+
+function publicSession(record: SessionRecord): SessionAuditView {
+  const view: SessionAuditView = {
+    id: record.id,
+    subjectId: record.subjectId,
+    createdAt: record.createdAt,
+    expiresAt: record.expiresAt,
+  };
+  if (record.revokedAt) view.revokedAt = record.revokedAt;
+  return view;
 }
 
 function assertClaimedActor(actor: Actor): void {

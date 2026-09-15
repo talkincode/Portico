@@ -123,3 +123,15 @@ export interface SessionRecord {
   expiresAt: string;
   revokedAt?: string;
 }
+
+/**
+ * Auditor-facing session row. Tokens and hashes stay off this projection so
+ * CLI / Portal / MCP cannot disagree about what an audit view may show.
+ */
+export interface SessionAuditView {
+  id: string;
+  subjectId: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt?: string;
+}

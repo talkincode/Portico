@@ -50,6 +50,18 @@ curl -s -X POST http://127.0.0.1:8790 \
 
 ---
 
+## 审计者查看会话轨迹
+
+登录与作废仍走 CLI。人类审计者可以用同一只读投影核对现有会话，而不接触令牌或哈希：
+
+- CLI：`identity sessions`
+- Portal：`GET /api/sessions`
+- MCP：`portico_sessions`
+
+三者返回同一批 `id` / `subjectId` / `createdAt` / `expiresAt`（已作废则含 `revokedAt`）。维护者、只读者与匿名得到 `FORBIDDEN`。读操作不改 `sessions.json`。
+
+---
+
 ## 伪造头全面拦截机制
 
 在过去很多轻量级管理界面中，系统容易草率地读取请求头中的自称信息（例如 `X-Actor-Id`）。这在多 Agent 协作环境中极度危险：由于名册中的 Agent ID 是公开的元数据，恶意脚本只要在 Header 中填入审计者的 ID，就能冒充审计者批准自身公开！
