@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="porticoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0F19"/>
+      <stop offset="50%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#070A10"/>
+    </linearGradient>
+
+    <!-- Cyan to Blue Primary Glow -->
+    <linearGradient id="cyanBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+
+    <!-- Emerald Glow -->
+    <linearGradient id="emeraldTeal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#0D9488"/>
+    </linearGradient>
+
+    <!-- Warm Amber / Gold Governance Accent -->
+    <linearGradient id="goldAmber" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+
+    <!-- Subtle Glow Filter -->
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="coreGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background App Icon Shape -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#porticoBg)" stroke="#1E293B" stroke-width="4"/>
+
+  <!-- Subtle Radial Ambience behind Portal -->
+  <circle cx="256" cy="270" r="130" fill="#0284C7" opacity="0.12" filter="url(#coreGlow)"/>
+
+  <!-- === PORTICO ARCHITECTURE === -->
+
+  <!-- Pediment (Top Triangular Roof) -->
+  <path d="M 256 68 L 424 154 L 88 154 Z" fill="url(#cyanBlue)"/>
+  <!-- Inner Tympanum Relief -->
+  <path d="M 256 86 L 396 150 L 116 150 Z" fill="#0B0F19" opacity="0.9"/>
+
+  <!-- Tiny Pediment Emblem: Trust Keystone -->
+  <polygon points="256,108 266,122 256,136 246,122" fill="url(#goldAmber)"/>
+
+  <!-- Architrave / Upper Beams -->
+  <rect x="76" y="158" width="360" height="18" rx="4" fill="#E2E8F0"/>
+  <rect x="88" y="180" width="336" height="8" rx="2" fill="#64748B"/>
+
+  <!-- Four Classical Governance Columns -->
+  <!-- 1. Outer Left Column -->
+  <rect x="104" y="194" width="26" height="186" rx="4" fill="url(#cyanBlue)"/>
+  <rect x="100" y="192" width="34" height="6" rx="2" fill="#E2E8F0"/>
+  <rect x="100" y="374" width="34" height="6" rx="2" fill="#E2E8F0"/>
+
+  <!-- 2. Inner Left Column -->
+  <rect x="166" y="194" width="22" height="186" rx="4" fill="#94A3B8" opacity="0.85"/>
+  <rect x="162" y="192" width="30" height="6" rx="2" fill="#E2E8F0"/>
+  <rect x="162" y="374" width="30" height="6" rx="2" fill="#E2E8F0"/>
+
+  <!-- 3. Inner Right Column -->
+  <rect x="324" y="194" width="22" height="186" rx="4" fill="#94A3B8" opacity="0.85"/>
+  <rect x="320" y="192" width="30" height="6" rx="2" fill="#E2E8F0"/>
+  <rect x="320" y="374" width="30" height="6" rx="2" fill="#E2E8F0"/>
+
+  <!-- 4. Outer Right Column -->
+  <rect x="382" y="194" width="26" height="186" rx="4" fill="url(#cyanBlue)"/>
+  <rect x="378" y="192" width="34" height="6" rx="2" fill="#E2E8F0"/>
+  <rect x="378" y="374" width="34" height="6" rx="2" fill="#E2E8F0"/>
+
+  <!-- Central Portal: The Governed Gateway -->
+  <path d="M 210 380 L 210 268 A 46 46 0 0 1 302 268 L 302 380 Z" fill="none" stroke="url(#emeraldTeal)" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Inner Portal Glow Threshold -->
+  <path d="M 224 380 L 224 280 A 32 32 0 0 1 288 280 L 288 380" fill="none" stroke="#38BDF8" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"/>
+
+  <!-- Core Governed Agent Spark (The 4-Point Star of Intelligence) -->
+  <g filter="url(#softGlow)">
+    <path d="M 256 230 Q 256 260 286 260 Q 256 260 256 290 Q 256 260 226 260 Q 256 260 256 230 Z" fill="url(#goldAmber)"/>
+    <circle cx="256" cy="260" r="5" fill="#FFFBEB"/>
+  </g>
+
+  <!-- Stepped Plinth / Base Foundation -->
+  <rect x="68" y="384" width="376" height="16" rx="4" fill="#64748B"/>
+  <rect x="52" y="404" width="408" height="18" rx="5" fill="#CBD5E1"/>
+  <rect x="36" y="426" width="440" height="10" rx="4" fill="#334155"/>
+</svg>
