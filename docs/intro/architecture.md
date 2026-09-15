@@ -1,5 +1,9 @@
 # 核心架构与信任边界
 
+<p align="center">
+  <img src="../assets/architecture.svg" alt="Portico 系统架构与信任边界全景" width="100%"/>
+</p>
+
 Portico 的系统架构围绕**信任边界划分**与**严格权限隔离**构建。
 
 ---

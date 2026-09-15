@@ -1,0 +1,242 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070B12"/>
+      <stop offset="50%" stop-color="#0D1424"/>
+      <stop offset="100%" stop-color="#050811"/>
+    </linearGradient>
+
+    <!-- Card Background Gradient -->
+    <linearGradient id="cardG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+
+    <!-- Color Gradients -->
+    <linearGradient id="cyanG" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="emeraldG" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="goldG" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="purpleG" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#9333EA"/>
+    </linearGradient>
+    <linearGradient id="roseG" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FB7185"/>
+      <stop offset="100%" stop-color="#E11D48"/>
+    </linearGradient>
+
+    <!-- Filter -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <style>
+    .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 800; fill: #F8FAFC; }
+    .subtitle { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #94A3B8; }
+    .zone-hdr { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+    .card-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; font-weight: 700; fill: #F1F5F9; }
+    .card-desc { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 11px; fill: #94A3B8; }
+    .badge-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 10px; font-weight: 600; text-anchor: middle; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; fill: #38BDF8; }
+  </style>
+
+  <!-- Canvas Background -->
+  <rect x="4" y="4" width="992" height="632" rx="20" fill="url(#bgG)" stroke="#1E293B" stroke-width="2"/>
+
+  <!-- ================= HEADER ================= -->
+  <g transform="translate(40, 22)">
+    <text x="0" y="24" class="title" font-size="20">PORTICO 系统架构与信任边界全景</text>
+    <text x="0" y="44" class="subtitle">Agent 不在这里运行 · 纯 Deno 默拒沙箱 · 三位一体入口 · 严格双人审批 · 不可篡改审计时间线</text>
+  </g>
+
+  <!-- ================= ZONE 1: ACTORS & TRUST PLANES ================= -->
+  <!-- Internal Zone Container -->
+  <rect x="36" y="74" width="616" height="100" rx="12" fill="#0B132B" fill-opacity="0.4" stroke="#0284C7" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="50" y="93" class="zone-hdr" fill="#38BDF8">🛡️ 组织内部信任区 (Internal Trust Plane · 需出示登录会话)</text>
+
+  <!-- Actor 1: Human Auditor -->
+  <g transform="translate(48, 104)" filter="url(#shadow)">
+    <rect x="0" y="0" width="186" height="58" rx="8" fill="url(#cardG)" stroke="#F59E0B" stroke-width="1.2"/>
+    <text x="12" y="22" class="card-title" fill="#FDE68A">人类安全审计者 (Auditor)</text>
+    <text x="12" y="38" class="card-desc">唯一公开审批权 · 凭证轮转</text>
+    <text x="12" y="50" class="card-desc">违规撤回 · 全量安全审计</text>
+  </g>
+
+  <!-- Actor 2: Agent Maintainer -->
+  <g transform="translate(246, 104)" filter="url(#shadow)">
+    <rect x="0" y="0" width="194" height="58" rx="8" fill="url(#cardG)" stroke="#38BDF8" stroke-width="1.2"/>
+    <text x="12" y="22" class="card-title" fill="#BAE6FD">智能体维护者 (Maintainer)</text>
+    <text x="12" y="38" class="card-desc">日常编目登记 · 受治表面更新</text>
+    <text x="12" y="50" class="card-desc">提交公开候选 · 严禁自我审批</text>
+  </g>
+
+  <!-- Actor 3: Internal Reader -->
+  <g transform="translate(452, 104)" filter="url(#shadow)">
+    <rect x="0" y="0" width="188" height="58" rx="8" fill="url(#cardG)" stroke="#34D399" stroke-width="1.2"/>
+    <text x="12" y="22" class="card-title" fill="#A7F3D0">内部只读人员 (Reader)</text>
+    <text x="12" y="38" class="card-desc">查阅内部全部服务名册</text>
+    <text x="12" y="50" class="card-desc">获取已授权直连入口与包坐标</text>
+  </g>
+
+  <!-- Public Zone Container -->
+  <rect x="668" y="74" width="296" height="100" rx="12" fill="#1C1017" fill-opacity="0.3" stroke="#F43F5E" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="682" y="93" class="zone-hdr" fill="#FB7185">🌐 外部公网不可信区 (Public Plane · 匿名访客)</text>
+
+  <!-- Actor 4: Anonymous Public -->
+  <g transform="translate(680, 104)" filter="url(#shadow)">
+    <rect x="0" y="0" width="272" height="58" rx="8" fill="url(#cardG)" stroke="#FB7185" stroke-width="1.2"/>
+    <text x="12" y="22" class="card-title" fill="#FECDD3">外部公众 / 外部智能体 (Public)</text>
+    <text x="12" y="38" class="card-desc">仅可见已获审批的 approved_public 服务</text>
+    <text x="12" y="50" class="card-desc">严禁探针探测任何未公开或待审服务</text>
+  </g>
+
+  <!-- Connectors Down from Actors to Entrances -->
+  <path d="M 140 162 L 140 188 M 340 162 L 340 188 M 540 162 L 540 188 M 816 162 L 816 188" stroke="#475569" stroke-width="1.5" stroke-dasharray="2 2"/>
+
+  <!-- ================= ZONE 2: THREE ENTRANCES ================= -->
+  <!-- Entrance 1: Web Portal -->
+  <g transform="translate(36, 192)" filter="url(#shadow)">
+    <rect x="0" y="0" width="298" height="92" rx="10" fill="url(#cardG)" stroke="#38BDF8" stroke-width="1.5"/>
+    <rect x="12" y="10" width="82" height="20" rx="10" fill="#0284C7" fill-opacity="0.25"/>
+    <text x="53" y="24" class="badge-txt" fill="#38BDF8">Web Portal</text>
+    <text x="100" y="24" class="mono">:8788</text>
+    <text x="12" y="46" class="card-title">双平面 Web 发现与工作台</text>
+    <text x="12" y="64" class="card-desc">/internal 笔记台 · /public 目录 · 杂志风详情</text>
+    <text x="12" y="78" class="card-desc">纯 CSS 语义主题 · 零 JS · CSP 锁死 (无写权限)</text>
+  </g>
+
+  <!-- Entrance 2: CLI Client -->
+  <g transform="translate(350, 192)" filter="url(#shadow)">
+    <rect x="0" y="0" width="298" height="92" rx="10" fill="url(#cardG)" stroke="#A78BFA" stroke-width="1.5"/>
+    <rect x="12" y="10" width="88" height="20" rx="10" fill="#7C3AED" fill-opacity="0.25"/>
+    <text x="56" y="24" class="badge-txt" fill="#C084FC">CLI 客户端</text>
+    <text x="106" y="24" class="mono">portico</text>
+    <text x="12" y="46" class="card-title">自动化与运维命令行入口</text>
+    <text x="12" y="64" class="card-desc">输出规范 {ok, data} JSON · 适合 CI/CD 与运维</text>
+    <text x="12" y="78" class="card-desc">强制出示 --session · 全面拦截伪造头参数</text>
+  </g>
+
+  <!-- Entrance 3: MCP Protocol Server -->
+  <g transform="translate(664, 192)" filter="url(#shadow)">
+    <rect x="0" y="0" width="300" height="92" rx="10" fill="url(#cardG)" stroke="#34D399" stroke-width="1.5"/>
+    <rect x="12" y="10" width="100" height="20" rx="10" fill="#059669" fill-opacity="0.25"/>
+    <text x="62" y="24" class="badge-txt" fill="#34D399">MCP Protocol</text>
+    <text x="118" y="24" class="mono">:8790</text>
+    <text x="12" y="46" class="card-title">面向 AI 的只读发现协议端点</text>
+    <text x="12" y="64" class="card-desc">JSON-RPC 2.0 (portico_list / describe / audit)</text>
+    <text x="12" y="78" class="card-desc">只做目录投影 · 绝不代发工具调用 (无写权限)</text>
+  </g>
+
+  <!-- Connectors Down from Entrances to Engine -->
+  <path d="M 185 284 L 185 306 M 499 284 L 499 306 M 814 284 L 814 306" stroke="#64748B" stroke-width="1.5"/>
+
+  <!-- ================= ZONE 3: GOVERNANCE KERNEL ================= -->
+  <rect x="36" y="306" width="928" height="142" rx="14" fill="#0B1329" stroke="#6366F1" stroke-width="2"/>
+  <text x="52" y="326" class="zone-hdr" fill="#818CF8">⚙️ PORTICO 治理内核 (Single Source of Truth · 唯一事实来源)</text>
+
+  <!-- Module 1: Registry & Lifecycle -->
+  <g transform="translate(50, 336)">
+    <rect x="0" y="0" width="280" height="98" rx="8" fill="#111C38" stroke="#38BDF8" stroke-width="1"/>
+    <text x="12" y="22" class="card-title" fill="#38BDF8">编目与状态机 (Registry &amp; Lifecycle)</text>
+    <text x="12" y="42" class="card-desc">5 态流转：draft ➔ internal ➔ pending ➔ approved</text>
+    <text x="12" y="58" class="card-desc">受治表面更新 (draft/internal/rejected 允许更新)</text>
+    <text x="12" y="74" class="card-desc">渠道与入口强一致性约束 (MCP / Web / CLI)</text>
+    <text x="12" y="88" class="card-desc">严禁明文密钥 · 强制只引用无密码 URL</text>
+  </g>
+
+  <!-- Module 2: Approval & Anti-Self-Approval -->
+  <g transform="translate(344, 336)">
+    <rect x="0" y="0" width="296" height="98" rx="8" fill="#111C38" stroke="#F59E0B" stroke-width="1"/>
+    <text x="12" y="22" class="card-title" fill="#FBBF24">双人审批与防自批 (Approval Engine)</text>
+    <text x="12" y="42" class="card-desc">公开发布必须独立人类审计者打勾 (auditor)</text>
+    <text x="12" y="58" class="card-desc">代码层死锁拦截自批：SELF_APPROVAL 异常</text>
+    <text x="12" y="74" class="card-desc">违规服务原子撤回 (withdrawn) · 即刻切断外网</text>
+    <text x="12" y="88" class="card-desc">审批结论与目录分离存储 · 维护者不可篡改</text>
+  </g>
+
+  <!-- Module 3: Access Vault & Gateway -->
+  <g transform="translate(654, 336)">
+    <rect x="0" y="0" width="296" height="98" rx="8" fill="#111C38" stroke="#34D399" stroke-width="1"/>
+    <text x="12" y="22" class="card-title" fill="#34D399">会话金库与鉴权网关 (Access &amp; Gateway)</text>
+    <text x="12" y="42" class="card-desc">一次性凭证签发 (pct1_...) ➔ 登录换取会话 (pst1_...)</text>
+    <text x="12" y="58" class="card-desc">服务端仅存加盐 SHA-256 哈希 · 拒绝伪造头</text>
+    <text x="12" y="74" class="card-desc">MCP Gateway (:8789) 鉴权并返回直连路由</text>
+    <text x="12" y="88" class="card-desc">门卫角色：只记访问流水，严禁代理工具流量</text>
+  </g>
+
+  <!-- Connector Down to Trust Root -->
+  <path d="M 500 448 L 500 468" stroke="#64748B" stroke-width="2"/>
+
+  <!-- ================= ZONE 4: LOCAL TRUST ROOT ================= -->
+  <g transform="translate(36, 468)">
+    <rect x="0" y="0" width="928" height="66" rx="10" fill="#0A0F1D" stroke="#334155" stroke-width="1.2"/>
+    <text x="16" y="20" class="zone-hdr" fill="#94A3B8">📁 本地信任根与追加写审计流水 (Local Trust Root · 原子替换写入 · 杜绝脏写)</text>
+
+    <!-- File 1 -->
+    <g transform="translate(16, 30)">
+      <rect x="0" y="0" width="168" height="26" rx="5" fill="#1E293B"/>
+      <text x="8" y="17" class="mono" font-size="11">identities.json</text>
+      <text x="110" y="17" class="card-desc">名册与角色</text>
+    </g>
+    <!-- File 2 -->
+    <g transform="translate(196, 30)">
+      <rect x="0" y="0" width="168" height="26" rx="5" fill="#1E293B"/>
+      <text x="8" y="17" class="mono" font-size="11">sessions.json</text>
+      <text x="106" y="17" class="card-desc">哈希与会话</text>
+    </g>
+    <!-- File 3 -->
+    <g transform="translate(376, 30)">
+      <rect x="0" y="0" width="168" height="26" rx="5" fill="#1E293B"/>
+      <text x="8" y="17" class="mono" font-size="11">catalog.json</text>
+      <text x="100" y="17" class="card-desc">服务与变更</text>
+    </g>
+    <!-- File 4 -->
+    <g transform="translate(556, 30)">
+      <rect x="0" y="0" width="168" height="26" rx="5" fill="#1E293B"/>
+      <text x="8" y="17" class="mono" font-size="11">approvals.json</text>
+      <text x="104" y="17" class="card-desc">公开审批链</text>
+    </g>
+    <!-- File 5 -->
+    <g transform="translate(736, 30)">
+      <rect x="0" y="0" width="176" height="26" rx="5" fill="#1E293B"/>
+      <text x="8" y="17" class="mono" font-size="11">gateway-audit.json</text>
+      <text x="120" y="17" class="card-desc">放行流水</text>
+    </g>
+  </g>
+
+  <!-- Connector Down to External World -->
+  <path d="M 500 534 L 500 552" stroke="#EF4444" stroke-width="2" stroke-dasharray="3 3"/>
+
+  <!-- ================= ZONE 5: EXTERNAL TARGETS (NON-RUNTIME) ================= -->
+  <g transform="translate(36, 552)">
+    <rect x="0" y="0" width="928" height="68" rx="10" fill="#180C14" fill-opacity="0.7" stroke="#EF4444" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="16" y="22" class="zone-hdr" fill="#F87171">⛔ 外部 Agent 运行时边界 (外部目标自行运行 · Portico 坚决不执行工具、不代跑大模型、不托管推理)</text>
+
+    <!-- Target 1 -->
+    <g transform="translate(16, 32)">
+      <rect x="0" y="0" width="280" height="26" rx="5" fill="#2A121E" stroke="#F43F5E" stroke-width="1"/>
+      <text x="10" y="17" class="card-title" font-size="11" fill="#FDA4AF">外部 MCP 服务端点 (mcp_endpoint)</text>
+    </g>
+    <!-- Target 2 -->
+    <g transform="translate(310, 32)">
+      <rect x="0" y="0" width="280" height="26" rx="5" fill="#2A121E" stroke="#F43F5E" stroke-width="1"/>
+      <text x="10" y="17" class="card-title" font-size="11" fill="#FDA4AF">外部 Web 控制台直连 (url: https://...)</text>
+    </g>
+    <!-- Target 3 -->
+    <g transform="translate(604, 32)">
+      <rect x="0" y="0" width="308" height="26" rx="5" fill="#2A121E" stroke="#F43F5E" stroke-width="1"/>
+      <text x="10" y="17" class="card-title" font-size="11" fill="#FDA4AF">外部 CLI 包分发坐标 (package: jsr:/npm:)</text>
+    </g>
+  </g>
+</svg>

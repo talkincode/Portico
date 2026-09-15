@@ -32,6 +32,14 @@
 
 ---
 
+## 系统架构全景
+
+<p align="center">
+  <img src="assets/architecture.svg" alt="Portico 系统架构与信任边界全景" width="100%"/>
+</p>
+
+---
+
 ## 30 秒极速体验
 
 需要本地安装了 **Deno 2.9.x**（不要用 Node 或 Bun 跑本仓库）。
