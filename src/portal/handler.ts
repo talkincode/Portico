@@ -87,6 +87,9 @@ export async function handlePortalRequest(
       const surfaces = await context.catalog.list(actor);
       return jsonOk(dashboardFrom(surfaces));
     }
+    if (url.pathname === "/api/identities") {
+      return jsonOk(await context.access.list(actor));
+    }
     if (url.pathname === "/api/page") {
       if (!context.pages) return jsonOk({ components: [] });
       return jsonOk(await context.pages.get(actor));

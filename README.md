@@ -53,7 +53,7 @@ deno task build
 
 ### MCP 入口
 
-Portal、CLI、MCP 是同一治理状态的三个入口。MCP 是**只读**服务端（JSON-RPC 2.0 over HTTP），暴露五个工具：`portico_list`、`portico_describe`、`portico_entry`、`portico_dashboard`、`portico_audit`。它们只是目录查询的投影，不执行、不代理、不编排任何外部工具。
+Portal、CLI、MCP 是同一治理状态的三个入口。MCP 是**只读**服务端（JSON-RPC 2.0 over HTTP），暴露六个工具：`portico_list`、`portico_describe`、`portico_entry`、`portico_dashboard`、`portico_audit`、`portico_identities`。它们只是目录与名册查询的投影，不执行、不代理、不编排任何外部工具。
 
 鉴权只认会话，不接受 `X-Portico-Actor-*` 自称头：
 

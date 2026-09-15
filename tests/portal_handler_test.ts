@@ -652,3 +652,60 @@ Deno.test("catalog query filters visible records and does not leak internals to 
   assertEquals(bad.status, 400);
   assertEquals(bad.body.error?.code, "INVALID_INPUT");
 });
+
+Deno.test("maintainer and auditor list the same roster on portal; reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const expected = [
+    { id: "agent:docs-bot", kind: "agent", role: "maintainer" },
+    { id: "human:reader", kind: "human", role: "reader" },
+    { id: "human:security-auditor", kind: "human", role: "auditor" },
+  ];
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/identities", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 200);
+  assertEquals(asMaintainer.body.ok, true);
+  const maintainerIds = (asMaintainer.body.data as Array<{ id: string; kind: string; role: string }>)
+    .slice()
+    .sort((a, b) => a.id.localeCompare(b.id));
+  assertEquals(maintainerIds, expected);
+  assertEquals(
+    JSON.stringify(asMaintainer.body.data).includes("secretHash") ||
+      JSON.stringify(asMaintainer.body.data).includes("tokenHash") ||
+      JSON.stringify(asMaintainer.body.data).includes("pct1_") ||
+      JSON.stringify(asMaintainer.body.data).includes("pst1_"),
+    false,
+    "roster listing must not leak credential or session secrets",
+  );
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/identities", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.data, asMaintainer.body.data);
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/identities", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.ok, false);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/identities"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+});

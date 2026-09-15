@@ -5,6 +5,7 @@ import {
   type AuditService,
   parseAuditQuery,
 } from "../audit/mod.ts";
+import type { AccessService } from "../access/mod.ts";
 import {
   type Actor,
   applyCatalogQuery,
@@ -27,11 +28,11 @@ import { isRecord } from "./types.ts";
  * endpoint — there was no MCP server at all, so an MCP client could discover
  * nothing. These tools close that gap.
  *
- * Every tool is a thin, read-only projection of an existing CatalogService or
- * AuditService call, so visibility, approval and role rules cannot fork: an
- * MCP caller sees exactly what the same identity sees on the CLI and the
- * Portal. Nothing here executes, proxies or orchestrates anything — Portico
- * still does not run other people's tools.
+ * Every tool is a thin, read-only projection of an existing CatalogService,
+ * AuditService or AccessService call, so visibility, approval and role rules
+ * cannot fork: an MCP caller sees exactly what the same identity sees on the
+ * CLI and the Portal. Nothing here executes, proxies or orchestrates anything
+ * — Portico still does not run other people's tools.
  */
 
 export interface McpTool {
@@ -43,6 +44,7 @@ export interface McpTool {
 export interface McpToolDeps {
   catalog: CatalogService;
   audit: AuditService;
+  access: AccessService;
 }
 
 export const TOOLS: readonly McpTool[] = [
@@ -129,6 +131,12 @@ export const TOOLS: readonly McpTool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "portico_identities",
+    description:
+      "列出当前名册中的身份（id / kind / role）。等价于 CLI `identity list` 与 Portal `GET /api/identities`。仅维护者与人类审计者可读；只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
 export function isTool(name: string): boolean {
@@ -173,6 +181,8 @@ export async function callTool(
       const events = await deps.audit.list(actor);
       return applyAuditQuery(events, parseAuditQuery(input));
     }
+    case "portico_identities":
+      return await deps.access.list(actor);
     default:
       throw new CatalogError(ErrorCode.NOT_FOUND, `unknown tool '${name}'`);
   }

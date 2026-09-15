@@ -171,6 +171,7 @@ async function toolsCall(
     const data = await callTool(actor, name, params.arguments, {
       catalog: context.catalog,
       audit: new AuditService(context.catalog, context.access, context.gateway),
+      access: context.access,
     });
     return { content: [{ type: "text", text: JSON.stringify({ ok: true, data }) }] };
   } catch (error) {
