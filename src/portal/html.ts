@@ -538,6 +538,16 @@ const MAGAZINE_CSS = `
         flex-direction: column;
         gap: 1.25rem;
       }
+      .rail-header {
+        padding: 0 0.5rem;
+      }
+      .rail-heading {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
       .rail-nav {
         display: flex;
         flex-direction: column;
@@ -568,7 +578,7 @@ const MAGAZINE_CSS = `
         border-radius: 8px;
         padding: 1.1rem;
         font-size: 0.8rem;
-        line-height: 1.5;
+        line-height: 1.55;
         color: var(--muted);
       }
       .rail-promo-card strong {
@@ -576,7 +586,7 @@ const MAGAZINE_CSS = `
         color: var(--accent);
         font-family: var(--title-font);
         letter-spacing: 0.15em;
-        margin-top: 0.5rem;
+        margin-bottom: 0.35rem;
       }
 
       /* Compact middle list */
@@ -598,7 +608,13 @@ const MAGAZINE_CSS = `
         margin-bottom: 0.25rem;
       }
       .list-compact-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
-      .list-compact-header .sort-label { font-size: 0.78rem; color: var(--muted); }
+      .count-badge {
+        font-size: 0.75rem;
+        color: var(--muted);
+        background: var(--tag-bg);
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+      }
       .compact-card {
         display: flex;
         gap: 0.75rem;
@@ -635,7 +651,7 @@ const MAGAZINE_CSS = `
       .compact-body h2 a { color: var(--text); }
       .compact-body .meta { font-size: 0.72rem; color: var(--muted); margin: 0; }
 
-      /* Article Detail reading pane */
+      /* Agent Detail Pane */
       .detail {
         background: var(--card-bg);
         border: 1px solid var(--rule);
@@ -650,175 +666,204 @@ const MAGAZINE_CSS = `
         color: var(--muted);
         margin-bottom: 1.25rem;
       }
+      .detail-header {
+        border-bottom: 1px solid var(--rule);
+        padding-bottom: 1.5rem;
+        margin-bottom: 1.75rem;
+      }
+      .detail-kicker-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .version-tag {
+        font-size: 0.75rem;
+        color: var(--muted);
+        background: var(--tag-bg);
+        padding: 0.15rem 0.45rem;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
       .detail h1 {
         font-family: var(--title-font);
         font-size: clamp(2rem, 3.2vw, 2.75rem);
         font-weight: 700;
         line-height: 1.25;
-        margin: 0 0 1.25rem;
+        margin: 0 0 0.75rem;
       }
-      .author-meta-row {
+      .lead-paragraph {
+        font-size: 1.05rem;
+        line-height: 1.75;
+        color: var(--muted);
+        margin: 0;
+      }
+
+      /* Access and Connection Box */
+      .access-box {
+        background: var(--panel);
+        border: 1px solid var(--accent-line);
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 1.75rem 0;
+        box-shadow: 0 4px 16px rgba(74, 158, 255, 0.08);
+      }
+      .access-box-header {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding-bottom: 1.5rem;
-        border-bottom: 1px solid var(--rule);
-        margin-bottom: 2rem;
+        align-items: flex-start;
         gap: 1rem;
+        margin-bottom: 1.25rem;
       }
-      .author-info {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-      .author-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
+      .access-icon-wrap {
+        width: 38px;
+        height: 38px;
+        border-radius: 8px;
         background: var(--accent-soft);
-        color: var(--accent);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: 700;
-        font-size: 0.88rem;
+        flex-shrink: 0;
       }
-      .author-text { font-size: 0.85rem; }
-      .author-text .author-name { font-weight: 600; color: var(--text); display: block; }
-      .author-text .publish-time { font-size: 0.78rem; color: var(--muted); }
-      .article-actions {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
+      .access-icon-wrap svg {
+        width: 20px;
+        height: 20px;
+        stroke: var(--accent);
+      }
+      .access-box-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin: 0 0 0.25rem;
+        color: var(--text);
+      }
+      .access-box-sub {
         font-size: 0.82rem;
         color: var(--muted);
-      }
-      .action-pill {
-        display: flex;
-        align-items: center;
-        gap: 0.35rem;
-        padding: 0.3rem 0.65rem;
-        border-radius: 6px;
-        border: 1px solid var(--rule);
-        background: var(--tag-bg);
-      }
-
-      /* Editorial typography */
-      .lead-paragraph {
-        font-size: 1.08rem;
-        line-height: 1.85;
-        color: var(--text);
-        margin-bottom: 2rem;
-      }
-      .section-heading {
-        font-family: var(--title-font);
-        font-size: 1.45rem;
-        font-weight: 700;
-        margin: 2.25rem 0 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.65rem;
-      }
-      .section-heading .bar {
-        width: 4px;
-        height: 1.3rem;
-        background: var(--accent);
-        border-radius: 2px;
-        display: inline-block;
-      }
-      .editorial-quote {
-        background: var(--tag-bg);
-        border: 1px solid var(--rule);
-        border-radius: 8px;
-        padding: 1.4rem 1.75rem;
-        margin: 2rem 0;
-        position: relative;
-      }
-      .editorial-quote .quote-mark {
-        font-family: var(--title-font);
-        font-size: 2.5rem;
-        line-height: 1;
-        color: var(--accent);
-        font-weight: 700;
-        display: block;
-        margin-bottom: 0.25rem;
-      }
-      .editorial-quote blockquote {
         margin: 0;
-        font-size: 0.98rem;
-        line-height: 1.75;
-        font-weight: 500;
-        color: var(--text);
+        line-height: 1.5;
       }
-      .editorial-quote cite {
-        display: block;
-        margin-top: 0.6rem;
-        font-size: 0.82rem;
-        color: var(--muted);
-        font-style: normal;
+      .access-box-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
       }
-
-      /* Workflow Process diagram */
-      .workflow-diagram {
+      .entry-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
         background: var(--tag-bg);
         border: 1px solid var(--rule);
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 2rem 0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        overflow-x: auto;
-      }
-      .wf-steps {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        flex: 1;
-      }
-      .wf-step {
-        background: var(--panel);
-        border: 1px solid var(--rule);
         border-radius: 6px;
-        padding: 0.65rem 0.85rem;
-        text-align: center;
-        min-width: 95px;
+        font-size: 0.88rem;
+        flex-wrap: wrap;
       }
-      .wf-step-icon {
-        font-size: 1.1rem;
-        margin-bottom: 0.25rem;
-        display: block;
-      }
-      .wf-step-title {
-        font-size: 0.8rem;
+      .entry-label {
         font-weight: 600;
         color: var(--text);
-        display: block;
+        flex-shrink: 0;
       }
-      .wf-step-sub {
-        font-size: 0.68rem;
-        color: var(--muted);
-        display: block;
+      .entry-value {
+        word-break: break-all;
+        flex: 1;
       }
-      .wf-arrow { color: var(--accent); font-weight: 700; }
-      .wf-badge-note {
-        border-left: 1px dashed var(--rule);
-        padding-left: 1.25rem;
-        font-family: var(--title-font);
-        font-size: 0.88rem;
+      .entry-value a {
         color: var(--accent);
-        line-height: 1.45;
-        font-style: italic;
+        font-weight: 600;
+      }
+      .access-action-row {
+        margin-top: 0.25rem;
+      }
+      .btn-access {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: var(--accent);
+        color: #FFFFFF !important;
+        padding: 0.6rem 1.25rem;
+        border-radius: 6px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        text-decoration: none !important;
+        transition: opacity 0.15s;
+      }
+      .btn-access:hover {
+        opacity: 0.9;
+      }
+      .command-box {
+        margin-top: 0.5rem;
+      }
+      .command-box-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .code-snippet {
+        background: #0E1217;
+        color: #E6EDF3;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 0.85rem 1.1rem;
+        margin: 0;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        overflow-x: auto;
+      }
+      .code-snippet code {
+        background: transparent;
+        padding: 0;
+        border: 0;
+        color: inherit;
       }
 
       /* Governance spec panel */
       .governance-panel {
         background: var(--tag-bg);
         border: 1px solid var(--rule);
-        border-radius: 8px;
-        padding: 1.25rem 1.5rem;
-        margin-top: 2.5rem;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-top: 2rem;
+      }
+      .panel-heading {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0 0 1rem;
+        color: var(--text);
+      }
+      .gov-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem 1.5rem;
+        margin: 0 0 1.25rem;
+      }
+      .gov-item dt {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+      }
+      .gov-item dd {
+        margin: 0;
+        font-size: 0.88rem;
+        font-weight: 500;
+        color: var(--text);
+      }
+      .gov-trust-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
+        border-top: 1px solid var(--rule);
+        padding-top: 1rem;
+        font-size: 0.8rem;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+      .shield-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
       }
       .badge { color: var(--accent); font-weight: 600; }
       code {
@@ -841,7 +886,6 @@ const MAGAZINE_CSS = `
         .sidebar { border-top: 1px solid var(--rule); padding-top: 1.5rem; }
         .stream .card { grid-template-columns: 1fr; }
         .card-thumb { height: 160px; }
-        .workflow-diagram { flex-direction: column; }
         .topbar-right .search-box, .topbar-right .motto { display: none; }
       }
 `;
@@ -944,16 +988,24 @@ function renderChrome(input: {
       </nav>
       <div class="topbar-right">
         <form class="search-box" method="get" action="/" role="search">
-          ${input.theme === "system" ? "" : `<input type="hidden" name="theme" value="${escapeHtml(input.theme)}">`}
-          ${input.channel ? `<input type="hidden" name="channel" value="${escapeHtml(input.channel)}">` : ""}
+          ${
+    input.theme === "system"
+      ? ""
+      : `<input type="hidden" name="theme" value="${escapeHtml(input.theme)}">`
+  }
+          ${
+    input.channel ? `<input type="hidden" name="channel" value="${escapeHtml(input.channel)}">` : ""
+  }
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="7"/>
             <path d="M21 21l-4.35-4.35"/>
           </svg>
-          <input type="search" name="q" value="${escapeHtml(q ?? "")}" placeholder="搜索已授权入口" maxlength="120" aria-label="搜索已授权入口">
+          <input type="search" name="q" value="${
+    escapeHtml(q ?? "")
+  }" placeholder="搜索已授权入口" maxlength="120" aria-label="搜索已授权入口">
           <button type="submit">搜索</button>
         </form>
-        <div class="motto">更好的技术内容<br>连接更多的实践者</div>
+        <div class="motto">受控治理与发现<br>独立审批 · 客户端直连</div>
         <p class="themes">
           <a href="${escapeHtml(withQuery(input.path, "light", input.channel, q))}">日</a>
           <a href="${escapeHtml(withQuery(input.path, "dark", input.channel, q))}">夜</a>
@@ -977,7 +1029,8 @@ function renderHome(
   const empty = surfaces.length === 0 ? `<p class="empty">没有可见的 Agent 表面。</p>` : "";
   const heroHtml = hero ? renderHero(hero, theme, channel) : "";
   const filterTabs = renderFilterTabs(theme, channel, "/", q);
-  const cards = surfaces.map((surface, idx) => renderCard(surface, theme, channel, { index: idx })).join("");
+  const cards = surfaces.map((surface, idx) => renderCard(surface, theme, channel, { index: idx }))
+    .join("");
   return `<main>
       ${heroHtml}
       ${filterTabs}
@@ -1019,124 +1072,238 @@ function renderReading(
   return `
     <!-- Column 1: Left Rail Navigation -->
     <aside class="read-rail">
+      <div class="rail-header">
+        <span class="rail-heading">服务渠道</span>
+      </div>
       <nav class="rail-nav">
-        <a class="rail-link active" href="${escapeHtml(contentHref)}">
+        <a class="rail-link${channel === null ? " active" : ""}" href="${
+    escapeHtml(withQuery("/", theme, null))
+  }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-          <span>全部内容</span>
+          <span>全部服务</span>
         </a>
-        <span class="rail-link" aria-disabled="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
-          <span>今日更新</span>
-        </span>
-        <a class="rail-link" href="${escapeHtml(withQuery("/", theme, "cli"))}">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-          <span>AI 与开发</span>
-        </a>
-        <a class="rail-link" href="${escapeHtml(withQuery("/", theme, "mcp"))}">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          <span>网络与系统</span>
-        </a>
-        <a class="rail-link" href="${escapeHtml(withQuery("/", theme, "web"))}">
+        <a class="rail-link${channel === "web" ? " active" : ""}" href="${
+    escapeHtml(withQuery("/", theme, "web"))
+  }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          <span>开源项目</span>
+          <span>Web 渠道</span>
         </a>
-        <span class="rail-link" aria-disabled="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-          <span>阅读收藏</span>
-        </span>
+        <a class="rail-link${channel === "cli" ? " active" : ""}" href="${
+    escapeHtml(withQuery("/", theme, "cli"))
+  }">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+          <span>CLI 工具</span>
+        </a>
+        <a class="rail-link${channel === "mcp" ? " active" : ""}" href="${
+    escapeHtml(withQuery("/", theme, "mcp"))
+  }">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>MCP 服务</span>
+        </a>
       </nav>
       <div class="rail-promo-card">
-        在技术与现实之间<br>
-        构建更好的可能<br>
         <strong>PORTICO</strong>
-        让优质内容持续发生
+        <span>受控的 Agent 治理门户。Agent 在外部独立运行，此处仅做登记、发布、发现、授权与审计，不代理流量，不代跑 Agent。</span>
       </div>
     </aside>
 
     <!-- Column 2: Middle Stream List -->
     <section class="list-compact">
       <div class="list-compact-header">
-        <h3>全部内容</h3>
-        <span class="sort-label">按发布时间 ▾</span>
+        <h3>已登记服务</h3>
+        <span class="count-badge">${surfaces.length} 个入口</span>
       </div>
       ${renderTopics(theme, channel, `/s/${encodeURIComponent(selected.id)}`)}
       ${cards || `<p class="empty">没有可见的 Agent 表面。</p>`}
     </section>
 
-    <!-- Column 3: Article Detail Reading Area -->
+    <!-- Column 3: Agent Detail Pane -->
     <article class="detail" data-surface="${escapeHtml(selected.id)}" data-governance="${
     escapeHtml(selected.governanceState)
   }">
       <nav class="breadcrumbs">
-        <a href="${escapeHtml(contentHref)}">首页</a> &gt; <span>${escapeHtml(channelLabel(selected.channels))}</span> &gt; <span>${escapeHtml(selected.name)}</span>
+        <a href="${escapeHtml(contentHref)}">首页</a> &gt; <span>${
+    escapeHtml(channelLabel(selected.channels))
+  }</span> &gt; <span>${escapeHtml(selected.name)}</span>
       </nav>
-      <h1>${escapeHtml(selected.name)}</h1>
-      
-      <div class="author-meta-row">
-        <div class="author-info">
-          <div class="author-avatar">编</div>
-          <div class="author-text">
-            <span class="author-name">编辑 Agent · 人工审核</span>
-            <span class="publish-time">版本 ${escapeHtml(selected.version)} · 约 8 分钟阅读</span>
-          </div>
+
+      <div class="detail-header">
+        <div class="detail-kicker-row">
+          <span class="badge-chip">${escapeHtml(channelLabel(selected.channels))}</span>
+          <span class="kicker">${governanceLabel(selected.governanceState)}</span>
+          <span class="version-tag">v${escapeHtml(selected.version)}</span>
         </div>
-        <div class="article-actions">
-          <span class="action-pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> 收藏</span>
-          <span class="action-pill">AA</span>
-          <span class="action-pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg> 分享</span>
-        </div>
+        <h1>${escapeHtml(selected.name)}</h1>
+        <p class="lead-paragraph">${escapeHtml(selected.description)}</p>
       </div>
 
-      <p class="lead-paragraph">${escapeHtml(selected.description)}</p>
+      <!-- Access and Direct Connection Box -->
+      ${renderAccessBox(selected)}
 
-      <h2 class="section-heading"><span class="bar"></span>01 工作流比单次生成更重要</h2>
-      <p>如果把视角从“生成一段代码”拉长到“完成一个可运行的功能”，你会发现真正的效率提升，来自工作流的重塑。Agent 不再只是一个随叫随到的补全工具，而是可以理解上下文、拆解任务、调用工具、参与协作的伙伴。</p>
-      <p>在工程实践中，AI 可以根据需求生成初始代码，自动补充测试用例，解释报错信息，甚至根据线上日志提出修复建议。当它们被串联在一起，形成一个顺畅的工作流时，开发者的心智负担会显著下降，交付速度也随之提升。</p>
-
-      <div class="editorial-quote">
-        <span class="quote-mark">“</span>
-        <blockquote>AI 的价值，不在于替代开发者，而在于让开发者把精力放在更有创造性的工作上。</blockquote>
-        <cite>—— 社区开发者 @chengyin</cite>
-      </div>
-
-      <div class="workflow-diagram">
-        <div class="wf-steps">
-          <div class="wf-step">
-            <span class="wf-step-icon">📄</span>
-            <span class="wf-step-title">需求理解</span>
-            <span class="wf-step-sub">自然语言转化</span>
-          </div>
-          <span class="wf-arrow">➔</span>
-          <div class="wf-step">
-            <span class="wf-step-icon">&lt;/&gt;</span>
-            <span class="wf-step-title">代码生成</span>
-            <span class="wf-step-sub">遵循架构规范</span>
-          </div>
-          <span class="wf-arrow">➔</span>
-          <div class="wf-step">
-            <span class="wf-step-icon">⚙️</span>
-            <span class="wf-step-title">测试与调试</span>
-            <span class="wf-step-sub">自动定位修复</span>
-          </div>
-          <span class="wf-arrow">➔</span>
-          <div class="wf-step">
-            <span class="wf-step-icon">👥</span>
-            <span class="wf-step-title">工程协作</span>
-            <span class="wf-step-sub">知识文档沉淀</span>
-          </div>
-        </div>
-        <div class="wf-badge-note">
-          更顺畅的开发体验<br>更专注的创造力
-        </div>
-      </div>
-
+      <!-- Governance and Spec Box -->
       <div class="governance-panel">
-        <p class="kicker">${escapeHtml(channelLabel(selected.channels))} · ${governanceLabel(selected.governanceState)}</p>
-        <p class="meta">版本 ${escapeHtml(selected.version)} · <code>${escapeHtml(selected.id)}</code></p>
-        <p class="byline">${escapeHtml(byline(selected))}</p>
-        <p class="entry">${renderEntry(selected.entry.kind, selected.entry.value)}</p>
+        <h3 class="panel-heading">治理与审计规格</h3>
+        <dl class="gov-grid">
+          <div class="gov-item">
+            <dt>标识 (ID)</dt>
+            <dd><code>${escapeHtml(selected.id)}</code></dd>
+          </div>
+          <div class="gov-item">
+            <dt>服务渠道</dt>
+            <dd>${escapeHtml(channelLabel(selected.channels))}</dd>
+          </div>
+          <div class="gov-item">
+            <dt>当前版本</dt>
+            <dd>v${escapeHtml(selected.version)}</dd>
+          </div>
+          <div class="gov-item">
+            <dt>维护主体</dt>
+            <dd>${escapeHtml(byline(selected))}</dd>
+          </div>
+          <div class="gov-item">
+            <dt>治理状态</dt>
+            <dd>${governanceLabel(selected.governanceState)}</dd>
+          </div>
+          <div class="gov-item">
+            <dt>连接模式</dt>
+            <dd>客户端直连 (Direct)</dd>
+          </div>
+        </dl>
+        <div class="gov-trust-note">
+          <span class="shield-icon" aria-hidden="true">🛡️</span>
+          <span><strong>信任边界保障：</strong>Portico 仅维护目录登记、授权状态与网关路由门卫，不代跑 Agent、不执行工具、不代理远程流量。公开入口经独立审批后方可对外暴露。</span>
+        </div>
       </div>
     </article>`;
+}
+
+function renderAccessBox(selected: AgentSurface): string {
+  const kind = selected.entry.kind;
+  const val = selected.entry.value;
+
+  if (kind === "url") {
+    const isHttp = isDirectHttpHref(val);
+    return `
+      <div class="access-box">
+        <div class="access-box-header">
+          <div class="access-icon-wrap web">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <div>
+            <h3 class="access-box-title">接入方式 · 外部 Web 页面</h3>
+            <p class="access-box-sub">已授权的直连 Web 入口。由客户端直接访问，Portico 不代理页面与请求。</p>
+          </div>
+        </div>
+        <div class="access-box-body">
+          <div class="entry-row">
+            <span class="entry-label">访问地址：</span>
+            <div class="entry-value">${renderEntry(kind, val)}</div>
+          </div>
+          ${
+      isHttp
+        ? `<div class="access-action-row">
+            <a href="${
+          escapeHtml(val)
+        }" target="_blank" rel="noopener noreferrer" class="btn-access">
+              访问外部入口 ↗
+            </a>
+          </div>`
+        : ""
+    }
+        </div>
+      </div>`;
+  }
+
+  if (kind === "package") {
+    return `
+      <div class="access-box">
+        <div class="access-box-header">
+          <div class="access-icon-wrap cli">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+          </div>
+          <div>
+            <h3 class="access-box-title">接入方式 · 命令行包坐标</h3>
+            <p class="access-box-sub">受治理的分发包坐标。Portico 不代为安装或执行，请在本地通过包管理器调用。</p>
+          </div>
+        </div>
+        <div class="access-box-body">
+          <div class="entry-row">
+            <span class="entry-label">包坐标：</span>
+            <div class="entry-value">${renderEntry(kind, val)}</div>
+          </div>
+          <div class="command-box">
+            <div class="command-box-label">快速调用命令</div>
+            <pre class="code-snippet"><code>${renderCliCommand(val)}</code></pre>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (kind === "mcp_endpoint") {
+    return `
+      <div class="access-box">
+        <div class="access-box-header">
+          <div class="access-icon-wrap mcp">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </div>
+          <div>
+            <h3 class="access-box-title">接入方式 · MCP 服务端点</h3>
+            <p class="access-box-sub">受控的 Model Context Protocol 端点。Portico 提供身份鉴权与路由门卫，客户端直连调用。</p>
+          </div>
+        </div>
+        <div class="access-box-body">
+          <div class="entry-row">
+            <span class="entry-label">服务端点：</span>
+            <div class="entry-value">${renderEntry(kind, val)}</div>
+          </div>
+          <div class="command-box">
+            <div class="command-box-label">客户端配置示例 (claude_desktop_config.json)</div>
+            <pre class="code-snippet"><code>${renderMcpConfigSnippet(selected.id, val)}</code></pre>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="access-box">
+      <div class="access-box-header">
+        <div>
+          <h3 class="access-box-title">接入方式 · 登记入口</h3>
+          <p class="access-box-sub">Portico 登记的授权访问信息。</p>
+        </div>
+      </div>
+      <div class="access-box-body">
+        <div class="entry-row">
+          <span class="entry-label">入口：</span>
+          <div class="entry-value">${renderEntry(kind, val)}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderCliCommand(pkg: string): string {
+  if (pkg.startsWith("jsr:")) {
+    return escapeHtml(`deno run -A ${pkg}`);
+  }
+  if (pkg.startsWith("npm:")) {
+    return escapeHtml(`npx ${pkg.slice(4)}`);
+  }
+  return escapeHtml(`# 运行包: ${pkg}`);
+}
+
+function renderMcpConfigSnippet(id: string, endpoint: string): string {
+  const config = JSON.stringify(
+    {
+      mcpServers: {
+        [id]: {
+          url: endpoint,
+        },
+      },
+    },
+    null,
+    2,
+  );
+  return escapeHtml(config);
 }
 
 function renderSidebar(
@@ -1155,74 +1322,68 @@ function renderSidebar(
           <div class="pick-content">
             <h2><a href="${escapeHtml(href)}">${escapeHtml(pick.name)}</a></h2>
             <p class="desc">${escapeHtml(pick.description)}</p>
-            <p class="meta">${governanceLabel(pick.governanceState)} · ${escapeHtml(pick.version)}</p>
+            <p class="meta">${governanceLabel(pick.governanceState)} · ${
+      escapeHtml(pick.version)
+    }</p>
           </div>
         </article>`;
   }).join("");
 
   return `<aside class="sidebar">
-      <!-- Section 1: 专题导航 -->
+      <!-- Section 1: 接入渠道 -->
       <section class="side-section">
         <div class="side-header">
-          <h3 class="kicker">专题导航</h3>
-          <a class="more-link" href="${escapeHtml(withQuery("/", theme, "web"))}">查看全部专题 →</a>
+          <h3 class="kicker">接入渠道</h3>
+          <a class="more-link" href="${escapeHtml(withQuery("/", theme, null))}">全部服务 →</a>
         </div>
         <div class="topic-list">
-          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "cli"))}">
+          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "web"))}">
             <div class="topic-icon-wrap">
-              <svg viewBox="0 0 44 44" fill="none">
-                <path d="M4 22c8-10 16-10 24 0s16 10 24 0" stroke="#4A9EFF" stroke-width="2"/>
-                <path d="M4 28c8-10 16-10 24 0s16 10 24 0" stroke="#2563EB" stroke-width="1.5" opacity="0.6"/>
-              </svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             </div>
             <div class="topic-info">
-              <h4>AI 与软件工程</h4>
-              <p>12 篇文章 · 4 份报告</p>
+              <h4>Web 入口</h4>
+              <p>直连网页端点，不代理流量</p>
+            </div>
+          </a>
+          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "cli"))}">
+            <div class="topic-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+            </div>
+            <div class="topic-info">
+              <h4>CLI 工具</h4>
+              <p>受控包坐标 (jsr/npm)，本地运行</p>
             </div>
           </a>
           <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "mcp"))}">
             <div class="topic-icon-wrap">
-              <svg viewBox="0 0 44 44" fill="none">
-                <rect x="8" y="14" width="12" height="24" stroke="#4A9EFF" stroke-width="2"/>
-                <rect x="24" y="8" width="12" height="30" stroke="#38BDF8" stroke-width="2"/>
-              </svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
             </div>
             <div class="topic-info">
-              <h4>网络与系统</h4>
-              <p>18 篇文章 · 6 份报告</p>
-            </div>
-          </a>
-          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "web"))}">
-            <div class="topic-icon-wrap">
-              <svg viewBox="0 0 44 44" fill="none">
-                <path d="M4 36l14-20 10 12 12-16" stroke="#4A9EFF" stroke-width="2"/>
-              </svg>
-            </div>
-            <div class="topic-info">
-              <h4>开源与社区</h4>
-              <p>14 篇文章 · 5 份报告</p>
+              <h4>MCP 服务</h4>
+              <p>Model Context Protocol 发现与端点</p>
             </div>
           </a>
         </div>
       </section>
 
-      <!-- Section 2: 编辑精选 -->
+      <!-- Section 2: 推荐入口 -->
       <section class="side-section picks">
         <div class="side-header">
-          <h3 class="kicker">编辑精选</h3>
-          <span class="more-link">查看更多 →</span>
+          <h3 class="kicker">推荐入口</h3>
         </div>
         <div class="picks-list">
-          ${pickHtml || `<p class="empty">暂无精选。</p>`}
+          ${pickHtml || `<p class="empty">暂无推荐。</p>`}
         </div>
       </section>
 
-      <!-- Section 3: 底部 Slogan 卡片 -->
+      <!-- Section 3: 治理原则 -->
       <div class="slogan-card">
         <svg viewBox="0 0 200 120" fill="none">
           <path d="M0 120L60 40L110 85L160 20L220 120Z" fill="#1C2430"/>
         </svg>
-        <h4>好的技术内容，<br>让复杂的世界更清晰。</h4>
+        <h4>Agent 门户与治理层</h4>
+        <p style="margin: 0 0 0.75rem; font-size: 0.8rem; color: #8A9099; position: relative; z-index: 2;">只做登记、发布、发现、授权与审计。公开须经独立审批，不代跑 Agent，不代理流量。</p>
         <span class="brand-mark">PORTICO</span>
       </div>
     </aside>`;
@@ -1249,16 +1410,16 @@ function renderHero(surface: AgentSurface, theme: ThemeMode, channel: ChannelFil
     escapeHtml(surface.governanceState)
   }">
         <div class="hero-content">
-          <p class="kicker">专题 / ${escapeHtml(channelLabel(surface.channels))} · ${governanceLabel(surface.governanceState)}</p>
+          <p class="kicker">推荐服务 / ${escapeHtml(channelLabel(surface.channels))} · ${
+    governanceLabel(surface.governanceState)
+  }</p>
           <h1 class="hero-title"><a href="${escapeHtml(href)}">${escapeHtml(surface.name)}</a></h1>
           <p class="desc hero-desc">${escapeHtml(surface.description)}</p>
           <div class="hero-meta">
-            <span class="byline">编辑 Agent · 人工审核</span>
+            <span class="byline">维护者: ${escapeHtml(byline(surface))}</span>
             <span>·</span>
-            <span>${escapeHtml(surface.version)}</span>
-            <span>#AI</span>
-            <span>#软件工程</span>
-            <span>#开发工具</span>
+            <span>v${escapeHtml(surface.version)}</span>
+            <span class="meta-tag">#${escapeHtml(surface.channels[0] ?? "agent")}</span>
           </div>
         </div>
         <div class="hero-graphic-card">
@@ -1270,9 +1431,9 @@ function renderHero(surface: AgentSurface, theme: ThemeMode, channel: ChannelFil
             <polygon points="55,34 95,56 70,70 30,48" stroke="#60A5FA" stroke-width="1" fill="#1E3A8A" opacity="0.6"/>
           </svg>
           <div class="hero-graphic-text">
-            <span class="en-sub">IDEAS BUILD TOGETHER</span>
+            <span class="en-sub">AGENT GOVERNANCE PORTAL</span>
             <div class="line-bar"></div>
-            <span class="cn-sub">与 AI 一起，<br>构建更大的可能</span>
+            <span class="cn-sub">受控接入与安全治理<br>直连端点 · 独立审批</span>
           </div>
         </div>
       </section>`;
@@ -1289,22 +1450,28 @@ function renderCard(
 
   if (opts.compact) {
     return `
-      <a class="compact-card${current}" href="${escapeHtml(href)}" data-id="${escapeHtml(surface.id)}" data-governance="${
-      escapeHtml(surface.governanceState)
-    }">
+      <a class="compact-card${current}" href="${escapeHtml(href)}" data-id="${
+      escapeHtml(surface.id)
+    }" data-governance="${escapeHtml(surface.governanceState)}">
         <div class="compact-thumb">
           ${renderThumbnailSvg(surface.channels, opts.index ?? 0, true)}
         </div>
         <div class="compact-body">
           <h2>${escapeHtml(surface.name)}</h2>
-          <p class="meta">编辑 Agent · 人工审核 · ${escapeHtml(surface.version)}</p>
+          <p class="meta">${escapeHtml(channelLabel(surface.channels))} · v${
+      escapeHtml(surface.version)
+    } · <code>${escapeHtml(surface.id)}</code></p>
         </div>
       </a>`;
   }
 
   const entry = `<p class="entry">${renderEntry(surface.entry.kind, surface.entry.value)}</p>`;
   const primaryChannel = surface.channels[0] ?? "cli";
-  const channelBadgeLabel = primaryChannel === "cli" ? "CLI" : primaryChannel === "mcp" ? "MCP" : "Web";
+  const channelBadgeLabel = primaryChannel === "cli"
+    ? "CLI"
+    : primaryChannel === "mcp"
+    ? "MCP"
+    : "Web";
 
   return `
         <article class="card${current}" data-id="${escapeHtml(surface.id)}" data-governance="${
@@ -1323,7 +1490,7 @@ function renderCard(
             <div class="meta-footer">
               <span class="byline">${escapeHtml(byline(surface))}</span>
               <span>·</span>
-              <span>${escapeHtml(surface.version)}</span>
+              <span>v${escapeHtml(surface.version)}</span>
               <span class="meta-tag">#${escapeHtml(primaryChannel)}</span>
               <span class="meta-tag">#Agent</span>
             </div>
@@ -1346,7 +1513,11 @@ function renderThumbnailSvg(channels: Channel[], index: number, compact: boolean
         <rect x="36" y="42" width="60" height="12" rx="2" fill="#21262D"/>
         <rect x="14" y="68" width="110" height="8" rx="2" fill="#21262D"/>
         <rect x="14" y="84" width="80" height="8" rx="2" fill="#1C2128"/>
-        ${compact ? "" : '<text x="14" y="112" fill="#58A6FF" font-family="sans-serif" font-size="9" opacity="0.8">命令行到工作流</text>'}
+        ${
+      compact
+        ? ""
+        : '<text x="14" y="112" fill="#58A6FF" font-family="sans-serif" font-size="9" opacity="0.8">CLI PACKAGE</text>'
+    }
       </svg>`;
   }
   if (channels.includes("mcp") || mod === 1) {
