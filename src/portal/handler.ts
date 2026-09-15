@@ -101,6 +101,9 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/identities") {
       return jsonOk(await context.access.list(actor));
     }
+    if (url.pathname === "/api/grants") {
+      return jsonOk(await context.access.listGrants(actor));
+    }
     if (url.pathname === "/api/approvals") {
       return jsonOk(await context.catalog.listApprovals(actor));
     }

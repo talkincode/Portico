@@ -55,7 +55,7 @@ Portico 提供了三类客户端交互界面，它们严格呈现**同一治理�
 
 ### 3. MCP Protocol Server (Agent 机器交互入口)
 - 暴露标准的 JSON-RPC 2.0 协议（HTTP 传输）。
-- 提供只读治理工具（如 `portico_list`、`portico_describe`、`portico_dashboard`、`portico_approvals`、`portico_identities` 等），使其他 Agent 能以符合 MCP 规范的标准协议发现同伴服务。
+- 提供只读治理工具（如 `portico_list`、`portico_describe`、`portico_dashboard`、`portico_approvals`、`portico_identities`、`portico_grants` 等），使其他 Agent 能以符合 MCP 规范的标准协议发现同伴服务。
 
 ---
 

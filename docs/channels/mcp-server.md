@@ -14,7 +14,7 @@
 
 ## 内置治理工具一览
 
-Portico MCP 服务端暴露了 7 个经过安全收敛的只读治理工具：
+Portico MCP 服务端暴露了 8 个经过安全收敛的只读治理工具：
 
 | 工具名称 (Tool Name) | 参数说明 | 权限要求 | 功能描述 |
 | :--- | :--- | :--- | :--- |
@@ -25,6 +25,7 @@ Portico MCP 服务端暴露了 7 个经过安全收敛的只读治理工具：
 | **`portico_audit`** | `{ q?: string, kind?: string, action?: string, subject?: string }` | **仅限人类审计者** | 查询审计时间线流水。非审计者调用返回 `FORBIDDEN`。 |
 | **`portico_approvals`** | `{}` | 已登录会话；匿名为空列表 | 列出公开边界审批记录（通过 / 拒绝 / 撤回）。与 CLI `catalog approvals`、Portal `GET /api/approvals` 同一载荷。 |
 | **`portico_identities`** | `{}` | **维护者与人类审计者** | 列出名册身份（id / kind / role，可选 email）。只读与匿名返回 `FORBIDDEN`。不返回凭证或会话。 |
+| **`portico_grants`** | `{}` | **仅限人类审计者** | 列出追加式授权轨迹。与 CLI `identity grants`、Portal `GET /api/grants` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回凭证或会话。 |
 
 ---
 

@@ -143,6 +143,12 @@ export const TOOLS: readonly McpTool[] = [
       "列出当前名册中的身份（id / kind / role）。等价于 CLI `identity list` 与 Portal `GET /api/identities`。仅维护者与人类审计者可读；只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "portico_grants",
+    description:
+      "列出追加式授权轨迹（谁在何时授予了哪个角色）。等价于 CLI `identity grants` 与 Portal `GET /api/grants`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。读操作不写名册。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
 export function isTool(name: string): boolean {
@@ -191,6 +197,8 @@ export async function callTool(
       return await deps.catalog.listApprovals(actor);
     case "portico_identities":
       return await deps.access.list(actor);
+    case "portico_grants":
+      return await deps.access.listGrants(actor);
     default:
       throw new CatalogError(ErrorCode.NOT_FOUND, `unknown tool '${name}'`);
   }
