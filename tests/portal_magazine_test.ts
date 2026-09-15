@@ -348,6 +348,12 @@ function railLinks(html: string): Array<{ className: string; href: string; label
   }));
 }
 
+function breadcrumbNav(html: string): string {
+  const match = html.match(/<nav class="breadcrumbs">([\s\S]*?)<\/nav>/);
+  if (!match) throw new Error("reading page must have breadcrumbs");
+  return match[1];
+}
+
 Deno.test("reading page keeps one channel navigator that returns to the filtered list", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
@@ -361,7 +367,7 @@ Deno.test("reading page keeps one channel navigator that returns to the filtered
   assertEquals(page.status, 200);
   const html = await page.text();
   const rails = railLinks(html);
-  assertEquals(rails.map((item) => item.label), ["全部服务", "Web 渠道", "CLI 工具", "MCP 服务"]);
+  assertEquals(rails.map((item) => item.label), ["全部服务", "Web", "CLI", "MCP"]);
   assertEquals(rails.map((item) => item.href), [
     "/",
     "/?channel=web",
@@ -373,9 +379,12 @@ Deno.test("reading page keeps one channel navigator that returns to the filtered
     "the remaining channel navigator must leave the reading page",
   );
   const active = rails.find((item) => item.className.includes("active"));
-  assertEquals(active?.label, "CLI 工具");
+  assertEquals(active?.label, "CLI");
   assert(!html.includes("专题分类"), "reading page must not repeat a second channel navigator");
   assert(!html.includes('class="topics"'), "topic tabs must not remain as a second channel set");
+  assert(!html.includes(">CLI 工具<"), "channel labels must not keep the suffixed rail copy");
+  assert(!html.includes(">Web 渠道<"));
+  assert(!html.includes(">MCP 服务<"));
 });
 
 Deno.test("reading page channel tabs and breadcrumb home keep the search query", async () => {
@@ -402,10 +411,67 @@ Deno.test("reading page channel tabs and breadcrumb home keep the search query",
   const rails = railLinks(html);
   assertEquals(rails.map((item) => [item.label, item.href]), [
     ["全部服务", "/?q=Writer"],
-    ["Web 渠道", "/?channel=web&amp;q=Writer"],
-    ["CLI 工具", "/?channel=cli&amp;q=Writer"],
-    ["MCP 服务", "/?channel=mcp&amp;q=Writer"],
+    ["Web", "/?channel=web&amp;q=Writer"],
+    ["CLI", "/?channel=cli&amp;q=Writer"],
+    ["MCP", "/?channel=mcp&amp;q=Writer"],
   ]);
   assert(!html.includes("专题分类"), "keeping q must not revive the second channel navigator");
   assert(!html.includes('class="topics"'));
+});
+
+Deno.test("reading page breadcrumb channel uses CHANNEL_LABEL and links to the filtered list", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  await context.catalog.register(maintainer, publicWeb());
+
+  const cliPage = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(cliPage.status, 200);
+  const cliHtml = await cliPage.text();
+  const cliCrumb = breadcrumbNav(cliHtml);
+  assert(
+    cliCrumb.includes('<a href="/?channel=cli">CLI</a>'),
+    "breadcrumb channel must be a filter link, not a span",
+  );
+  assert(!cliCrumb.includes("<span>CLI</span>"), "breadcrumb channel must not stay plain text");
+  assert(cliCrumb.includes("<span>Docs Writer</span>"), "the record name stays the current crumb");
+
+  const webPage = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-web", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(webPage.status, 200);
+  const webHtml = await webPage.text();
+  const webCrumb = breadcrumbNav(webHtml);
+  assert(
+    webCrumb.includes('<a href="/?channel=web">Web</a>'),
+    "unfiltered reading page still links the record's own channel; label is Web not WEB",
+  );
+  assert(!webCrumb.includes(">WEB<"), "channelLabel must use CHANNEL_LABEL, not toUpperCase");
+});
+
+Deno.test("reading page breadcrumb channel keeps the search query", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const crumb = breadcrumbNav(html);
+  assert(
+    crumb.includes('<a href="/?channel=cli&amp;q=Writer">CLI</a>'),
+    "breadcrumb channel must keep q when linking back to the list",
+  );
+  const home = html.match(/<nav class="breadcrumbs">\s*<a href="([^"]*)">首页<\/a>/);
+  if (!home) throw new Error("reading page must have a breadcrumb home link");
+  assertEquals(home[1], "/?q=Writer");
 });

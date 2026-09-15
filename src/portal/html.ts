@@ -1,5 +1,6 @@
 import type { AgentSurface, Channel } from "../catalog/mod.ts";
 import type { DashboardView } from "../catalog/dashboard.ts";
+import { CHANNEL_LABEL } from "./design/tokens.ts";
 
 export type { DashboardView };
 
@@ -1066,6 +1067,8 @@ function renderReading(
   q?: string,
 ): string {
   const contentHref = withQuery("/", theme, null, q);
+  const crumbChannel = readingChannel(selected, channel);
+  const crumbHref = withQuery("/", theme, crumbChannel, q);
   const cards = surfaces.map((surface, idx) =>
     renderCard(surface, theme, channel, { compact: true, currentId: selected.id, index: idx })
   ).join("");
@@ -1087,19 +1090,19 @@ function renderReading(
     escapeHtml(withQuery("/", theme, "web", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          <span>Web 渠道</span>
+          <span>${escapeHtml(CHANNEL_LABEL.web)}</span>
         </a>
         <a class="rail-link${channel === "cli" ? " active" : ""}" href="${
     escapeHtml(withQuery("/", theme, "cli", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-          <span>CLI 工具</span>
+          <span>${escapeHtml(CHANNEL_LABEL.cli)}</span>
         </a>
         <a class="rail-link${channel === "mcp" ? " active" : ""}" href="${
     escapeHtml(withQuery("/", theme, "mcp", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          <span>MCP 服务</span>
+          <span>${escapeHtml(CHANNEL_LABEL.mcp)}</span>
         </a>
       </nav>
       <div class="rail-promo-card">
@@ -1122,9 +1125,9 @@ function renderReading(
     escapeHtml(selected.governanceState)
   }">
       <nav class="breadcrumbs">
-        <a href="${escapeHtml(contentHref)}">首页</a> &gt; <span>${
-    escapeHtml(channelLabel(selected.channels))
-  }</span> &gt; <span>${escapeHtml(selected.name)}</span>
+        <a href="${escapeHtml(contentHref)}">首页</a> &gt; <a href="${escapeHtml(crumbHref)}">${
+    escapeHtml(CHANNEL_LABEL[crumbChannel])
+  }</a> &gt; <span>${escapeHtml(selected.name)}</span>
       </nav>
 
       <div class="detail-header">
@@ -1342,7 +1345,7 @@ function renderSidebar(
               <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             </div>
             <div class="topic-info">
-              <h4>Web 入口</h4>
+              <h4>${escapeHtml(CHANNEL_LABEL.web)}</h4>
               <p>直连网页端点，不代理流量</p>
             </div>
           </a>
@@ -1351,7 +1354,7 @@ function renderSidebar(
               <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
             </div>
             <div class="topic-info">
-              <h4>CLI 工具</h4>
+              <h4>${escapeHtml(CHANNEL_LABEL.cli)}</h4>
               <p>受控包坐标 (jsr/npm)，本地运行</p>
             </div>
           </a>
@@ -1360,7 +1363,7 @@ function renderSidebar(
               <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
             </div>
             <div class="topic-info">
-              <h4>MCP 服务</h4>
+              <h4>${escapeHtml(CHANNEL_LABEL.mcp)}</h4>
               <p>Model Context Protocol 发现与端点</p>
             </div>
           </a>
@@ -1540,8 +1543,13 @@ function governanceLabel(state: string): string {
   return escapeHtml(state);
 }
 
+function readingChannel(selected: AgentSurface, channel: ChannelFilter): Channel {
+  if (channel && selected.channels.includes(channel)) return channel;
+  return selected.channels[0] ?? "web";
+}
+
 function channelLabel(channels: string[]): string {
-  return channels.map((item) => item.toUpperCase()).join(" · ");
+  return channels.map((item) => CHANNEL_LABEL[item as Channel] ?? item).join(" · ");
 }
 
 function byline(surface: AgentSurface): string {
