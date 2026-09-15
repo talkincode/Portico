@@ -24,7 +24,9 @@
     "cli": "deno run --allow-read --allow-write --allow-env src/cli/main.ts",
     "portal": "deno run --allow-read --allow-env --allow-net=127.0.0.1 src/portal/main.ts",
     "mcp": "deno run --allow-read --allow-env --allow-net=127.0.0.1 src/mcp/main.ts",
-    "gateway": "deno run --allow-read --allow-write --allow-env --allow-net=127.0.0.1 src/gateway/main.ts"
+    "gateway": "deno run --allow-read --allow-write --allow-env --allow-net=127.0.0.1 src/gateway/main.ts",
+    "docs:build": "mdbook build",
+    "docs:serve": "mdbook serve"
   },
-  "exclude": ["data", "dist", "tmp"]
+  "exclude": ["data", "dist", "tmp", "book"]
 }

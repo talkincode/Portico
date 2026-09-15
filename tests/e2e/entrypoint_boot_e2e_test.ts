@@ -38,6 +38,7 @@ Deno.test("E2E: the Gateway audits a denial under a file-scoped write grant", as
     PORTICO_CATALOG_PATH: `${dir}/catalog.json`,
     PORTICO_IDENTITIES_PATH: `${dir}/identities.json`,
     PORTICO_GATEWAY_AUDIT_PATH: audit,
+    PORTICO_PORT: "0",
   }, scoped);
   try {
     const denied = await fetch(
@@ -67,6 +68,7 @@ Deno.test("E2E: the shipped MCP entrypoint starts and speaks JSON-RPC 2.0", asyn
     PORTICO_CATALOG_PATH: `${dir}/catalog.json`,
     PORTICO_IDENTITIES_PATH: `${dir}/identities.json`,
     PORTICO_SESSIONS_PATH: `${dir}/sessions.json`,
+    PORTICO_PORT: "0",
   }, MCP_PERMS);
   try {
     const { url } = server.body.data;

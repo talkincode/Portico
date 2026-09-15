@@ -11,3 +11,4 @@ tmp/
 catalog.json
 catalog.json.tmp
 dist/
+book/

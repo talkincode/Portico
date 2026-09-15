@@ -1,0 +1,30 @@
+[book]
+title = "Portico 官方文档"
+authors = ["Portico Contributors"]
+description = "Portico - 受治理的 Agent 门户与准入网关官方文档"
+language = "zh-CN"
+src = "docs"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/talkincode/Portico"
+edit-url-template = "https://github.com/talkincode/Portico/edit/main/{path}"
+site-url = "/Portico/"
+admonitions = true
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 1
+boost-paragraph = 1
+expand = true
+heading-split-level = 3
+
+[output.html.fold]
+enable = true
+level = 1

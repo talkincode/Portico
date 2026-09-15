@@ -28,7 +28,9 @@ interface UpData {
 async function startUp(dataDir: string) {
   return await bootEntrypoint<UpData>(UP, {
     PORTICO_DATA_DIR: dataDir,
+    PORTICO_PORT: "0",
     PORTICO_GATEWAY_PORT: "0",
+    PORTICO_MCP_PORT: "0",
   }, UP_PERMS);
 }
 
