@@ -100,6 +100,9 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/identities") {
       return jsonOk(await context.access.list(actor));
     }
+    if (url.pathname === "/api/approvals") {
+      return jsonOk(await context.catalog.listApprovals(actor));
+    }
     if (url.pathname === "/api/page") {
       if (!context.pages) return jsonOk({ components: [] });
       return jsonOk(await context.pages.get(actor));

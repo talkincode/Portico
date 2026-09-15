@@ -132,6 +132,12 @@ export const TOOLS: readonly McpTool[] = [
     },
   },
   {
+    name: "portico_approvals",
+    description:
+      "列出公开边界上的审批记录（通过 / 拒绝 / 撤回）。等价于 CLI `catalog approvals` 与 Portal `GET /api/approvals`。已登录身份看到同一批记录与同一顺序；匿名得到空列表，不泄漏待审或已拒绝入口。读操作不写目录。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_identities",
     description:
       "列出当前名册中的身份（id / kind / role）。等价于 CLI `identity list` 与 Portal `GET /api/identities`。仅维护者与人类审计者可读；只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。",
@@ -181,6 +187,8 @@ export async function callTool(
       const events = await deps.audit.list(actor);
       return applyAuditQuery(events, parseAuditQuery(input));
     }
+    case "portico_approvals":
+      return await deps.catalog.listApprovals(actor);
     case "portico_identities":
       return await deps.access.list(actor);
     default:

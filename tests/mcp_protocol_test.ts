@@ -127,6 +127,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_entry",
     "portico_dashboard",
     "portico_audit",
+    "portico_approvals",
     "portico_identities",
   ]);
 });
@@ -201,6 +202,63 @@ Deno.test("portico_identities is the same roster for maintainer and auditor; rea
   });
   assertEquals(anonCall.body.result?.isError, true);
   assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
+});
+
+Deno.test("portico_approvals matches catalog.listApprovals for signed-in callers; anonymous is empty", async () => {
+  const { context, catalog } = await seeded();
+  const expected = await catalog.listApprovals(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].surfaceId, "docs-mcp");
+  assertEquals(expected[0].decision, "approved");
+
+  const auditorCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_approvals", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(auditorCall.body.result?.isError, undefined);
+  assertEquals(envelope(auditorCall.body).data, expected);
+
+  const maintainerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_approvals", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("agent:docs-bot")!,
+    },
+  });
+  assertEquals(envelope(maintainerCall.body).data, expected);
+
+  const readerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_approvals", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(envelope(readerCall.body).data, expected);
+
+  const anonCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: { name: "portico_approvals", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, undefined);
+  assertEquals(envelope(anonCall.body).data, []);
 });
 
 Deno.test("anonymous sees only approved-public surfaces through MCP", async () => {
