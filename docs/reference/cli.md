@@ -80,6 +80,9 @@ portico catalog reject --catalog <path> --identities <path> --sessions <path> --
 # 撤回已公开服务至内部 (仅限人类审计者)
 portico catalog withdraw --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
 
+# 列出公开边界审批记录（通过 / 拒绝 / 撤回）；匿名为空列表
+portico catalog approvals --catalog <path> --identities <path> --sessions <path> --session <token>
+
 # 列表查询可见服务
 portico catalog list --catalog <path> [--identities <path> --sessions <path> --session <token>]
 

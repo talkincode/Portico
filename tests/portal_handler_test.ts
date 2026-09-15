@@ -711,6 +711,65 @@ Deno.test("maintainer and auditor list the same roster on portal; reader and ano
   assertEquals(asAnon.body.error?.code, "FORBIDDEN");
 });
 
+Deno.test("signed-in callers see the same approval records on portal; anonymous sees none", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await context.catalog.approve(auditor, { id: "docs-writer" });
+  const expected = await context.catalog.listApprovals(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].surfaceId, "docs-writer");
+  assertEquals(expected[0].decision, "approved");
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/approvals", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/approvals", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 200);
+  assertEquals(asMaintainer.body.data, expected);
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/approvals", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 200);
+  assertEquals(asReader.body.data, expected);
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/approvals"), context),
+  );
+  assertEquals(asAnon.status, 200);
+  assertEquals(asAnon.body.ok, true);
+  assertEquals(asAnon.body.data, []);
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/approvals", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.catalog.listApprovals(auditor), expected);
+});
+
 async function withMappedEmail() {
   const context = await seededContext();
   await context.access.grant(auditor, {
