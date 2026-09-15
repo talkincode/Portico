@@ -66,6 +66,7 @@ interface CatalogRecord {
    - 协议必须为 `http:` 或 `https:`。
    - 严禁包含凭证信息（如 `https://user:password@host`）。
    - 严禁使用 `javascript:`、`data:` 或 `file:` 伪协议。
+   - Web 入口不得指向 Portico 自己的阅读页：路径为 `/s/<id>` 或 `/public/s/<id>`（忽略主机、尾斜杠与查询串）时写入失败。已公开记录不会被这条规则改写，须先撤回再更新。
 4. **CLI 包坐标规则**：
    - 必须显式以 `jsr:` 或 `npm:` 作为前缀（例如 `jsr:@scope/tool` 或 `npm:some-cli-bin`）。
    - 严禁包含系统命令拼接字符（如 `;`、`|`、`&`、`$`、反引号）。

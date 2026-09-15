@@ -234,6 +234,37 @@ Deno.test("file store failed update leaves the catalog file untouched", async ()
   assertEquals(after, before);
 });
 
+Deno.test("file store rejects rewriting a web entry into Portico's own reading page", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-update-" });
+  const path = `${dir}/catalog.json`;
+  const { FileCatalogStore } = await import("../src/catalog/mod.ts");
+  const store = new FileCatalogStore(path);
+  const service = new CatalogService(store);
+  await service.register(maintainer, {
+    id: "docs-web",
+    name: "Docs Web",
+    description: "External documentation portal.",
+    channels: ["web"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "url", value: "https://docs.example.test/portals/docs-writer" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  });
+  const before = await Deno.readTextFile(path);
+
+  await assertRejectsCode(
+    () =>
+      service.update(maintainer, {
+        id: "docs-web",
+        entry: { kind: "url", value: "http://127.0.0.1:8788/s/docs-web" },
+      }),
+    "INVALID_INPUT",
+  );
+
+  const after = await Deno.readTextFile(path);
+  assertEquals(after, before);
+});
+
 Deno.test("any maintainer-role actor can update, not only the record's listed maintainers", async () => {
   const service = new CatalogService(new MemoryCatalogStore());
   await service.register(maintainer, surface());
