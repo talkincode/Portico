@@ -27,7 +27,7 @@
 
 内网测试部署（不是生产上线）用这三份 unit，`ExecStart` 必须指向本仓库的 `deploy/run-*.sh`，**不得**指向未纳入审查的额外副本。MCP 曾经以 `unless-stopped` 容器游离在 systemd 之外，只重启 portal/gateway 会留下旧 MCP 进程。
 
-仓库里的 unit 是模板：`WorkingDirectory=/opt/portico`，`PORTICO_DEPLOY_BIND=127.0.0.1`。真实检出路径与内网绑定在安装现场用 drop-in 或 `EnvironmentFile` 注入。
+仓库里的 unit 是模板：`WorkingDirectory=/opt/portico`，`PORTICO_DEPLOY_BIND=127.0.0.1`。真实检出路径与内网绑定在安装现场用 drop-in 或 `EnvironmentFile` 注入。形状见 [`drop-in.example.conf`](drop-in.example.conf)：先清空 `ExecStart=` 再指向本检出的 `deploy/run-*.sh`，不要把 RFC1918 地址写进仓库。
 
 ```sh
 sudo cp deploy/portico-portal.service deploy/portico-gateway.service deploy/portico-mcp.service /etc/systemd/system/
