@@ -37,6 +37,8 @@ import { isRecord } from "./types.ts";
  * current session identity, not a login. `portico_sessions` is the auditor
  * session trail, not a way to mint or revoke tokens. `portico_credentials`
  * is the auditor credential inventory, not a way to issue tokens.
+ * `portico_revokes` is the auditor identity-revoke trail, not a way to
+ * remove a roster identity.
  */
 
 export interface McpTool {
@@ -155,6 +157,12 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_revokes",
+    description:
+      "列出追加式身份撤回轨迹（谁在何时撤回了哪个角色）。等价于 CLI `identity revokes` 与 Portal `GET /api/revokes`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。读操作不写名册。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_whoami",
     description:
       "返回当前已证明身份的 id / kind / role。等价于 CLI `identity whoami` 与 Portal `GET /api/whoami`。已登录会话看到自己；匿名得到 FORBIDDEN。不返回邮箱、凭证或会话。读操作不写名册。",
@@ -228,6 +236,8 @@ export async function callTool(
       return await deps.access.list(actor);
     case "portico_grants":
       return await deps.access.listGrants(actor);
+    case "portico_revokes":
+      return await deps.access.listRevokes(actor);
     case "portico_whoami":
       return await deps.access.whoami(actor);
     case "portico_sessions":

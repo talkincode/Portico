@@ -104,6 +104,9 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/grants") {
       return jsonOk(await context.access.listGrants(actor));
     }
+    if (url.pathname === "/api/revokes") {
+      return jsonOk(await context.access.listRevokes(actor));
+    }
     if (url.pathname === "/api/sessions") {
       return jsonOk(await context.access.listSessions(actor));
     }

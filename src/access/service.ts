@@ -289,10 +289,15 @@ export class AccessService {
     return { id: record.id, kind: record.kind, role: record.role };
   }
 
+  /**
+   * Identity-revoke trail for a human auditor. Extra keys that may sit on
+   * disk stay off this projection so CLI / Portal / MCP cannot disagree
+   * about what an audit view may show. Reading does not rewrite the roster.
+   */
   async listRevokes(actor: Actor): Promise<RevokeRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listRevokes();
-    return records.map((record) => structuredClone(record));
+    return records.map(publicRevoke);
   }
 
   async listCredentialRevokes(actor: Actor): Promise<CredentialRevokeRecord[]> {
@@ -709,6 +714,17 @@ function publicGrant(record: GrantRecord): GrantRecord {
     role: record.role,
     grantedBy: { id: record.grantedBy.id, kind: record.grantedBy.kind },
     grantedAt: record.grantedAt,
+  };
+}
+
+function publicRevoke(record: RevokeRecord): RevokeRecord {
+  return {
+    id: record.id,
+    subjectId: record.subjectId,
+    kind: record.kind,
+    role: record.role,
+    revokedBy: { id: record.revokedBy.id, kind: record.revokedBy.kind },
+    revokedAt: record.revokedAt,
   };
 }
 

@@ -31,6 +31,7 @@ Commands:
   identity revoke   --identities <path> --id <id> --session <token> --sessions <path>
   identity list     --identities <path> [--session <token> --sessions <path>]
   identity grants   --identities <path> --session <token> --sessions <path>
+  identity revokes  --identities <path> --session <token> --sessions <path>
   identity sessions --identities <path> --session <token> --sessions <path>
   identity credentials --identities <path> --session <token> --sessions <path>
   identity credential issue --identities <path> --sessions <path> --id <subject> [--session <token>]
@@ -465,6 +466,9 @@ async function runIdentity(
   }
   if (action === "grants") {
     return ok(await service.listGrants(actor));
+  }
+  if (action === "revokes") {
+    return ok(await service.listRevokes(actor));
   }
   if (action === "sessions") {
     return ok(await service.listSessions(actor));
