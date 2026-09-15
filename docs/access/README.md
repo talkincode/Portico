@@ -21,4 +21,5 @@ Portico 的访问控制（Access Control）系统旨在为**人与 Agent 共存�
 - [角色模型与权限矩阵](roles.md)：详解 `auditor`、`maintainer` 与 `reader` 的权限差异，以及主体类型（`human` vs `agent`）的刚性约束。
 - [首位人类审计者引导](bootstrap.md)：解析安全 Bootstrap 机制如何实现无需硬编码管理员密码的初始入驻。
 - [凭证签发与登录会话](sessions.md)：展示基于 `pct1_...` 凭证换取 `pst1_...` 会话的完整工作流与跨协议鉴权（CLI / Portal / MCP）。
+- [Cloudflare Access JWT 映射](cf-access.md)：Portal 可选、默认关闭的 JWT 映射；密钥与登录界面留在 Cloudflare 边缘，本仓库只认已校验 email。
 - [身份注销与凭证作废](revocation.md)：剖析软作废（Credential Revoke）与硬吊销（Identity Revoke）的机制差异及其安全回滚保证。

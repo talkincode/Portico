@@ -30,7 +30,7 @@ deno task cli -- catalog list \
 ```
 
 ### 2. Web Portal 与 REST API
-支持标准 HTTP Header。可选的 Cloudflare Access JWT（`Cf-Access-Jwt-Assertion`）只在 Portal 进程、且环境变量显式启用时生效；明文 `Cf-Access-Authenticated-User-Email` 不是证明。Gateway 与 MCP 忽略该头。
+支持标准 HTTP Header。可选的 Cloudflare Access JWT（`Cf-Access-Jwt-Assertion`）只在 Portal 进程、且环境变量显式启用时生效；明文 `Cf-Access-Authenticated-User-Email` 不是证明。Gateway 与 MCP 忽略该头。Portico 侧步骤见 [Cloudflare Access JWT 映射](cf-access.md)。
 ```bash
 # 推荐方式：标准 Authorization Bearer
 curl -s -H "Authorization: Bearer pst1_1a2b3c4d5e..." http://127.0.0.1:8788/api/catalog
