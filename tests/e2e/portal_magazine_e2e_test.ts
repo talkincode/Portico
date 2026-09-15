@@ -212,3 +212,42 @@ Deno.test("E2E: magazine search is a GET over authorized surfaces, not a CMS art
     assert(!anonHtml.includes("jsr:@example/docs-writer"));
   });
 });
+
+Deno.test("E2E: reading-page chrome keeps all-channels and search query", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-magazine-nav-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+
+  await withPortal(catalog, identities, async (base) => {
+    const unfiltered = await fetch(`${base}/s/docs-writer`, { headers: readerHeaders() });
+    assertEquals(unfiltered.status, 200);
+    const unfilteredHtml = await unfiltered.text();
+    assert(unfilteredHtml.includes('<a class="active" href="/">内容</a>'));
+    assert(unfilteredHtml.includes('<a class="" href="/">专题</a>'));
+    assert(!unfilteredHtml.includes('href="/?channel=web">专题</a>'));
+
+    const searched = await fetch(`${base}/s/docs-writer?q=Writer&channel=cli`, {
+      headers: readerHeaders(),
+    });
+    assertEquals(searched.status, 200);
+    const searchedHtml = await searched.text();
+    assert(searchedHtml.includes('<a class="active" href="/?channel=cli&amp;q=Writer">专题</a>'));
+    assert(searchedHtml.includes('href="/?q=Writer">首页</a>'));
+    assert(searchedHtml.includes('href="/s/docs-writer?channel=cli&amp;q=Writer"'));
+  });
+});

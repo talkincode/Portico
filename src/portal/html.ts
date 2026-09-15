@@ -908,7 +908,7 @@ export function renderMagazinePage(input: MagazinePageInput): string {
     ? undefined
     : input.view.surfaces.find((item) => item.governanceState === "approved_public");
   const main = selected
-    ? renderReading(input.view.surfaces, selected, input.theme, input.channel)
+    ? renderReading(input.view.surfaces, selected, input.theme, input.channel, input.q)
     : renderHome(input.view.surfaces, hero, input.theme, input.channel, input.q);
   const side = selected ? "" : renderSidebar(picks, input.theme, input.channel, path);
   const frameClass = selected ? "frame reading" : "frame home";
@@ -959,8 +959,8 @@ function renderChrome(input: {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
   const q = input.q;
   const contentHref = withQuery("/", input.theme, null, q);
-  const topicHref = withQuery("/", input.theme, input.channel ?? "web", q);
-  const contentActive = input.channel === null && !input.path.startsWith("/s/") ? " active" : "";
+  const topicHref = withQuery("/", input.theme, input.channel, q);
+  const contentActive = input.channel === null ? " active" : "";
   const topicActive = input.channel !== null ? " active" : "";
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
@@ -1063,8 +1063,9 @@ function renderReading(
   selected: AgentSurface,
   theme: ThemeMode,
   channel: ChannelFilter,
+  q?: string,
 ): string {
-  const contentHref = withQuery("/", theme, null);
+  const contentHref = withQuery("/", theme, null, q);
   const cards = surfaces.map((surface, idx) =>
     renderCard(surface, theme, channel, { compact: true, currentId: selected.id, index: idx })
   ).join("");
@@ -1113,7 +1114,7 @@ function renderReading(
         <h3>已登记服务</h3>
         <span class="count-badge">${surfaces.length} 个入口</span>
       </div>
-      ${renderTopics(theme, channel, `/s/${encodeURIComponent(selected.id)}`)}
+      ${renderTopics(theme, channel, `/s/${encodeURIComponent(selected.id)}`, q)}
       ${cards || `<p class="empty">没有可见的 Agent 表面。</p>`}
     </section>
 
@@ -1389,7 +1390,7 @@ function renderSidebar(
     </aside>`;
 }
 
-function renderTopics(theme: ThemeMode, channel: ChannelFilter, path: string): string {
+function renderTopics(theme: ThemeMode, channel: ChannelFilter, path: string, q?: string): string {
   const items: Array<{ id: ChannelFilter; label: string }> = [
     { id: null, label: "全部" },
     { id: "web", label: "Web" },
@@ -1397,7 +1398,7 @@ function renderTopics(theme: ThemeMode, channel: ChannelFilter, path: string): s
     { id: "mcp", label: "MCP" },
   ];
   const links = items.map((item) => {
-    const href = withQuery(path.startsWith("/s/") ? path : "/", theme, item.id);
+    const href = withQuery(path.startsWith("/s/") ? path : "/", theme, item.id, q);
     const active = channel === item.id ? " active" : "";
     return `<li><a class="${active.trim()}" href="${escapeHtml(href)}">${item.label}</a></li>`;
   }).join("");
