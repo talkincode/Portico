@@ -402,3 +402,59 @@ Deno.test("lookupHumanByEmail maps a roster address and does not write", async (
   assertEquals(await service.lookupHumanByEmail("not-an-email"), null);
   assertEquals(await Deno.readFile(path), before);
 });
+
+Deno.test("whoami returns the proven roster identity; anonymous is FORBIDDEN", async () => {
+  const service = await bootstrapped();
+  await service.grant(auditor, {
+    id: maintainer.id,
+    kind: "agent",
+    role: "maintainer",
+  });
+  await service.grant(auditor, {
+    id: reader.id,
+    kind: "human",
+    role: "reader",
+    email: "reader@example.invalid",
+  });
+
+  assertEquals(await service.whoami(auditor), {
+    id: auditor.id,
+    kind: "human",
+    role: "auditor",
+  });
+  assertEquals(await service.whoami(maintainer), {
+    id: maintainer.id,
+    kind: "agent",
+    role: "maintainer",
+  });
+  const me = await service.whoami(reader);
+  assertEquals(me, { id: reader.id, kind: "human", role: "reader" });
+  assertEquals("email" in me, false);
+
+  await assertRejectsCode(
+    () => service.whoami({ id: "anonymous", kind: "human", role: "anonymous" }),
+    "FORBIDDEN",
+  );
+  await assertRejectsCode(
+    () => service.whoami({ id: "human:nobody", kind: "human", role: "reader" }),
+    "FORBIDDEN",
+  );
+});
+
+Deno.test("whoami does not rewrite the roster file", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-access-whoami-" });
+  const path = `${dir}/identities.json`;
+  const service = new AccessService(new FileIdentityStore(path));
+  await service.grant(null, {
+    id: auditor.id,
+    kind: "human",
+    role: "auditor",
+  });
+  const before = await Deno.readFile(path);
+  assertEquals(await service.whoami(auditor), {
+    id: auditor.id,
+    kind: "human",
+    role: "auditor",
+  });
+  assertEquals(await Deno.readFile(path), before);
+});

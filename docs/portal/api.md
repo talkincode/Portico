@@ -83,3 +83,15 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/grants
 
 > [!NOTE]
 > 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是授权写入入口；`POST` 返回 `405`。
+
+---
+
+### 6. 当前身份接口 (`GET /api/whoami`)
+返回当前已证明身份的 id / kind / role。与 CLI `identity whoami`、MCP `portico_whoami` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/whoami
+```
+
+> [!NOTE]
+> 已登录会话（含 Portal 上已校验的 Cloudflare Access 映射）看到自己。匿名得到 `403 Forbidden`。这不是登录入口；`POST` 返回 `405`。载荷不含邮箱、凭证或会话令牌。
