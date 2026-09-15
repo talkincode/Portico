@@ -35,7 +35,8 @@ import { isRecord } from "./types.ts";
  * CLI and the Portal. Nothing here executes, proxies or orchestrates anything
  * — Portico still does not run other people's tools. `portico_whoami` is the
  * current session identity, not a login. `portico_sessions` is the auditor
- * session trail, not a way to mint or revoke tokens.
+ * session trail, not a way to mint or revoke tokens. `portico_credentials`
+ * is the auditor credential inventory, not a way to issue tokens.
  */
 
 export interface McpTool {
@@ -166,6 +167,12 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_credentials",
+    description:
+      "列出登录凭证轨迹（id / 主体 / credentialRef / 签发者 / 时间，作废则含 revokedAt）。等价于 CLI `identity credentials` 与 Portal `GET /api/credentials`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回令牌或哈希。读操作不写会话文件。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_page",
     description:
       "读取维护者排布的门户组件盒（当前身份可见的卡片与提示）。等价于 CLI `page get` 与 Portal `GET /api/page`。匿名看不到内部卡片；读操作不写 page 或目录。Portico 不是 CMS，不能通过此工具改页面。",
@@ -225,6 +232,8 @@ export async function callTool(
       return await deps.access.whoami(actor);
     case "portico_sessions":
       return await deps.access.listSessions(actor);
+    case "portico_credentials":
+      return await deps.access.listCredentials(actor);
     case "portico_page":
       if (!deps.pages) return { components: [] };
       return await deps.pages.get(actor);

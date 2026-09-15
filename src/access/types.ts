@@ -135,3 +135,16 @@ export interface SessionAuditView {
   expiresAt: string;
   revokedAt?: string;
 }
+
+/**
+ * Auditor-facing credential row. The one-time token and its hash stay in the
+ * store; this projection is identity, issuer and timestamps only.
+ */
+export interface CredentialAuditView {
+  id: string;
+  subjectId: string;
+  credentialRef: string;
+  issuedBy: MaintainerRef;
+  issuedAt: string;
+  revokedAt?: string;
+}

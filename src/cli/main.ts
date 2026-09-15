@@ -32,6 +32,7 @@ Commands:
   identity list     --identities <path> [--session <token> --sessions <path>]
   identity grants   --identities <path> --session <token> --sessions <path>
   identity sessions --identities <path> --session <token> --sessions <path>
+  identity credentials --identities <path> --session <token> --sessions <path>
   identity credential issue --identities <path> --sessions <path> --id <subject> [--session <token>]
   identity credential revoke --identities <path> --sessions <path> --id <subject> --session <token>
   identity login    --identities <path> --sessions <path> --id <id> --token <issued>
@@ -468,6 +469,9 @@ async function runIdentity(
   if (action === "sessions") {
     return ok(await service.listSessions(actor));
   }
+  if (action === "credentials") {
+    return ok(await service.listCredentials(actor));
+  }
 
   throw new UsageError(action ? `unknown identity action '${action}'` : "missing identity action");
 }
@@ -477,6 +481,7 @@ function needsSessionStore(action: string | undefined, subaction?: string): bool
     action === "logout" ||
     action === "whoami" ||
     action === "sessions" ||
+    action === "credentials" ||
     (action === "credential" && (subaction === "issue" || subaction === "revoke"));
 }
 

@@ -107,6 +107,9 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/sessions") {
       return jsonOk(await context.access.listSessions(actor));
     }
+    if (url.pathname === "/api/credentials") {
+      return jsonOk(await context.access.listCredentials(actor));
+    }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));
     }

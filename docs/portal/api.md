@@ -107,3 +107,15 @@ curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/sessions
 
 > [!NOTE]
 > 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是登录或作废入口；`POST` 返回 `405`。载荷不含令牌或哈希。
+
+---
+
+### 8. 登录凭证轨迹 (`GET /api/credentials`)
+列出登录凭证轨迹（id / 主体 / credentialRef / 签发者 / 签发时间，作废则含 `revokedAt`）。与 CLI `identity credentials`、MCP `portico_credentials` 同一载荷。
+
+```bash
+curl -s -H "Authorization: Bearer pst1_..." http://127.0.0.1:8788/api/credentials
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是签发或作废入口；`POST` 返回 `405`。载荷不含令牌或哈希。

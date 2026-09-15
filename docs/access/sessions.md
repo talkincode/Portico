@@ -60,6 +60,16 @@ curl -s -X POST http://127.0.0.1:8790 \
 
 三者返回同一批 `id` / `subjectId` / `createdAt` / `expiresAt`（已作废则含 `revokedAt`）。维护者、只读者与匿名得到 `FORBIDDEN`。读操作不改 `sessions.json`。
 
+## 审计者查看凭证轨迹
+
+签发与作废仍走 CLI。人类审计者可以用同一只读投影核对已签发凭证，而不接触令牌或哈希：
+
+- CLI：`identity credentials`
+- Portal：`GET /api/credentials`
+- MCP：`portico_credentials`
+
+三者返回同一批 `id` / `subjectId` / `credentialRef` / `issuedBy` / `issuedAt`（已作废则含 `revokedAt`）。维护者、只读者与匿名得到 `FORBIDDEN`。读操作不改 `sessions.json`。这不是签发或作废入口。
+
 ---
 
 ## 伪造头全面拦截机制
