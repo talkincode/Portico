@@ -13,6 +13,7 @@
   - [角色模型与权限矩阵](access/roles.md)
   - [首位人类审计者引导](access/bootstrap.md)
   - [凭证签发与登录会话](access/sessions.md)
+  - [Cloudflare Access JWT 映射](access/cf-access.md)
   - [身份注销与凭证作废](access/revocation.md)
 
 - [目录与生命周期治理](catalog/README.md)
