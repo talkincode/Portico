@@ -106,6 +106,12 @@ export const TOOLS: readonly McpTool[] = [
     },
   },
   {
+    name: "portico_mcp",
+    description:
+      "列出当前身份可见的 MCP 连接信息（endpoint 与 connect.mode=`direct`）。等价于 CLI `mcp list` 与 Portal `GET /api/mcp`。CLI 包坐标不会出现。匿名只看到已审批公开记录。Portico 不代理流量、不执行工具。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_dashboard",
     description:
       "治理概览：当前身份可见的记录数与各治理状态计数。等价于 CLI `catalog dashboard` 与 Portal `GET /api/dashboard`。这不是运行指标大盘。",
@@ -239,6 +245,8 @@ export async function callTool(
         `surface '${id}' has no single authorized entry`,
       );
     }
+    case "portico_mcp":
+      return await deps.catalog.listMcp(actor);
     case "portico_dashboard":
       return dashboardFrom(await deps.catalog.list(actor));
     case "portico_audit": {

@@ -14,13 +14,14 @@
 
 ## 内置治理工具一览
 
-Portico MCP 服务端暴露了 15 个经过安全收敛的只读治理工具：
+Portico MCP 服务端暴露了 16 个经过安全收敛的只读治理工具：
 
 | 工具名称 (Tool Name) | 参数说明 | 权限要求 | 功能描述 |
 | :--- | :--- | :--- | :--- |
 | **`portico_list`** | `{ channel?: string, state?: string }` | 匿名或持会话 | 查询当前可见的服务列表。匿名请求仅返回 `approved_public` 记录。 |
 | **`portico_describe`** | `{ id: string }` | 匿名或持会话 | 查询指定服务的元数据与连接信息。若无权访问返回 NOT_FOUND。 |
 | **`portico_entry`** | `{ id: string, channel?: string }` | 匿名或持会话 | 获取特定渠道的直连端点或包坐标。 |
+| **`portico_mcp`** | `{}` | 匿名或持会话 | 列出当前身份可见的 MCP 连接信息。与 CLI `mcp list`、Portal `GET /api/mcp` 同一载荷。CLI 包坐标不会出现。匿名只看到已审批公开记录。不代理、不执行。 |
 | **`portico_dashboard`**| `{}` | 匿名或持会话 | 获取系统资产大盘统计（服务总数、渠道分布、公开数）。 |
 | **`portico_audit`** | `{ q?: string, kind?: string, action?: string, subject?: string }` | **仅限人类审计者** | 查询审计时间线流水。非审计者调用返回 `FORBIDDEN`。 |
 | **`portico_approvals`** | `{}` | 已登录会话；匿名为空列表 | 列出公开边界审批记录（通过 / 拒绝 / 撤回）。与 CLI `catalog approvals`、Portal `GET /api/approvals` 同一载荷。 |
