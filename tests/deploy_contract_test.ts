@@ -237,3 +237,40 @@ for (const [name, unit] of Object.entries(UNITS)) {
     );
   });
 }
+
+Deno.test("deploy contract: drop-in example keeps live bind out of the repo", async () => {
+  const text = await Deno.readTextFile(`${ROOT}deploy/drop-in.example.conf`);
+  assert(
+    text.includes("[Service]"),
+    "the drop-in example must be a systemd service override",
+  );
+  assert(
+    text.includes("WorkingDirectory=/opt/portico"),
+    "the drop-in example must use the same example checkout path as the unit templates",
+  );
+  assert(
+    text.includes("Environment=PORTICO_DEPLOY_BIND=127.0.0.1"),
+    "the drop-in example must default the bind address to loopback",
+  );
+  assert(
+    /^ExecStart=$/m.test(text),
+    "the drop-in example must clear ExecStart before resetting it",
+  );
+  assert(
+    text.includes("ExecStart=/opt/portico/deploy/run-portal.sh"),
+    "the drop-in example must show how to point ExecStart at the versioned script",
+  );
+  assert(
+    !text.includes("0.0.0.0"),
+    "the drop-in example must not bind all interfaces",
+  );
+  assert(
+    !/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/
+      .test(text),
+    "the drop-in example must not embed an RFC1918 address",
+  );
+  assert(
+    !text.includes("/home/"),
+    "the drop-in example must not use a host home directory",
+  );
+});
