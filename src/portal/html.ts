@@ -1078,25 +1078,25 @@ function renderReading(
       </div>
       <nav class="rail-nav">
         <a class="rail-link${channel === null ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, null))
+    escapeHtml(withQuery("/", theme, null, q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           <span>全部服务</span>
         </a>
         <a class="rail-link${channel === "web" ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, "web"))
+    escapeHtml(withQuery("/", theme, "web", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           <span>Web 渠道</span>
         </a>
         <a class="rail-link${channel === "cli" ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, "cli"))
+    escapeHtml(withQuery("/", theme, "cli", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
           <span>CLI 工具</span>
         </a>
         <a class="rail-link${channel === "mcp" ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, "mcp"))
+    escapeHtml(withQuery("/", theme, "mcp", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           <span>MCP 服务</span>
@@ -1114,7 +1114,6 @@ function renderReading(
         <h3>已登记服务</h3>
         <span class="count-badge">${surfaces.length} 个入口</span>
       </div>
-      ${renderTopics(theme, channel, `/s/${encodeURIComponent(selected.id)}`, q)}
       ${cards || `<p class="empty">没有可见的 Agent 表面。</p>`}
     </section>
 
@@ -1388,21 +1387,6 @@ function renderSidebar(
         <span class="brand-mark">PORTICO</span>
       </div>
     </aside>`;
-}
-
-function renderTopics(theme: ThemeMode, channel: ChannelFilter, path: string, q?: string): string {
-  const items: Array<{ id: ChannelFilter; label: string }> = [
-    { id: null, label: "全部" },
-    { id: "web", label: "Web" },
-    { id: "cli", label: "CLI" },
-    { id: "mcp", label: "MCP" },
-  ];
-  const links = items.map((item) => {
-    const href = withQuery(path.startsWith("/s/") ? path : "/", theme, item.id, q);
-    const active = channel === item.id ? " active" : "";
-    return `<li><a class="${active.trim()}" href="${escapeHtml(href)}">${item.label}</a></li>`;
-  }).join("");
-  return `<nav class="topics" style="margin-bottom: 1rem;"><p class="kicker" style="margin-bottom: 0.4rem;">专题分类</p><ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 0.75rem;">${links}</ul></nav>`;
 }
 
 function renderHero(surface: AgentSurface, theme: ThemeMode, channel: ChannelFilter): string {

@@ -337,6 +337,47 @@ Deno.test("channel-filtered reading page highlights 专题 without dropping the 
   assertEquals(topic.className, "active");
 });
 
+function railLinks(html: string): Array<{ className: string; href: string; label: string }> {
+  const matches = html.matchAll(
+    /<a class="(rail-link[^"]*)" href="([^"]*)">[\s\S]*?<span>([^<]*)<\/span>/g,
+  );
+  return [...matches].map((match) => ({
+    className: match[1],
+    href: match[2],
+    label: match[3],
+  }));
+}
+
+Deno.test("reading page keeps one channel navigator that returns to the filtered list", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const rails = railLinks(html);
+  assertEquals(rails.map((item) => item.label), ["全部服务", "Web 渠道", "CLI 工具", "MCP 服务"]);
+  assertEquals(rails.map((item) => item.href), [
+    "/",
+    "/?channel=web",
+    "/?channel=cli",
+    "/?channel=mcp",
+  ]);
+  assert(
+    rails.every((item) => !item.href.startsWith("/s/")),
+    "the remaining channel navigator must leave the reading page",
+  );
+  const active = rails.find((item) => item.className.includes("active"));
+  assertEquals(active?.label, "CLI 工具");
+  assert(!html.includes("专题分类"), "reading page must not repeat a second channel navigator");
+  assert(!html.includes('class="topics"'), "topic tabs must not remain as a second channel set");
+});
+
 Deno.test("reading page channel tabs and breadcrumb home keep the search query", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
@@ -358,12 +399,13 @@ Deno.test("reading page channel tabs and breadcrumb home keep the search query",
   if (!home) throw new Error("reading page must have a breadcrumb home link");
   assertEquals(home[1], "/?q=Writer");
 
-  assert(
-    html.includes('href="/s/docs-writer?channel=cli&amp;q=Writer"'),
-    "topic tabs on the reading page must keep q",
-  );
-  assert(
-    html.includes('href="/s/docs-writer?q=Writer"'),
-    "the all-channels topic tab must keep q without inventing a channel",
-  );
+  const rails = railLinks(html);
+  assertEquals(rails.map((item) => [item.label, item.href]), [
+    ["全部服务", "/?q=Writer"],
+    ["Web 渠道", "/?channel=web&amp;q=Writer"],
+    ["CLI 工具", "/?channel=cli&amp;q=Writer"],
+    ["MCP 服务", "/?channel=mcp&amp;q=Writer"],
+  ]);
+  assert(!html.includes("专题分类"), "keeping q must not revive the second channel navigator");
+  assert(!html.includes('class="topics"'));
 });
