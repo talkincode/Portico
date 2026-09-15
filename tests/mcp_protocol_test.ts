@@ -7,6 +7,7 @@ import {
   type CatalogStore,
   MemoryCatalogStore,
 } from "../src/catalog/mod.ts";
+import { GatewayService, MemoryGatewayAuditStore } from "../src/gateway/mod.ts";
 import { handleMcpRequest, type McpContext } from "../src/mcp/mod.ts";
 import { MemoryPageStore, PageService } from "../src/ui/mod.ts";
 
@@ -137,6 +138,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_sessions",
     "portico_credentials",
     "portico_credential_revokes",
+    "portico_gateway_audit",
     "portico_page",
   ]);
 });
@@ -612,6 +614,90 @@ Deno.test("portico_credential_revokes is the same trail for auditor; maintainer,
   });
   assertEquals(anonCall.body.result?.isError, true);
   assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
+});
+
+Deno.test("portico_gateway_audit is the same trail for auditor; maintainer, reader and anonymous are FORBIDDEN", async () => {
+  const { context, catalog } = await seeded();
+  const gateway = new GatewayService(catalog, new MemoryGatewayAuditStore());
+  const reader: Actor = { id: "human:reader", kind: "human", role: "reader" };
+  await gateway.authorize(reader, "docs-mcp");
+  const withGateway: McpContext = { ...context, gateway };
+  const expected = await gateway.listAudit(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].surfaceId, "docs-mcp");
+  assertEquals(expected[0].decision, "allowed");
+
+  const auditorCall = await rpc(withGateway, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_gateway_audit", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(auditorCall.body.result?.isError, undefined);
+  assertEquals(envelope(auditorCall.body).data, expected);
+  assertEquals(
+    JSON.stringify(envelope(auditorCall.body).data).includes("secretHash") ||
+      JSON.stringify(envelope(auditorCall.body).data).includes("tokenHash") ||
+      JSON.stringify(envelope(auditorCall.body).data).includes("pct1_") ||
+      JSON.stringify(envelope(auditorCall.body).data).includes("pst1_"),
+    false,
+  );
+
+  const maintainerCall = await rpc(withGateway, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_gateway_audit", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("agent:docs-bot")!,
+    },
+  });
+  assertEquals(maintainerCall.body.result?.isError, true);
+  assertEquals(envelope(maintainerCall.body).error?.code, "FORBIDDEN");
+
+  const readerCall = await rpc(withGateway, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_gateway_audit", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(readerCall.body.result?.isError, true);
+  assertEquals(envelope(readerCall.body).error?.code, "FORBIDDEN");
+
+  const anonCall = await rpc(withGateway, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: { name: "portico_gateway_audit", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, true);
+  assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
+
+  const missing = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 5,
+    method: "tools/call",
+    params: { name: "portico_gateway_audit", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(missing.body.result?.isError, undefined);
+  assertEquals(envelope(missing.body).data, []);
 });
 
 Deno.test("portico_revokes is the same trail for auditor; maintainer, reader and anonymous are FORBIDDEN", async () => {

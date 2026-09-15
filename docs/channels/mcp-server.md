@@ -14,7 +14,7 @@
 
 ## 内置治理工具一览
 
-Portico MCP 服务端暴露了 13 个经过安全收敛的只读治理工具：
+Portico MCP 服务端暴露了 15 个经过安全收敛的只读治理工具：
 
 | 工具名称 (Tool Name) | 参数说明 | 权限要求 | 功能描述 |
 | :--- | :--- | :--- | :--- |
@@ -31,6 +31,7 @@ Portico MCP 服务端暴露了 13 个经过安全收敛的只读治理工具：
 | **`portico_sessions`** | `{}` | **仅限人类审计者** | 列出登录会话轨迹（id / 主体 / 时间，作废则含 revokedAt）。与 CLI `identity sessions`、Portal `GET /api/sessions` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回令牌或哈希。 |
 | **`portico_credentials`** | `{}` | **仅限人类审计者** | 列出登录凭证轨迹（id / 主体 / credentialRef / 签发者 / 时间，作废则含 revokedAt）。与 CLI `identity credentials`、Portal `GET /api/credentials` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回令牌或哈希。 |
 | **`portico_credential_revokes`** | `{}` | **仅限人类审计者** | 列出追加式登录凭证作废轨迹。与 CLI `identity credential revokes`、Portal `GET /api/credential-revokes` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。不返回令牌或哈希。读操作不写名册。 |
+| **`portico_gateway_audit`** | `{}` | **仅限人类审计者** | 列出 Gateway 访问审计。与 CLI `gateway audit`、Portal `GET /api/gateway-audit` 同一载荷。维护者、只读与匿名返回 `FORBIDDEN`。读操作不写目录或审计文件。这不是授权入口，也不执行工具。 |
 | **`portico_page`** | `{}` | 匿名或持会话 | 读取维护者排布的门户组件盒。与 CLI `page get`、Portal `GET /api/page` 同一载荷。匿名看不到内部卡片。读操作不写 page 或目录。 |
 
 ---

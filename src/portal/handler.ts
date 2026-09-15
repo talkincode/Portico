@@ -11,7 +11,7 @@ import {
   ErrorCode,
   parseCatalogQuery,
 } from "../catalog/mod.ts";
-import type { GatewayService } from "../gateway/mod.ts";
+import { type GatewayService, listGatewayAudit } from "../gateway/mod.ts";
 import { type PageService } from "../ui/mod.ts";
 import {
   prefersDark,
@@ -115,6 +115,9 @@ export async function handlePortalRequest(
     }
     if (url.pathname === "/api/credential-revokes") {
       return jsonOk(await context.access.listCredentialRevokes(actor));
+    }
+    if (url.pathname === "/api/gateway-audit") {
+      return jsonOk(await listGatewayAudit(context.gateway, actor));
     }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));
