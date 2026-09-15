@@ -131,6 +131,19 @@ for (const [name, contract] of Object.entries(CONTRACTS)) {
   });
 }
 
+Deno.test("deploy contract: portal and mcp are told where the composed page lives", async () => {
+  // Otherwise Portal `GET /api/page` and MCP `portico_page` silently return an
+  // empty composition while `page get --page` shows cards — the three
+  // entrances disagreeing about the same question.
+  for (const name of ["portal", "mcp"] as const) {
+    const source = await script(CONTRACTS[name].file);
+    assert(
+      source.includes("PORTICO_PAGE_PATH="),
+      `${CONTRACTS[name].file} must pass PORTICO_PAGE_PATH`,
+    );
+  }
+});
+
 Deno.test("deploy contract: every entrance is told where the Gateway audit lives", async () => {
   // Otherwise the Portal and MCP timelines silently omit Gateway access events
   // while `audit list --audit` includes them — the three entrances disagreeing

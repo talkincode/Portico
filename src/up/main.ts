@@ -262,6 +262,7 @@ if (import.meta.main) {
         PORTICO_IDENTITIES_PATH: setup.identities,
         PORTICO_SESSIONS_PATH: setup.sessions,
         PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
+        PORTICO_PAGE_PATH: setup.page,
         PORTICO_BIND: setup.hostname,
         PORTICO_PORT: String(setup.mcpPort),
       }),

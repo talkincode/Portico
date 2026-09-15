@@ -17,6 +17,7 @@ import {
   ErrorCode,
   parseCatalogQuery,
 } from "../catalog/mod.ts";
+import type { PageService } from "../ui/mod.ts";
 import { isRecord } from "./types.ts";
 
 /**
@@ -46,6 +47,7 @@ export interface McpToolDeps {
   catalog: CatalogService;
   audit: AuditService;
   access: AccessService;
+  pages?: PageService;
 }
 
 export const TOOLS: readonly McpTool[] = [
@@ -156,6 +158,12 @@ export const TOOLS: readonly McpTool[] = [
       "返回当前已证明身份的 id / kind / role。等价于 CLI `identity whoami` 与 Portal `GET /api/whoami`。已登录会话看到自己；匿名得到 FORBIDDEN。不返回邮箱、凭证或会话。读操作不写名册。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
+  {
+    name: "portico_page",
+    description:
+      "读取维护者排布的门户组件盒（当前身份可见的卡片与提示）。等价于 CLI `page get` 与 Portal `GET /api/page`。匿名看不到内部卡片；读操作不写 page 或目录。Portico 不是 CMS，不能通过此工具改页面。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
 export function isTool(name: string): boolean {
@@ -208,6 +216,9 @@ export async function callTool(
       return await deps.access.listGrants(actor);
     case "portico_whoami":
       return await deps.access.whoami(actor);
+    case "portico_page":
+      if (!deps.pages) return { components: [] };
+      return await deps.pages.get(actor);
     default:
       throw new CatalogError(ErrorCode.NOT_FOUND, `unknown tool '${name}'`);
   }
