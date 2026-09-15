@@ -86,6 +86,18 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/grants
 
 ---
 
+### 5a. 身份撤回轨迹接口 (`GET /api/revokes`)
+列出追加式身份撤回记录。与 CLI `identity revokes`、MCP `portico_revokes` 同一载荷。
+
+```bash
+curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/revokes
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是撤回写入入口；`POST` 返回 `405`。载荷不含凭证或会话令牌。
+
+---
+
 ### 6. 当前身份接口 (`GET /api/whoami`)
 返回当前已证明身份的 id / kind / role。与 CLI `identity whoami`、MCP `portico_whoami` 同一载荷。
 

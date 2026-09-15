@@ -132,6 +132,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_approvals",
     "portico_identities",
     "portico_grants",
+    "portico_revokes",
     "portico_whoami",
     "portico_sessions",
     "portico_credentials",
@@ -535,6 +536,77 @@ Deno.test("portico_credentials is the same trail for auditor; maintainer, reader
     id: 4,
     method: "tools/call",
     params: { name: "portico_credentials", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, true);
+  assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
+});
+
+Deno.test("portico_revokes is the same trail for auditor; maintainer, reader and anonymous are FORBIDDEN", async () => {
+  const { context } = await seeded();
+  await context.access.grant(auditor, {
+    id: "agent:retired-bot",
+    kind: "agent",
+    role: "maintainer",
+  });
+  await context.access.revoke(auditor, { id: "agent:retired-bot" });
+  const expected = await context.access.listRevokes(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].subjectId, "agent:retired-bot");
+
+  const auditorCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_revokes", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:security-auditor")!,
+    },
+  });
+  assertEquals(auditorCall.body.result?.isError, undefined);
+  assertEquals(envelope(auditorCall.body).data, expected);
+  assertEquals(
+    JSON.stringify(envelope(auditorCall.body).data).includes("secretHash") ||
+      JSON.stringify(envelope(auditorCall.body).data).includes("tokenHash") ||
+      JSON.stringify(envelope(auditorCall.body).data).includes("pct1_") ||
+      JSON.stringify(envelope(auditorCall.body).data).includes("pst1_"),
+    false,
+  );
+
+  const maintainerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_revokes", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("agent:docs-bot")!,
+    },
+  });
+  assertEquals(maintainerCall.body.result?.isError, true);
+  assertEquals(envelope(maintainerCall.body).error?.code, "FORBIDDEN");
+
+  const readerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_revokes", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(readerCall.body.result?.isError, true);
+  assertEquals(envelope(readerCall.body).error?.code, "FORBIDDEN");
+
+  const anonCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: { name: "portico_revokes", arguments: {} },
   });
   assertEquals(anonCall.body.result?.isError, true);
   assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
