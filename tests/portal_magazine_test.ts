@@ -265,7 +265,7 @@ Deno.test("magazine search is a GET form over authorized surfaces, not a CMS art
 
   const home = await handlePortalRequest(new Request("http://portico.local/"), context);
   const homeHtml = await home.text();
-  assert(homeHtml.includes('<form'), "search must submit without script");
+  assert(homeHtml.includes("<form"), "search must submit without script");
   assert(homeHtml.includes('name="q"'));
   assert(homeHtml.includes("搜索已授权入口"));
   assert(!homeHtml.includes("搜索文章、报告或主题"));
@@ -281,10 +281,89 @@ Deno.test("magazine search is a GET form over authorized surfaces, not a CMS art
   assert(!readerHtml.includes("Docs Web"), "q must not mix unrelated visible records");
   assert(readerHtml.includes('value="Writer"'), "the form must echo the query");
 
-  const anonMiss = await handlePortalRequest(new Request("http://portico.local/?q=Writer"), context);
+  const anonMiss = await handlePortalRequest(
+    new Request("http://portico.local/?q=Writer"),
+    context,
+  );
   const anonHtml = await anonMiss.text();
   assertEquals(anonMiss.status, 200);
   assert(!anonHtml.includes("Docs Writer"));
   assert(!anonHtml.includes("jsr:@example/docs-writer"));
   assert(anonHtml.includes("没有可见的 Agent 表面。") || !anonHtml.includes("data-id="));
+});
+
+function topbarLink(html: string, label: string): { className: string; href: string } {
+  const match = html.match(new RegExp(`<a class="([^"]*)" href="([^"]*)">${label}</a>`));
+  if (!match) throw new Error(`missing topbar link ${label}`);
+  return { className: match[1], href: match[2] };
+}
+
+Deno.test("unfiltered reading page does not default 专题 to web and highlights 内容", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const content = topbarLink(html, "内容");
+  const topic = topbarLink(html, "专题");
+  assertEquals(content.href, "/");
+  assertEquals(content.className, "active");
+  assertEquals(topic.href, "/");
+  assertEquals(topic.className, "");
+  assert(!topic.href.includes("channel=web"), "null channel is all, not a silent web filter");
+});
+
+Deno.test("channel-filtered reading page highlights 专题 without dropping the filter", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const content = topbarLink(html, "内容");
+  const topic = topbarLink(html, "专题");
+  assertEquals(content.href, "/");
+  assertEquals(content.className, "");
+  assertEquals(topic.href, "/?channel=cli");
+  assertEquals(topic.className, "active");
+});
+
+Deno.test("reading page channel tabs and breadcrumb home keep the search query", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const content = topbarLink(html, "内容");
+  const topic = topbarLink(html, "专题");
+  assertEquals(content.href, "/?q=Writer");
+  assertEquals(topic.href, "/?channel=cli&amp;q=Writer");
+
+  const home = html.match(/<nav class="breadcrumbs">\s*<a href="([^"]*)">首页<\/a>/);
+  if (!home) throw new Error("reading page must have a breadcrumb home link");
+  assertEquals(home[1], "/?q=Writer");
+
+  assert(
+    html.includes('href="/s/docs-writer?channel=cli&amp;q=Writer"'),
+    "topic tabs on the reading page must keep q",
+  );
+  assert(
+    html.includes('href="/s/docs-writer?q=Writer"'),
+    "the all-channels topic tab must keep q without inventing a channel",
+  );
 });
