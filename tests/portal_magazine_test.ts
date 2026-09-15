@@ -475,3 +475,129 @@ Deno.test("reading page breadcrumb channel keeps the search query", async () => 
   if (!home) throw new Error("reading page must have a breadcrumb home link");
   assertEquals(home[1], "/?q=Writer");
 });
+
+function locationPath(response: Response): string {
+  const location = response.headers.get("location");
+  if (!location) throw new Error("missing Location");
+  const url = new URL(location, "http://portico.local");
+  return `${url.pathname}${url.search}`;
+}
+
+Deno.test("reading page with a mismatched channel redirects to the record's own channel", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=mcp", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 302);
+  assertEquals(locationPath(page), "/s/docs-writer?channel=cli");
+  assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
+});
+
+Deno.test("reading page drops a q that does not match the selected record", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?q=zzz", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 302);
+  assertEquals(locationPath(page), "/s/docs-writer");
+});
+
+Deno.test("reading page keeps a matching q when rewriting a mismatched channel", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=mcp&q=Writer&theme=dark", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 302);
+  assertEquals(locationPath(page), "/s/docs-writer?channel=cli&q=Writer&theme=dark");
+});
+
+Deno.test("reading page with a matching filter still renders and includes the selected record", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=cli", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  assertEquals(page.headers.get("location"), null);
+  const html = await page.text();
+  assert(html.includes('class="detail"'));
+  assert(html.includes("1 个入口"));
+  assert(!html.includes("0 个入口"));
+});
+
+Deno.test("anonymous mismatched-channel reading of an internal record is still 404", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=mcp"),
+    context,
+  );
+  assertEquals(page.status, 404);
+  assertEquals(page.headers.get("location"), null);
+  const html = await page.text();
+  assert(!html.includes("Docs Writer"));
+  assert(!html.includes("jsr:@example/docs-writer"));
+  assert(!html.includes("/s/docs-writer?channel=cli"));
+});
+
+Deno.test("anonymous mismatched-channel reading of an approved public record redirects", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, publicWeb());
+  await context.catalog.publish(maintainer, { id: "docs-web", visibility: "public" });
+  await context.catalog.approve(auditor, { id: "docs-web" });
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-web?channel=mcp"),
+    context,
+  );
+  assertEquals(page.status, 302);
+  assertEquals(locationPath(page), "/s/docs-web?channel=web");
+});
+
+Deno.test("following a canonicalized reading URL never shows zero entries with a detail pane", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const mismatch = await handlePortalRequest(
+    new Request("http://portico.local/s/docs-writer?channel=mcp&q=zzz", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(mismatch.status, 302);
+  assertEquals(locationPath(mismatch), "/s/docs-writer?channel=cli");
+
+  const canonical = await handlePortalRequest(
+    new Request(new URL(mismatch.headers.get("location")!, "http://portico.local"), {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(canonical.status, 200);
+  const html = await canonical.text();
+  assert(html.includes('class="detail"'));
+  assert(html.includes("Docs Writer"));
+  assert(html.includes("1 个入口"));
+  assert(!html.includes("0 个入口"));
+});
