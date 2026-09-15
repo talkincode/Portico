@@ -6,12 +6,15 @@ export interface Identity {
   id: string;
   kind: ActorKind;
   role: GrantRole;
+  /** Optional unique address for a human identity. Never a second proof. */
+  email?: string;
 }
 
 export interface GrantInput {
   id: string;
   kind: ActorKind;
   role: GrantRole;
+  email?: string;
 }
 
 export interface GrantRecord {

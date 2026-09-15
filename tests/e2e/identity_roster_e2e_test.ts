@@ -6,8 +6,9 @@ import { bootEntrypoint } from "./process.ts";
 /**
  * Identity roster listing is one contract: CLI `identity list`, Portal
  * `GET /api/identities` and MCP `portico_identities` must return the same
- * id/kind/role rows for the same session. Readers and anonymous stay
- * FORBIDDEN. Reading must not rewrite the roster or leak secrets.
+ * id/kind/role rows (plus optional human email) for the same session.
+ * Readers and anonymous stay FORBIDDEN. Reading must not rewrite the roster
+ * or leak secrets. Email is not a second proof of identity.
  */
 
 const PORTAL = `${ROOT}src/portal/main.ts`;
@@ -23,6 +24,7 @@ interface IdentityRow {
   id: string;
   kind: string;
   role: string;
+  email?: string;
 }
 
 interface JsonRpcBody {
@@ -189,6 +191,89 @@ Deno.test("E2E: CLI, Portal and MCP identity list match for maintainer; reader a
       "reading the roster must not rewrite the catalog",
     );
     assert(cliMaintainer.body.data !== undefined);
+  } finally {
+    await portal.stop();
+    await mcp.stop();
+  }
+});
+
+Deno.test("E2E: optional human email is shared across CLI, Portal and MCP; agent email is refused", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-identities-email-e2e-" });
+  const dataDir = `${dir}/data`;
+  const catalog = `${dataDir}/catalog.json`;
+  const identities = `${dataDir}/identities.json`;
+  const sessions = `${dataDir}/sessions.json`;
+  await Deno.mkdir(dataDir, { recursive: true });
+  await bootstrapRoster(identities, sessions);
+
+  const granted = await runCli([
+    "identity",
+    "grant",
+    "--identities",
+    identities,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "human:mapped",
+    "--kind",
+    "human",
+    "--role",
+    "reader",
+    "--email",
+    "Mapped@example.invalid",
+  ]);
+  assertEquals(granted.code, 0, granted.raw || granted.stderr);
+  const created = granted.stdout as { ok: boolean; data: IdentityRow };
+  assertEquals(created.ok, true);
+  assertEquals(created.data.email, "mapped@example.invalid");
+
+  const beforeIdentities = await Deno.readFile(identities);
+  const agentEmail = await runCli([
+    "identity",
+    "grant",
+    "--identities",
+    identities,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "agent:mail-bot",
+    "--kind",
+    "agent",
+    "--role",
+    "maintainer",
+    "--email",
+    "bot@example.invalid",
+  ]);
+  assertEquals(agentEmail.code, 1, agentEmail.raw || agentEmail.stderr);
+  const agentBody = agentEmail.stdout as Envelope<IdentityRow>;
+  assertEquals(agentBody.error?.code, "INVALID_INPUT");
+  assertEquals(await Deno.readFile(identities), beforeIdentities);
+
+  const portal = await bootEntrypoint<{ url: string }>(PORTAL, {
+    PORTICO_CATALOG_PATH: catalog,
+    PORTICO_IDENTITIES_PATH: identities,
+    PORTICO_SESSIONS_PATH: sessions,
+  }, PORTAL_PERMS);
+  const mcp = await bootEntrypoint<{ url: string }>(MCP, {
+    PORTICO_CATALOG_PATH: catalog,
+    PORTICO_IDENTITIES_PATH: identities,
+    PORTICO_SESSIONS_PATH: sessions,
+  }, MCP_PERMS);
+
+  try {
+    const maintainerAuth = actor("maintainer", "agent:docs-bot");
+    const maintainerSession = sessionFor("agent:docs-bot")!;
+    const cliListed = await cliIdentities(identities, maintainerAuth);
+    const portalListed = await portalIdentities(portal.body.data.url, maintainerSession);
+    const mcpListed = await mcpIdentities(mcp.body.data.url, maintainerSession);
+    assertEquals(cliListed.code, 0, JSON.stringify(cliListed.body));
+    assertEquals(portalListed.status, 200);
+    assertEquals(cliListed.body.data, portalListed.body.data);
+    assertEquals(cliListed.body.data, mcpListed.data);
+    const mapped = (cliListed.body.data ?? []).find((row) => row.id === "human:mapped");
+    assertEquals(mapped?.email, "mapped@example.invalid");
+    assertEquals(mapped?.kind, "human");
+    assertEquals(mapped?.role, "reader");
+    const bot = (cliListed.body.data ?? []).find((row) => row.id === "agent:mail-bot");
+    assertEquals(bot, undefined);
   } finally {
     await portal.stop();
     await mcp.stop();
