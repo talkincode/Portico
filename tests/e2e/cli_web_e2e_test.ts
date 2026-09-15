@@ -184,6 +184,31 @@ Deno.test("CLI web URL with a secret query is rejected and does not create the c
   assert(!(await fileExists(catalog)), "failed web register must not create the catalog file");
 });
 
+Deno.test("CLI register rejects a web entry that points at Portico's own reading page", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-web-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const input = `${dir}/record.json`;
+  const payload = sampleWebRecord();
+  payload.entry = { kind: "url", value: "http://127.0.0.1:8788/s/docs-web" };
+  const env = await bootstrapRoster(`${dir}/identities.json`);
+  await Deno.writeTextFile(input, `${JSON.stringify(payload)}\n`);
+
+  const result = await runCli([
+    "catalog",
+    "register",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--input",
+    input,
+  ], env);
+  assertEquals(result.code, 1);
+  const body = result.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(body.ok, false);
+  assertEquals(body.error.code, "INVALID_INPUT");
+  assert(!(await fileExists(catalog)), "self-reading web entry must not create the catalog file");
+});
+
 Deno.test("CLI public web publish stays hidden from anonymous until independent approve", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-web-e2e-" });
   const catalog = `${dir}/catalog.json`;

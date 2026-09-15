@@ -257,6 +257,7 @@ export class CatalogService {
     const channels = parsed.fields.channels ?? existing.channels;
     const entry = parsed.fields.entry ?? existing.entry;
     assertChannelEntry(channels, entry);
+    assertWebEntryNotSelfPage(parsed.id, entry);
 
     const record: AgentSurface = {
       ...existing,
@@ -722,6 +723,7 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
   const channels = parseChannels(input.channels);
   const entry = parseEntry(input.entry);
   assertChannelEntry(channels, entry);
+  assertWebEntryNotSelfPage(input.id, entry);
   const maintainers = parseMaintainers(input.maintainers);
 
   return {
@@ -871,6 +873,29 @@ function parsePackageCoordinate(value: string): void {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
       "package must be a jsr: or npm: coordinate; Portico does not install or fetch URLs",
+    );
+  }
+}
+
+/**
+ * A web entry is the surface's own URL, not Portico's reading page for that
+ * surface. `/s/:id` and `/public/s/:id` are Portal chrome; pointing a catalog
+ * card at them is a self-loop and is never a real documentation/site entry.
+ * Host is ignored: the path is reserved regardless of where Portal is bound.
+ */
+function assertWebEntryNotSelfPage(id: string, entry: EntryRef): void {
+  if (entry.kind !== "url") return;
+  let url: URL;
+  try {
+    url = new URL(entry.value);
+  } catch {
+    return;
+  }
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (path === `/s/${id}` || path === `/public/s/${id}`) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "web entry must not point at Portico's own reading page for this surface",
     );
   }
 }
