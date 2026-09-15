@@ -54,7 +54,7 @@ curl -s -H "Authorization: Bearer $READER_SESSION" http://127.0.0.1:8788/api/cli
 ---
 
 ### 3. 自定义门户布局接口 (`GET /api/page`)
-获取维护者排布的自定义门户卡片与组件列表：
+获取维护者排布的自定义门户卡片与组件列表。与 CLI `page get`、MCP `portico_page` 同一载荷：匿名看不到内部卡片，读操作不写 page 文件。
 
 ```bash
 curl -s http://127.0.0.1:8788/api/page

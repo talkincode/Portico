@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "./assert.ts";
 import { signedInRoster } from "./fixtures.ts";
+import { AuditService } from "../src/audit/mod.ts";
 import {
   type Actor,
   CatalogService,
@@ -7,6 +8,7 @@ import {
   MemoryCatalogStore,
 } from "../src/catalog/mod.ts";
 import { handleMcpRequest, type McpContext } from "../src/mcp/mod.ts";
+import { MemoryPageStore, PageService } from "../src/ui/mod.ts";
 
 /**
  * The MCP entrance must present exactly the governance state the CLI and the
@@ -131,6 +133,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_identities",
     "portico_grants",
     "portico_whoami",
+    "portico_page",
   ]);
 });
 
@@ -268,6 +271,71 @@ Deno.test("portico_grants is the same trail for auditor; maintainer, reader and 
   });
   assertEquals(anonCall.body.result?.isError, true);
   assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
+});
+
+Deno.test("portico_page matches PageService.get; anonymous hides internal cards", async () => {
+  const { context, catalog } = await seeded();
+  const pages = new PageService(
+    new MemoryPageStore(),
+    catalog,
+    new AuditService(catalog, context.access),
+  );
+  await pages.set(maintainer, {
+    components: [
+      { kind: "catalog_card", id: "docs-writer" },
+      { kind: "permission_hint" },
+    ],
+  });
+  const withPages: McpContext = { ...context, pages };
+  const reader: Actor = { id: "human:reader", kind: "human", role: "reader" };
+  const expected = await pages.get(reader);
+  assertEquals(expected.components[0]?.kind, "catalog_card");
+  assertEquals(
+    (expected.components[0] as { id?: string }).id,
+    "docs-writer",
+  );
+
+  const readerCall = await rpc(withPages, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_page", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(readerCall.body.result?.isError, undefined);
+  assertEquals(envelope(readerCall.body).data, expected);
+
+  const anonCall = await rpc(withPages, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_page", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, undefined);
+  const anonPage = envelope(anonCall.body).data as {
+    components: Array<{ kind: string; id?: string; name?: string }>;
+  };
+  assertEquals(anonPage.components.some((item) => item.kind === "catalog_card"), false);
+  assertEquals(JSON.stringify(anonPage).includes("Docs Writer"), false);
+  assertEquals(JSON.stringify(anonPage).includes("docs-writer"), false);
+
+  const missing = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "portico_page", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(missing.body.result?.isError, undefined);
+  assertEquals(envelope(missing.body).data, { components: [] });
 });
 
 Deno.test("portico_whoami is the same identity for a session; anonymous is FORBIDDEN", async () => {

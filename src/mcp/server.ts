@@ -1,6 +1,8 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
+import { AuditService } from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
+import { FilePageStore, PageService } from "../ui/mod.ts";
 import { handleMcpRequest } from "./handler.ts";
 
 export interface McpListenOptions {
@@ -12,6 +14,11 @@ export interface McpListenOptions {
    * caller sees the same timeline as `audit list --audit` and the Portal.
    */
   gatewayAuditPath?: string;
+  /**
+   * When set, `portico_page` returns the same composed page as CLI `page get`
+   * and Portal `GET /api/page`. Absent means an empty composition.
+   */
+  pagePath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -27,12 +34,19 @@ export function listenMcp(options: McpListenOptions): Deno.HttpServer {
   const gateway = options.gatewayAuditPath
     ? new GatewayService(catalog, new FileGatewayAuditStore(options.gatewayAuditPath))
     : undefined;
+  const pages = options.pagePath
+    ? new PageService(
+      new FilePageStore(options.pagePath),
+      catalog,
+      new AuditService(catalog, access, gateway),
+    )
+    : undefined;
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
     signal: options.signal,
     onListen: options.onListen ?? (() => {}),
-  }, (request) => handleMcpRequest(request, { catalog, access, gateway }));
+  }, (request) => handleMcpRequest(request, { catalog, access, gateway, pages }));
 }
 
 export function mcpUrl(server: Deno.HttpServer): string {
