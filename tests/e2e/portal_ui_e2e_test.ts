@@ -311,3 +311,102 @@ Deno.test("E2E: page 404s are HTML; reader vs auditor vs anonymous disagree; wit
     assert(!article.body.includes("Docs Writer"));
   });
 });
+
+Deno.test("E2E: /internal/approvals shows the same notes to a reader; anonymous 404s; catalog is unchanged", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-ui-approvals-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "internal",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-writer",
+      "--note",
+      "Package coordinate reviewed.",
+    ], env)).code,
+    0,
+  );
+
+  const catalogBefore = await Deno.readFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const asReader = await fetchPage(`${base}/internal/approvals`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(asReader.status, 200);
+    assert(asReader.body.includes("审批记录"), "reader must get the approvals screen");
+    assert(asReader.body.includes("Docs Writer"), "reader must see the approved name");
+    assert(
+      asReader.body.includes("Package coordinate reviewed."),
+      "reader must see the auditor note",
+    );
+    assert(!/<script/i.test(asReader.body), "approvals page must not ship script");
+
+    const asAuditor = await fetchPage(`${base}/internal/approvals`, {
+      headers: headersFor("human:security-auditor"),
+    });
+    assertEquals(asAuditor.status, 200);
+    assert(asAuditor.body.includes("Package coordinate reviewed."));
+
+    const asAnon = await fetchPage(`${base}/internal/approvals`);
+    assertHtml404(asAnon, "anonymous /internal/approvals");
+    assert(!asAnon.body.includes("Docs Writer"));
+    assert(!asAnon.body.includes("Package coordinate reviewed."));
+    assert(!asAnon.body.includes("审批记录"));
+  });
+
+  const catalogAfter = await Deno.readFile(catalog);
+  assertEquals(
+    catalogAfter,
+    catalogBefore,
+    "reading the approvals page must not dirty the catalog",
+  );
+});

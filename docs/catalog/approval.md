@@ -34,7 +34,7 @@
 
 ### 0. 列出审批记录 (`catalog approvals`)
 
-公开边界上的通过、拒绝与撤回记录是同一份只读列表。CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 对同一身份返回同一批记录、同一顺序。已登录身份（只读 / 维护者 / 人类审计者）可以看到记录；匿名得到空列表，不泄漏待审或已拒绝入口。这不是写路径：Portal POST 返回 405，读操作不改目录。
+公开边界上的通过、拒绝与撤回记录是同一份只读列表。CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 对同一身份返回同一批记录、同一顺序。Portal `/internal/approvals` 用同一份列表渲染无脚本 HTML。已登录身份（只读 / 维护者 / 人类审计者）可以看到记录；匿名 API 得到空列表，匿名 HTML 得到 404，都不泄漏待审或已拒绝入口。这不是写路径：Portal POST 返回 405，读操作不改目录。
 
 ```bash
 deno task cli -- catalog approvals \
@@ -55,7 +55,7 @@ deno task cli -- catalog approve \
   --note "Package coordinate reviewed."
 ```
 
-`--note` 可选：最多 500 个字符，不能含控制字符；空白或过长会被 `INVALID_INPUT` 拒绝且不写目录。备注会追加到审批记录上，已登录身份经 CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 看到同一条；匿名仍是空列表。Portal 与 MCP 不能批准，这不是写入口。
+`--note` 可选：最多 500 个字符，不能含控制字符；空白或过长会被 `INVALID_INPUT` 拒绝且不写目录。备注会追加到审批记录上，已登录身份经 CLI `catalog approvals`、Portal `GET /api/approvals`、MCP `portico_approvals` 与 `/internal/approvals` 看到同一条；匿名仍是空列表或 HTML 404。Portal 与 MCP 不能批准，这不是写入口。
 
 **生效结果**：
 - `catalog.json` 中的 `governanceState` 更新为 `approved_public`，`visibility` 更新为 `public`。

@@ -7,7 +7,14 @@
  * detail that the public surface must never receive.
  */
 
-import type { Actor, AgentSurface, Channel, GovernanceState } from "../../../catalog/types.ts";
+import type {
+  Actor,
+  AgentSurface,
+  ApprovalRecord,
+  Channel,
+  GovernanceState,
+  PublicDecision,
+} from "../../../catalog/types.ts";
 import { AUDIT_KINDS, type AuditQuery } from "../../../audit/mod.ts";
 import type { AuditEvent } from "../../../audit/types.ts";
 import {
@@ -97,7 +104,7 @@ function hashCode(value: string): number {
 }
 
 /** Which rail entry is the current page. */
-export type InternalScreen = "content" | "catalog" | "audit" | "surface";
+export type InternalScreen = "content" | "catalog" | "approvals" | "audit" | "surface";
 
 interface ShellParts {
   ctx: ViewContext;
@@ -147,6 +154,7 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
   const items: Array<{ id: InternalScreen; href: string; label: string; count?: number }> = [
     { id: "content", href: "/internal", label: "内容" },
     { id: "catalog", href: "/internal/c", label: "目录", count: ctx.counts.total },
+    { id: "approvals", href: "/internal/approvals", label: "审批" },
   ];
   // The audit trail is not merely hidden by CSS for a non-auditor: it is absent
   // from the response, so the HTML never leaks that a trail exists.
@@ -194,7 +202,13 @@ function renderRail(ctx: ViewContext, screen: InternalScreen): string {
     ).join("");
 
   return `      <nav class="int-rail tk-rail" aria-label="治理导航">
-${group("工作台", item("▤", "全部内容", "/internal", { active: contentActive, count: total }))}
+${
+    group(
+      "工作台",
+      item("▤", "全部内容", "/internal", { active: contentActive, count: total }) +
+        item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }),
+    )
+  }
 ${group("治理状态", states)}
 ${group("渠道", channels)}${
     ctx.actor.kind === "human" && ctx.actor.role === "auditor"
@@ -491,6 +505,76 @@ function statBlock(value: string, label: string): string {
   return `<div class="tk-stat"><span class="tk-stat__value">${
     esc(value)
   }</span><span class="tk-stat__label">${esc(label)}</span></div>`;
+}
+
+const DECISION_LABEL: Record<PublicDecision, string> = {
+  approved: "通过",
+  rejected: "驳回",
+  withdrawn: "撤回",
+};
+
+export interface ApprovalsViewInput {
+  ctx: ViewContext;
+  records: readonly ApprovalRecord[];
+}
+
+export function renderApprovalsView(input: ApprovalsViewInput): string {
+  const { ctx, records } = input;
+  const body = `      <main class="int-page">
+        <div class="int-page__head">
+          <h1 class="int-page__title">审批记录</h1>
+          <p class="int-page__sub">通过、驳回与撤回。与 CLI catalog approvals、Portal GET /api/approvals、MCP portico_approvals 同一批记录。只读，不可改写；备注不能事后修改。</p>
+        </div>
+        ${
+    boundaryNote("Portal 不能批准或驳回。公开边界上的决定只出现在这份轨迹里，待审候选不会出现。")
+  }
+        ${
+    records.length === 0
+      ? emptyState(
+        "还没有公开边界上的审批记录。",
+        "待审公开不会出现在这里。批准、驳回或撤回之后才会追加。",
+      )
+      : `<div class="tk-panel">
+          <table class="tk-table">
+            <thead>
+              <tr>
+                <th>名称</th><th>决定</th><th>备注</th><th>审计者</th><th>时间</th><th>版本</th>
+              </tr>
+            </thead>
+            <tbody>
+${records.map(renderApprovalRow).join("\n")}
+            </tbody>
+          </table>
+        </div>`
+  }
+      </main>`;
+
+  return renderInternalPage({
+    ctx,
+    screen: "approvals",
+    panes: "two",
+    title: "审批记录",
+    body,
+  });
+}
+
+function renderApprovalRow(record: ApprovalRecord): string {
+  const note = record.note ? esc(record.note) : "—";
+  return `              <tr data-decision="${esc(record.decision)}">
+                <td>
+                  <a class="tk-label" href="/internal/s/${esc(record.surfaceId)}">${
+    esc(record.name)
+  }</a>
+                  <div class="tk-id">${esc(record.surfaceId)}</div>
+                </td>
+                <td><span class="tk-chip tk-chip--plain">${
+    esc(DECISION_LABEL[record.decision] ?? record.decision)
+  }</span></td>
+                <td>${note}</td>
+                <td class="tk-meta">${esc(record.reviewedBy.id)}</td>
+                <td class="tk-meta">${esc(record.reviewedAt.slice(0, 19).replace("T", " "))}</td>
+                <td class="tk-num">${esc(record.version)}</td>
+              </tr>`;
 }
 
 function renderCatalogRow(surface: AgentSurface): string {
