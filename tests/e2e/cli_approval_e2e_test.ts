@@ -47,6 +47,8 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
     ...actor("auditor", "human:security-auditor", "human"),
     "--id",
     "docs-writer",
+    "--note",
+    "Package coordinate reviewed.",
   ], env);
   assertEquals(approved.code, 0, approved.raw || approved.stderr);
   const approvedBody = approved.stdout as {
@@ -89,6 +91,7 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
       decision: string;
       submittedBy: { id: string };
       reviewedBy: { id: string; kind: string };
+      note?: string;
     }>;
   };
   assertEquals(approvalBody.ok, true);
@@ -98,6 +101,7 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
   assertEquals(approvalBody.data[0].submittedBy.id, "agent:docs-bot");
   assertEquals(approvalBody.data[0].reviewedBy.id, "human:security-auditor");
   assertEquals(approvalBody.data[0].reviewedBy.kind, "human");
+  assertEquals(approvalBody.data[0].note, "Package coordinate reviewed.");
 });
 
 Deno.test("CLI self-approval fails; anonymous still sees nothing and catalog stays pending", async () => {
@@ -334,4 +338,57 @@ Deno.test("CLI: a rejected surface can be fixed and resubmitted; the id is not p
   const listed = visible.stdout as { data: Array<{ id: string; description: string }> };
   assertEquals(listed.data.length, 1);
   assertEquals(listed.data[0].description, "Corrected description.");
+});
+
+Deno.test("CLI invalid approval note does not write; pending public stays pending", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-approval-note-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+  await registerAndSubmitPublic(catalog, input, env);
+  const before = await Deno.readFile(catalog);
+
+  const tooLong = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+    "--note",
+    "x".repeat(501),
+  ], env);
+  assertEquals(tooLong.code, 1);
+  const tooLongBody = tooLong.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(tooLongBody.ok, false);
+  assertEquals(tooLongBody.error.code, "INVALID_INPUT");
+
+  const control = await runCli([
+    "catalog",
+    "reject",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+    "--note",
+    "line\nbreak",
+  ], env);
+  assertEquals(control.code, 1);
+  const controlBody = control.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(controlBody.ok, false);
+  assertEquals(controlBody.error.code, "INVALID_INPUT");
+
+  assertEquals(await Deno.readFile(catalog), before);
+
+  const listed = await runCli([
+    "catalog",
+    "list",
+    "--catalog",
+    catalog,
+    ...actor("anonymous", "anonymous", "human"),
+  ]);
+  assertEquals((listed.stdout as { data: unknown[] }).data, []);
 });

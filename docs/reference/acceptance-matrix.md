@@ -20,7 +20,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **Registry 登记与目录** | 高 | 维护者登记内部表面，只读者读取；拦截非法偷写公开、明文密钥，以及指向自身阅读页的 Web 入口。 | `tests/catalog_service_test.ts`、`tests/web_channel_test.ts`、`tests/e2e/cli_catalog_e2e_test.ts` |
 | **受治理表面更新** | 高 | 维护者更新 draft/internal/rejected；禁止直接改 pending_public/approved_public；禁止把 web entry 改成自身阅读页。 | `tests/catalog_update_test.ts`、`tests/e2e/cli_update_e2e_test.ts` |
 | **Publisher 内部发布** | 高 | 草稿发布为内部；提交公开候选；匿名渠道保持完全不可见。 | `tests/catalog_publisher_test.ts`、`tests/e2e/cli_publish_e2e_test.ts` |
-| **Approval 公开审批** | 高 | 人类审计者通过/驳回；严格触发 SELF_APPROVAL 拦截；禁止 Agent 审批。 | `tests/catalog_approval_test.ts`、`tests/e2e/cli_approval_e2e_test.ts` |
+| **Approval 公开审批** | 高 | 人类审计者通过/驳回（可选 `--note`）；严格触发 SELF_APPROVAL 拦截；禁止 Agent 审批；非法备注不写。 | `tests/catalog_approval_test.ts`、`tests/e2e/cli_approval_e2e_test.ts`、`tests/e2e/catalog_approvals_e2e_test.ts` |
 | **公开发布撤回** | 高 | 仅限审计者执行；撤回后多端瞬间切断；重提需重新走全流程审批。 | `tests/catalog_withdraw_test.ts`、`tests/e2e/cli_withdrawal_e2e_test.ts` |
 | **Access Control 名册** | 高 | 空名册 Bootstrap 引导；禁止 Agent 担任 auditor；禁止注销唯一审计者。 | `tests/access_service_test.ts`、`tests/e2e/cli_access_e2e_test.ts` |
 | **名册可选邮箱** | 高 | 人类身份可绑定唯一 email；Agent 不可带邮箱；列表不泄漏未知字段；邮箱不是第二证明。 | `tests/access_service_test.ts`、`tests/e2e/identity_roster_e2e_test.ts` |

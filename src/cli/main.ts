@@ -44,9 +44,9 @@ Commands:
   catalog draft     --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog update    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
-  catalog approve   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
-  catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
-  catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog approve   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
+  catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
+  catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
   catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog dashboard --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected]
@@ -77,6 +77,9 @@ The first credential issue is the one-time bootstrap and needs no session.
 An identity cannot revoke itself; the last human auditor cannot be revoked.
 Revoking credentials invalidates login tokens and sessions without removing the roster identity.
 The identity that submitted public cannot approve or reject the same request.
+Approve, reject and withdraw accept an optional --note (at most 500 characters,
+no control characters); it is stored on the approval record and returned by
+catalog approvals / GET /api/approvals / portico_approvals.
 Withdrawing an approved public surface is reserved for a human auditor.
 A pending public candidate or an approved public surface cannot be updated
 directly; reject or withdraw it first, then update, then resubmit for approval.
@@ -184,6 +187,7 @@ export async function runCli(
     if (action === "approve" || action === "reject") {
       if (!flags.id) throw new UsageError("missing --id");
       const payload: ApprovalDecisionInput = { id: flags.id };
+      if (flags.note !== undefined) payload.note = flags.note;
       return ok(
         action === "approve"
           ? await service.approve(actor, payload)
@@ -194,6 +198,7 @@ export async function runCli(
     if (action === "withdraw") {
       if (!flags.id) throw new UsageError("missing --id");
       const payload: ApprovalDecisionInput = { id: flags.id };
+      if (flags.note !== undefined) payload.note = flags.note;
       return ok(await service.withdraw(actor, payload));
     }
 

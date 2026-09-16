@@ -21,8 +21,11 @@ deno task cli -- catalog withdraw \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
   --session $HUMAN_AUDITOR_SESSION \
-  --id sql-optimizer
+  --id sql-optimizer \
+  --note "Public entry retired after the owner left."
 ```
+
+`--note` 可选，规则与批准/驳回相同：最多 500 字符、无控制字符；非法备注不撤回、不追加审批记录。
 
 **响应示例**：
 ```json
