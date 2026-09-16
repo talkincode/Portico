@@ -29,6 +29,8 @@
 
 ## 查询与直连发现
 
+三入口共用 `listWeb`：同一身份看到同一批 `href` 与 `connect.mode=direct`，MCP 端点与 CLI 包坐标不会出现，匿名只看到已审批公开记录。Portico 不抓取、不代理、不渲染远程页面。
+
 ### 1. CLI 命令行
 ```bash
 # 列出可见的 Web 渠道服务
@@ -63,5 +65,14 @@ deno task cli -- web describe \
 }
 ```
 
-### 2. Portal 页面直连按钮
+### 2. Portal API 与页面直连按钮
+
+```bash
+curl -s -H "Authorization: Bearer $READER_SESSION" http://127.0.0.1:8788/api/web
+```
+
 在 Web Portal 的卡片与详情页中，经过授权的身份将看到一个直接跳转的外链按钮（带有 `rel="noopener noreferrer"`），用户可一键点击进入目标系统的控制台，而 Portico 不对目标网页实施反向代理或内容修改。
+
+### 3. MCP `portico_web`
+
+与 CLI `web list`、Portal `GET /api/web` 同一载荷。匿名只看到已审批公开记录。这不是页面代理。
