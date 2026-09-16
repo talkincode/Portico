@@ -130,6 +130,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_entry",
     "portico_mcp",
     "portico_web",
+    "portico_cli",
     "portico_dashboard",
     "portico_audit",
     "portico_approvals",
@@ -256,6 +257,75 @@ Deno.test("portico_web matches catalog.listWeb; anonymous hides internal Web; MC
     id: 2,
     method: "tools/call",
     params: { name: "portico_web", arguments: {} },
+  });
+  assertEquals(anonCall.body.result?.isError, undefined);
+  assertEquals(envelope(anonCall.body).data, expectedAnon);
+
+  const payload = JSON.stringify(envelope(readerCall.body).data);
+  assertEquals(
+    payload.includes("secretHash") ||
+      payload.includes("tokenHash") ||
+      payload.includes("pct1_") ||
+      payload.includes("pst1_"),
+    false,
+  );
+});
+
+Deno.test("portico_cli matches catalog.listCli; anonymous hides internal CLI; MCP and Web surfaces are absent", async () => {
+  const { context, catalog } = await seeded();
+  await catalog.register(maintainer, {
+    id: "ops-cli",
+    name: "Ops CLI",
+    description: "Internal operations package.",
+    channels: ["cli"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "package", value: "npm:@example/ops-cli" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  });
+  await catalog.register(maintainer, {
+    id: "docs-web",
+    name: "Docs Web",
+    description: "External documentation portal.",
+    channels: ["web"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "url", value: "https://docs.example.test/portals/docs-writer" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  });
+  await catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await catalog.approve(auditor, { id: "docs-writer" });
+
+  const reader: Actor = { id: "human:reader", kind: "human", role: "reader" };
+  const anonymous: Actor = { id: "anonymous", kind: "human", role: "anonymous" };
+  const expectedReader = await catalog.listCli(reader);
+  const expectedAnon = await catalog.listCli(anonymous);
+  assertEquals(expectedReader.map((item) => item.id), ["docs-writer", "ops-cli"]);
+  assertEquals(expectedAnon.map((item) => item.id), ["docs-writer"]);
+  assertEquals(expectedReader.some((item) => item.id === "docs-mcp"), false);
+  assertEquals(expectedReader.some((item) => item.id === "docs-web"), false);
+  assertEquals(expectedReader[0].connect.mode, "coordinate");
+  assertEquals(expectedReader[0].package.kind, "package");
+
+  const readerCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "portico_cli", arguments: {} },
+  }, {
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + SESSION_TOKENS.get("human:reader")!,
+    },
+  });
+  assertEquals(readerCall.body.result?.isError, undefined);
+  assertEquals(envelope(readerCall.body).data, expectedReader);
+
+  const anonCall = await rpc(context, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "portico_cli", arguments: {} },
   });
   assertEquals(anonCall.body.result?.isError, undefined);
   assertEquals(envelope(anonCall.body).data, expectedAnon);
