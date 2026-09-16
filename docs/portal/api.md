@@ -166,4 +166,4 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/approvals
 ```
 
 > [!NOTE]
-> 已登录身份看到同一批记录与同一顺序。匿名得到空列表，不泄漏待审、已拒绝入口或备注。人看的决定页是 `/internal/approvals`，待审候选在 `/internal/pending`（匿名均为 HTML 404）。这不是批准/驳回/撤回写入入口；`POST` 返回 `405`。
+> 已登录身份看到同一批记录与同一顺序。匿名得到空列表，不泄漏待审、已拒绝入口或备注。人看的决定页是 `/internal/approvals`，待审候选在 `/internal/pending`（入口为转义文本、不可点击；匿名均为 HTML 404）。这不是批准/驳回/撤回写入入口；`POST` 返回 `405`。

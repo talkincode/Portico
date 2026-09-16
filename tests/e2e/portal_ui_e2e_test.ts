@@ -469,6 +469,14 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
     assertEquals(asReader.status, 200);
     assert(asReader.body.includes("待审队列"), "reader must get the pending queue");
     assert(asReader.body.includes("Docs Writer"), "reader must see the pending candidate");
+    assert(
+      asReader.body.includes("jsr:@example/docs-writer"),
+      "queue must show the pending entry as text",
+    );
+    assert(
+      !asReader.body.includes('href="jsr:@example/docs-writer"'),
+      "a pending entry must not be a clickable target",
+    );
     assert(asReader.body.includes("/internal/approvals"), "queue must link to decisions");
 
     const catalogBoard = await fetchPage(`${base}/internal/c`, {
@@ -487,12 +495,17 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
     });
     assertEquals(asAuditor.status, 200);
     assert(asAuditor.body.includes("Docs Writer"), "auditor must see the same candidate");
+    assert(
+      asAuditor.body.includes("jsr:@example/docs-writer"),
+      "auditor must see where the pending entry points",
+    );
     assert(!/<button/i.test(asAuditor.body), "auditor must not get an approve button");
 
     const asAnon = await fetchPage(`${base}/internal/pending`);
     assertHtml404(asAnon, "anonymous /internal/pending");
     assert(!asAnon.body.includes("Docs Writer"));
     assert(!asAnon.body.includes("待审队列"));
+    assert(!asAnon.body.includes("jsr:@example/docs-writer"));
   });
 
   const catalogAfter = await Deno.readFile(catalog);
