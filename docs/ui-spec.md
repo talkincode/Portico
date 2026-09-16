@@ -20,7 +20,7 @@
 
 | | `internal` 内部笔记台 | `public` 公开发布 |
 | --- | --- | --- |
-| 路由 | `/internal`、`/internal/c`、`/internal/approvals`、`/internal/audit`、`/internal/s/:id` | `/public`、`/public/t/:channel`、`/public/s/:id` |
+| 路由 | `/internal`、`/internal/c`、`/internal/pending`、`/internal/approvals`、`/internal/audit`、`/internal/s/:id` | `/public`、`/public/t/:channel`、`/public/s/:id` |
 | 读者 | 只读及以上（匿名 404） | 任何人（含匿名） |
 | 可见记录 | 当前身份可见的全部（含草稿、待审、已拒绝） | 仅 `approved_public` |
 | 布局 | 三栏器物面板：导航栏 + 记录列表 + 阅读区 | 报头 + 头条 + 分栏 + 右栏 |

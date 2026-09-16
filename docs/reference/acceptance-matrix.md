@@ -31,7 +31,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **登录凭证作废轨迹只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一凭证作废轨迹；维护者/只读/匿名拒绝；读操作不改名册。 | `tests/access_credential_revoke_test.ts`、`tests/e2e/identity_credential_revokes_e2e_test.ts` |
 | **身份撤回轨迹只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一撤回轨迹；维护者/只读/匿名拒绝；读操作不改名册。 | `tests/access_revoke_test.ts`、`tests/e2e/identity_revokes_e2e_test.ts` |
 | **凭证作废与回滚** | 高 | 人类审计者作废泄露凭证；已作废凭证与会话瞬间失效；失败原子回滚。 | `tests/access_credential_revoke_test.ts`、`tests/e2e/cli_credential_revoke_e2e_test.ts` |
-| **Portal 发现与双平面** | 中 | `/internal` 内部笔记台；`/internal/approvals` 公开边界审批轨迹；`/public` 公开发布目录；主题平滑降级；零 JS。 | `tests/portal_ui_test.ts`、`tests/portal_theme_test.ts`、`tests/e2e/portal_ui_e2e_test.ts` |
+| **Portal 发现与双平面** | 中 | `/internal` 内部笔记台；`/internal/pending` 待审公开队列；`/internal/approvals` 公开边界审批轨迹；`/public` 公开发布目录；主题平滑降级；零 JS。 | `tests/portal_ui_test.ts`、`tests/portal_theme_test.ts`、`tests/e2e/portal_ui_e2e_test.ts` |
 | **MCP 渠道与网关鉴权** | 高 | 外部 MCP 连接信息发现；CLI / Portal / MCP 三入口同一 `listMcp` 载荷；网关准入鉴权流水追加；严禁代理工具调用。 | `tests/mcp_channel_test.ts`、`tests/gateway_service_test.ts`、`tests/e2e/cli_gateway_e2e_test.ts`、`tests/e2e/mcp_list_e2e_test.ts` |
 | **Gateway 访问审计只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一访问审计；维护者/只读/匿名拒绝；读操作不改目录或审计文件。 | `tests/gateway_service_test.ts`、`tests/e2e/gateway_audit_e2e_test.ts` |
 | **MCP 只读协议服务** | 高 | JSON-RPC 2.0 协议标准响应；portico_* 工具安全边界；只读无写权限。 | `tests/mcp_protocol_test.ts`、`tests/e2e/mcp_http_e2e_test.ts` |

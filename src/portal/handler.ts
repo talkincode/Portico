@@ -20,6 +20,7 @@ import {
   renderAuditView,
   renderCatalogView,
   renderContentView,
+  renderPendingView,
   renderPublicArticle,
   renderPublicIndex,
   renderPublicTopic,
@@ -327,6 +328,11 @@ async function internalPage(
   if (url.pathname === "/internal/approvals") {
     const records = await context.catalog.listApprovals(actor);
     return html(renderApprovalsView({ ctx: base, records }));
+  }
+
+  if (url.pathname === "/internal/pending") {
+    const pending = applyCatalogQuery(surfaces, { governanceState: "pending_public" });
+    return html(renderPendingView({ ctx: base, surfaces: pending }));
   }
 
   if (url.pathname === "/internal/audit") {
