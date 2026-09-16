@@ -26,6 +26,11 @@ export interface MagazinePageInput {
   path?: string;
   /** Signed-in identities may reach `/internal`. Anonymous chrome must not. */
   showInternal?: boolean;
+  /**
+   * Unfiltered `pending_public` count for signed-in chrome. Absent for anonymous
+   * so the magazine never advertises `/internal/pending`.
+   */
+  pendingPublic?: number;
 }
 
 const TITLE_FONT =
@@ -927,6 +932,7 @@ export function renderMagazinePage(input: MagazinePageInput): string {
     path,
     title: selected ? selected.name : "Portico",
     showInternal: input.showInternal === true,
+    pendingPublic: input.pendingPublic,
     body: `<div class="${frameClass}">${main}${side}</div>`,
   });
 }
@@ -965,6 +971,7 @@ function renderChrome(input: {
   title: string;
   body: string;
   showInternal?: boolean;
+  pendingPublic?: number;
 }): string {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
   const q = input.q;
@@ -974,6 +981,9 @@ function renderChrome(input: {
   const topicActive = input.channel !== null ? " active" : "";
   const internalLink = input.showInternal === true
     ? `\n        <a class="" href="/internal">内部笔记</a>`
+    : "";
+  const pendingLink = input.showInternal === true && input.pendingPublic !== undefined
+    ? `\n        <a class="" href="/internal/pending">待审 ${input.pendingPublic}</a>`
     : "";
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
@@ -997,7 +1007,7 @@ function renderChrome(input: {
       <nav class="nav">
         <a class="${contentActive.trim()}" href="${escapeHtml(contentHref)}">内容</a>
         <a class="${topicActive.trim()}" href="${escapeHtml(topicHref)}">专题</a>
-        <a class="" href="/public">公开发布</a>${internalLink}
+        <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}
         <span aria-disabled="true">收藏</span>
       </nav>
       <div class="topbar-right">

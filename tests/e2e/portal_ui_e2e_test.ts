@@ -470,6 +470,15 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
     assert(asReader.body.includes("待审队列"), "reader must get the pending queue");
     assert(asReader.body.includes("Docs Writer"), "reader must see the pending candidate");
     assert(asReader.body.includes("/internal/approvals"), "queue must link to decisions");
+
+    const catalogBoard = await fetchPage(`${base}/internal/c`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(catalogBoard.status, 200);
+    assert(
+      catalogBoard.body.includes('<a class="tk-stat" href="/internal/pending">'),
+      "catalog board pending count must link to the queue",
+    );
     assert(!/<script/i.test(asReader.body), "pending page must not ship script");
     assert(!/<form/i.test(asReader.body), "pending page must not ship a form");
 

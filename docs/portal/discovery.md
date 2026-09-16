@@ -39,6 +39,7 @@ Portico 的根路由 `/` 承担着**全角色通用发现门户**的职责。它
 2. **已登录读者 (Reader) 访问 `/`**：
    - 同时展示组织内部可见的服务与公开服务。
    - 显示内部服务标识 Badge，提供进入 `/internal` 完整笔记台的快速跳转。
+   - 顶栏「待审 N」链到 `/internal/pending`。计数是当前身份可见的全部 `pending_public`，不随 `q` / `channel` 过滤缩小。
 3. **人类审计者 (Auditor) 访问 `/`**：
-   - 标红展示当前处于 `pending_public` 的公开申请。
-   - 提供快速跳转至审批界面的操作链接。
+   - 与其他已登录身份相同：顶栏待审计数链到 `/internal/pending`，不是批准入口。
+   - Portal 不能批准或驳回；公开边界上的决定仍走 CLI `catalog approve` / `reject`。

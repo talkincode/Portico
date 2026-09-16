@@ -435,6 +435,11 @@ Deno.test("E2E: magazine and public surfaces reach each other; anonymous still 4
     const readerHomeHtml = await readerHome.text();
     assert(readerHomeHtml.includes('href="/internal"'));
     assert(readerHomeHtml.includes(">内部笔记</a>"));
+    assert(
+      readerHomeHtml.includes('href="/internal/pending"'),
+      "signed-in magazine chrome must offer the pending queue",
+    );
+    assert(!anonHomeHtml.includes('href="/internal/pending"'));
 
     const publicPage = await fetch(`${base}/public`);
     assertEquals(publicPage.status, 200);

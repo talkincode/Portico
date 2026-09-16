@@ -317,6 +317,31 @@ Deno.test("the pending queue hides drafts, internal records, and approved_public
   );
 });
 
+Deno.test("the catalog board links the pending_public count to the pending queue", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "pending-one", name: "Pending One" }));
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "public" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const page = await get(context, "/internal/c", reader);
+  assertEquals(page.status, 200);
+  assert(
+    page.html.includes('<a class="tk-stat" href="/internal/pending">'),
+    "the pending count must be a link to the queue",
+  );
+  assert(page.html.includes("待审公开"), "the catalog board still labels the pending count");
+  assert(
+    !/<form/i.test(page.html),
+    "linking the count must not turn the catalog board into a write form",
+  );
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "reading the catalog board must not dirty the catalog",
+  );
+});
+
 Deno.test("the pending queue escapes candidate names and never links a pending entry", async () => {
   const context = await seeded();
   await context.catalog.register(
