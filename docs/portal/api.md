@@ -41,7 +41,7 @@ curl -s -H "Authorization: Bearer $READER_SESSION" http://127.0.0.1:8788/api/cat
 ---
 
 ### 2. 渠道专用接口 (`GET /api/mcp`、`GET /api/web`、`GET /api/cli`)
-根据请求的渠道类型快速筛选并返回直连连接或包坐标。`GET /api/mcp` 与 CLI `mcp list`、MCP `portico_mcp` 同一载荷：匿名只看到已审批公开 MCP，CLI 包坐标不会出现，读操作不写目录。
+根据请求的渠道类型快速筛选并返回直连连接或包坐标。`GET /api/mcp` 与 CLI `mcp list`、MCP `portico_mcp` 同一载荷：匿名只看到已审批公开 MCP，CLI 包坐标不会出现，读操作不写目录。`GET /api/web` 与 CLI `web list`、MCP `portico_web` 同一载荷：匿名只看到已审批公开 Web，MCP 端点与 CLI 包坐标不会出现，读操作不写目录。
 
 ```bash
 # 获取所有可见的 Web 渠道服务及直连 URL
