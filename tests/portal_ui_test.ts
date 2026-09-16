@@ -107,7 +107,15 @@ Deno.test("anonymous callers get 404 on every internal route, never a 403", asyn
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
 
-  for (const path of ["/internal", "/internal/c", "/internal/audit", "/internal/s/docs-writer"]) {
+  for (
+    const path of [
+      "/internal",
+      "/internal/c",
+      "/internal/audit",
+      "/internal/approvals",
+      "/internal/s/docs-writer",
+    ]
+  ) {
     const { status, html } = await get(context, path);
     assertEquals(status, 404, `${path} must be 404 for anonymous`);
     assert(!html.includes("Docs Writer"), `${path} must not leak an internal record`);
@@ -122,7 +130,15 @@ Deno.test("anonymous internal pages 404 as HTML, not a JSON envelope", async () 
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
 
-  for (const path of ["/internal", "/internal/c", "/internal/audit", "/internal/s/docs-writer"]) {
+  for (
+    const path of [
+      "/internal",
+      "/internal/c",
+      "/internal/audit",
+      "/internal/approvals",
+      "/internal/s/docs-writer",
+    ]
+  ) {
     const response = await handlePortalRequest(
       new Request(`http://portico.local${path}`),
       context,
@@ -170,9 +186,17 @@ Deno.test("a reader sees the console but no audit trail entry or reset of it", a
     !asReader.html.includes("/internal/audit"),
     "a reader must not be offered the audit trail",
   );
+  assert(
+    asReader.html.includes("/internal/approvals"),
+    "a reader is offered the public-decision trail",
+  );
 
   const asAuditor = await get(context, "/internal", auditor);
   assert(asAuditor.html.includes("/internal/audit"), "an auditor gets the audit trail");
+  assert(
+    asAuditor.html.includes("/internal/approvals"),
+    "an auditor is offered the public-decision trail",
+  );
 });
 
 Deno.test("the audit route is 404 for anyone but a human auditor", async () => {
@@ -190,6 +214,66 @@ Deno.test("the audit route is 404 for anyone but a human auditor", async () => {
     assert(!page.html.includes("审计时间线"), `${actor.role} must not get the audit screen`);
     assert(!page.html.includes("register"), `${actor.role} must not receive audit events`);
   }
+});
+
+Deno.test("the approvals page shows signed-in identities the same decision records including notes", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await context.catalog.approve(auditor, {
+    id: "docs-writer",
+    note: "Package coordinate reviewed.",
+  });
+
+  const expected = await context.catalog.listApprovals(reader);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].note, "Package coordinate reviewed.");
+
+  for (const signedIn of [reader, maintainer, auditor]) {
+    const page = await get(context, "/internal/approvals", signedIn);
+    assertEquals(page.status, 200, `${signedIn.role} must read the approvals page`);
+    assert(page.html.includes("审批记录"), `${signedIn.role} must get the approvals screen`);
+    assert(page.html.includes("Docs Writer"), `${signedIn.role} must see the approved name`);
+    assert(
+      page.html.includes("Package coordinate reviewed."),
+      `${signedIn.role} must see the auditor note`,
+    );
+    assert(
+      !/<script/i.test(page.html),
+      `${signedIn.role} must not receive a scripted approvals page`,
+    );
+  }
+
+  const after = await context.catalog.listApprovals(reader);
+  assertEquals(after, expected, "reading the page must not rewrite approval records");
+});
+
+Deno.test("the approvals page does not present pending candidates as decisions", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "pending-one", name: "Pending One" }));
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "public" });
+
+  const page = await get(context, "/internal/approvals", auditor);
+  assertEquals(page.status, 200);
+  assert(!page.html.includes("Pending One"), "a pending candidate is not an approval record");
+});
+
+Deno.test("the approvals page escapes auditor notes", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await context.catalog.approve(auditor, {
+    id: "docs-writer",
+    note: "<script>alert(1)</script>",
+  });
+
+  const page = await get(context, "/internal/approvals", reader);
+  assertEquals(page.status, 200);
+  assert(!page.html.includes("<script>alert(1)</script>"), "raw note markup must not appear");
+  assert(page.html.includes("&lt;script&gt;"), "the note must be escaped");
 });
 
 Deno.test("the public page publishes only approved surfaces", async () => {
@@ -255,6 +339,7 @@ Deno.test("published pages and consoles ship no script", async () => {
       ["/internal", maintainer],
       ["/internal/c", maintainer],
       ["/internal/audit", auditor],
+      ["/internal/approvals", reader],
       ["/internal/s/draft-one", maintainer],
     ] as const
   ) {

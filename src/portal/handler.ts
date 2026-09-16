@@ -16,6 +16,7 @@ import { type PageService } from "../ui/mod.ts";
 import {
   prefersDark,
   type PublicContext,
+  renderApprovalsView,
   renderAuditView,
   renderCatalogView,
   renderContentView,
@@ -321,6 +322,11 @@ async function internalPage(
         filter: { state: state ?? undefined, channel: channel ?? undefined },
       }),
     );
+  }
+
+  if (url.pathname === "/internal/approvals") {
+    const records = await context.catalog.listApprovals(actor);
+    return html(renderApprovalsView({ ctx: base, records }));
   }
 
   if (url.pathname === "/internal/audit") {
