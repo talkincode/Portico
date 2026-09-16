@@ -41,7 +41,8 @@ import { isRecord } from "./types.ts";
  * `portico_credential_revokes` is the auditor credential-revoke trail, not a
  * way to invalidate tokens. `portico_revokes` is the auditor identity-revoke
  * trail, not a way to remove a roster identity. `portico_web` is authorized
- * Web hrefs, not a page proxy.
+ * Web hrefs, not a page proxy. `portico_cli` is authorized CLI package
+ * coordinates, not an installer.
  */
 
 export interface McpTool {
@@ -116,6 +117,12 @@ export const TOOLS: readonly McpTool[] = [
     name: "portico_web",
     description:
       "列出当前身份可见的 Web 直连入口（href 与 connect.mode=`direct`）。等价于 CLI `web list` 与 Portal `GET /api/web`。MCP 端点与 CLI 包坐标不会出现。匿名只看到已审批公开记录。Portico 不代理页面、不抓取远程 HTML。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_cli",
+    description:
+      "列出当前身份可见的 CLI 包坐标（package 与 connect.mode=`coordinate`）。等价于 CLI `cli list` 与 Portal `GET /api/cli`。MCP 端点与 Web href 不会出现。匿名只看到已审批公开记录。Portico 不安装、不执行、不下载该包。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -256,6 +263,8 @@ export async function callTool(
       return await deps.catalog.listMcp(actor);
     case "portico_web":
       return await deps.catalog.listWeb(actor);
+    case "portico_cli":
+      return await deps.catalog.listCli(actor);
     case "portico_dashboard":
       return dashboardFrom(await deps.catalog.list(actor));
     case "portico_audit": {
