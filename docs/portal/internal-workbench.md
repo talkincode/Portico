@@ -34,10 +34,13 @@
 - 何时发起过字段更新（展示具体的增改差分）。
 - 何时发起过公开申请，审批人是谁，给出的审计意见为何。
 
-### 4. 公开边界审批轨迹 (`/internal/approvals`)
-已登录身份（只读及以上）看到与 CLI `catalog approvals`、`GET /api/approvals`、MCP `portico_approvals` 同一批通过 / 驳回 / 撤回记录，含可选审计备注。待审公开不会出现在这里。页面无脚本，不能批准或驳回。匿名访问返回 HTML 404，不泄漏记录名或备注。
+### 4. 待审公开队列 (`/internal/pending`)
+已登录身份（只读及以上）看到当前可见的 `pending_public` 候选，与目录过滤 `state=pending_public` 同一批。草稿、内部记录与已公开记录不出现。页面无脚本、无表单，不能批准或驳回。匿名访问返回 HTML 404，不泄漏候选名称。已作出的决定在审批记录页。
 
-### 5. 专属安全审计台 (`/internal/audit`)
+### 5. 公开边界审批轨迹 (`/internal/approvals`)
+已登录身份（只读及以上）看到与 CLI `catalog approvals`、`GET /api/approvals`、MCP `portico_approvals` 同一批通过 / 驳回 / 撤回记录，含可选审计备注。待审公开不会出现在这里。页面无脚本，不能批准或驳回。匿名访问返回 HTML 404，不泄漏记录名或备注。待审候选在待审队列页。
+
+### 6. 专属安全审计台 (`/internal/audit`)
 仅向拥有 `auditor` 角色的人类展示：
 - 聚合显示全量操作流水（登记、更新、注销、凭证作废、网关放行）。
 - 支持按服务 ID 或执行者快速回溯历史安全事件。

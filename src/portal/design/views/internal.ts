@@ -104,7 +104,13 @@ function hashCode(value: string): number {
 }
 
 /** Which rail entry is the current page. */
-export type InternalScreen = "content" | "catalog" | "approvals" | "audit" | "surface";
+export type InternalScreen =
+  | "content"
+  | "catalog"
+  | "pending"
+  | "approvals"
+  | "audit"
+  | "surface";
 
 interface ShellParts {
   ctx: ViewContext;
@@ -154,6 +160,12 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
   const items: Array<{ id: InternalScreen; href: string; label: string; count?: number }> = [
     { id: "content", href: "/internal", label: "内容" },
     { id: "catalog", href: "/internal/c", label: "目录", count: ctx.counts.total },
+    {
+      id: "pending",
+      href: "/internal/pending",
+      label: "待审",
+      count: ctx.counts.byState.pending_public,
+    },
     { id: "approvals", href: "/internal/approvals", label: "审批" },
   ];
   // The audit trail is not merely hidden by CSS for a non-auditor: it is absent
@@ -206,6 +218,10 @@ ${
     group(
       "工作台",
       item("▤", "全部内容", "/internal", { active: contentActive, count: total }) +
+        item("◉", "待审队列", "/internal/pending", {
+          active: screen === "pending",
+          count: byState.pending_public,
+        }) +
         item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }),
     )
   }
@@ -513,6 +529,70 @@ const DECISION_LABEL: Record<PublicDecision, string> = {
   withdrawn: "撤回",
 };
 
+export interface PendingViewInput {
+  ctx: ViewContext;
+  /** Only `pending_public` records the actor can already see. */
+  surfaces: readonly AgentSurface[];
+}
+
+export function renderPendingView(input: PendingViewInput): string {
+  const { ctx, surfaces } = input;
+  const ordered = [...surfaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const body = `      <main class="int-page">
+        <div class="int-page__head">
+          <h1 class="int-page__title">待审队列</h1>
+          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
+        </div>
+        ${
+    boundaryNote("Portal 不能批准或驳回。公开边界上的决定在审批记录里，待审候选只出现在这里。")
+  }
+        ${
+    ordered.length === 0
+      ? emptyState(
+        "当前没有待审公开。",
+        "维护者把内部或草稿提交为公开候选后会出现在这里。匿名始终看不到这些记录。",
+      )
+      : `<div class="tk-panel">
+          <table class="tk-table">
+            <thead>
+              <tr>
+                <th>名称</th><th>状态</th><th>提交者</th><th>提交时间</th><th>渠道</th><th>版本</th>
+              </tr>
+            </thead>
+            <tbody>
+${ordered.map(renderPendingRow).join("\n")}
+            </tbody>
+          </table>
+        </div>`
+  }
+      </main>`;
+
+  return renderInternalPage({
+    ctx,
+    screen: "pending",
+    panes: "two",
+    title: "待审队列",
+    body,
+  });
+}
+
+function renderPendingRow(surface: AgentSurface): string {
+  const submittedBy = surface.publicSubmission?.submittedBy.id ?? "—";
+  const submittedAt = surface.publicSubmission?.submittedAt.slice(0, 19).replace("T", " ") ??
+    "—";
+  return `              <tr data-state="${esc(surface.governanceState)}">
+                <td>
+                  <a class="tk-label" href="/internal/s/${esc(surface.id)}">${esc(surface.name)}</a>
+                  <div class="tk-id">${esc(surface.id)}</div>
+                </td>
+                <td>${stateChip(surface.governanceState, { compact: true })}</td>
+                <td class="tk-meta">${esc(submittedBy)}</td>
+                <td class="tk-meta">${esc(submittedAt)}</td>
+                <td>${channelChips(surface.channels)}</td>
+                <td class="tk-num">${esc(surface.version)}</td>
+              </tr>`;
+}
+
 export interface ApprovalsViewInput {
   ctx: ViewContext;
   records: readonly ApprovalRecord[];
@@ -523,7 +603,7 @@ export function renderApprovalsView(input: ApprovalsViewInput): string {
   const body = `      <main class="int-page">
         <div class="int-page__head">
           <h1 class="int-page__title">审批记录</h1>
-          <p class="int-page__sub">通过、驳回与撤回。与 CLI catalog approvals、Portal GET /api/approvals、MCP portico_approvals 同一批记录。只读，不可改写；备注不能事后修改。</p>
+          <p class="int-page__sub">通过、驳回与撤回。与 CLI catalog approvals、Portal GET /api/approvals、MCP portico_approvals 同一批记录。只读，不可改写；备注不能事后修改。待审候选在 <a class="tk-link" href="/internal/pending">待审队列</a>。</p>
         </div>
         ${
     boundaryNote("Portal 不能批准或驳回。公开边界上的决定只出现在这份轨迹里，待审候选不会出现。")

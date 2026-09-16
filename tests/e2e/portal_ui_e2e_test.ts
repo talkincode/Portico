@@ -410,3 +410,110 @@ Deno.test("E2E: /internal/approvals shows the same notes to a reader; anonymous 
     "reading the approvals page must not dirty the catalog",
   );
 });
+
+Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anonymous 404s; catalog is unchanged", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-ui-pending-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "internal",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+
+  const catalogBefore = await Deno.readFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const asReader = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(asReader.status, 200);
+    assert(asReader.body.includes("待审队列"), "reader must get the pending queue");
+    assert(asReader.body.includes("Docs Writer"), "reader must see the pending candidate");
+    assert(asReader.body.includes("/internal/approvals"), "queue must link to decisions");
+    assert(!/<script/i.test(asReader.body), "pending page must not ship script");
+    assert(!/<form/i.test(asReader.body), "pending page must not ship a form");
+
+    const asAuditor = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:security-auditor"),
+    });
+    assertEquals(asAuditor.status, 200);
+    assert(asAuditor.body.includes("Docs Writer"), "auditor must see the same candidate");
+    assert(!/<button/i.test(asAuditor.body), "auditor must not get an approve button");
+
+    const asAnon = await fetchPage(`${base}/internal/pending`);
+    assertHtml404(asAnon, "anonymous /internal/pending");
+    assert(!asAnon.body.includes("Docs Writer"));
+    assert(!asAnon.body.includes("待审队列"));
+  });
+
+  const catalogAfter = await Deno.readFile(catalog);
+  assertEquals(
+    catalogAfter,
+    catalogBefore,
+    "reading the pending queue must not dirty the catalog",
+  );
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-writer",
+    ], env)).code,
+    0,
+  );
+
+  await withPortal(catalog, identities, async (base) => {
+    const afterApprove = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(afterApprove.status, 200);
+    assert(
+      !afterApprove.body.includes("Docs Writer"),
+      "an approved surface must leave the pending queue",
+    );
+  });
+});
