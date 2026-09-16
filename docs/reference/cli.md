@@ -86,16 +86,16 @@ portico catalog publish --catalog <path> --identities <path> --sessions <path> -
 # 更新受治理表面字段 (仅限 draft/internal/rejected)
 portico catalog update --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> --input <record.json>
 
-# 审批公开申请 (仅限独立人类审计者)
-portico catalog approve --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+# 审批公开申请 (仅限独立人类审计者；--note 可选)
+portico catalog approve --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
-# 驳回公开申请 (仅限独立人类审计者)
-portico catalog reject --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+# 驳回公开申请 (仅限独立人类审计者；--note 可选)
+portico catalog reject --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
-# 撤回已公开服务至内部 (仅限人类审计者)
-portico catalog withdraw --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+# 撤回已公开服务至内部 (仅限人类审计者；--note 可选)
+portico catalog withdraw --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
-# 列出公开边界审批记录（通过 / 拒绝 / 撤回）；匿名为空列表
+# 列出公开边界审批记录（通过 / 拒绝 / 撤回，含可选备注）；匿名为空列表
 portico catalog approvals --catalog <path> --identities <path> --sessions <path> --session <token>
 
 # 列表查询可见服务

@@ -155,3 +155,15 @@ curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/credentia
 
 > [!NOTE]
 > 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这不是作废写入入口；`POST` 返回 `405`。载荷不含凭证或会话令牌。
+
+---
+
+### 9. 公开审批记录 (`GET /api/approvals`)
+列出公开边界上的通过 / 拒绝 / 撤回记录（含可选 `note`）。与 CLI `catalog approvals`、MCP `portico_approvals` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/approvals
+```
+
+> [!NOTE]
+> 已登录身份看到同一批记录与同一顺序。匿名得到空列表，不泄漏待审、已拒绝入口或备注。这不是批准/驳回/撤回写入入口；`POST` 返回 `405`。

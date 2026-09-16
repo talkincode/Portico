@@ -232,3 +232,84 @@ Deno.test("anonymous cannot read approval records", async () => {
   await service.approve(auditor, { id: "docs-writer" });
   assertEquals(await service.listApprovals(anonymous), []);
 });
+
+Deno.test("auditor approve with a note stores it; omitting note leaves the field off", async () => {
+  const withNote = new CatalogService(new MemoryCatalogStore());
+  await pendingPublic(withNote);
+  await withNote.approve(auditor, {
+    id: "docs-writer",
+    note: "  Endpoint reviewed; no secret in the entry.  ",
+  });
+  const recorded = await withNote.listApprovals(reader);
+  assertEquals(recorded.length, 1);
+  assertEquals(recorded[0].note, "Endpoint reviewed; no secret in the entry.");
+  assertEquals(await withNote.listApprovals(anonymous), []);
+
+  const withoutNote = new CatalogService(new MemoryCatalogStore());
+  await pendingPublic(withoutNote);
+  await withoutNote.approve(auditor, { id: "docs-writer" });
+  const bare = await withoutNote.listApprovals(auditor);
+  assertEquals(bare.length, 1);
+  assertEquals("note" in bare[0], false);
+});
+
+Deno.test("reject note is visible to a reader and does not leak to anonymous", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  await pendingPublic(service);
+  await service.reject(auditor, { id: "docs-writer", note: "Entry points at an internal host." });
+  const approvals = await service.listApprovals(reader);
+  assertEquals(approvals.length, 1);
+  assertEquals(approvals[0].decision, "rejected");
+  assertEquals(approvals[0].note, "Entry points at an internal host.");
+  assertEquals(await service.listApprovals(anonymous), []);
+  assertEquals(await service.list(anonymous), []);
+});
+
+Deno.test("invalid approval notes do not write catalog or approval records", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  await pendingPublic(service);
+
+  await assertRejectsCode(
+    () => service.approve(auditor, { id: "docs-writer", note: "   " }),
+    "INVALID_INPUT",
+  );
+  await assertRejectsCode(
+    () => service.approve(auditor, { id: "docs-writer", note: "line\nbreak" }),
+    "INVALID_INPUT",
+  );
+  await assertRejectsCode(
+    () => service.approve(auditor, { id: "docs-writer", note: "x".repeat(501) }),
+    "INVALID_INPUT",
+  );
+  await assertRejectsCode(
+    () =>
+      service.reject(auditor, {
+        id: "docs-writer",
+        note: 12 as unknown as string,
+      }),
+    "INVALID_INPUT",
+  );
+
+  const got = await service.get(reader, "docs-writer");
+  assertEquals(got.governanceState, "pending_public");
+  assertEquals(await store.listApprovals(), []);
+  assertEquals(await service.list(anonymous), []);
+});
+
+Deno.test("self-approval with a note still writes nothing", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  await pendingPublic(service, humanMaintainer);
+  const selfAuditor: Actor = {
+    id: "human:docs-owner",
+    kind: "human",
+    role: "auditor",
+  };
+  await assertRejectsCode(
+    () => service.approve(selfAuditor, { id: "docs-writer", note: "I reviewed my own surface." }),
+    "SELF_APPROVAL",
+  );
+  assertEquals((await service.get(reader, "docs-writer")).governanceState, "pending_public");
+  assertEquals(await store.listApprovals(), []);
+});

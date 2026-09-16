@@ -51,7 +51,8 @@ const UPDATE_MUTABLE_KEYS = new Set([
   "version",
   "entry",
 ]);
-const ALLOWED_APPROVAL_KEYS = new Set(["id"]);
+const ALLOWED_APPROVAL_KEYS = new Set(["id", "note"]);
+const APPROVAL_NOTE_MAX = 500;
 const SECRET_KEYS = new Set([
   "token",
   "password",
@@ -331,6 +332,7 @@ export class CatalogService {
       entry: { ...record.entry },
       version: record.version,
       name: record.name,
+      ...optionalNote(parsed.note),
     };
     await this.store.commitApproval(record, approval);
     return structuredClone(record);
@@ -397,6 +399,7 @@ export class CatalogService {
       entry: { ...record.entry },
       version: record.version,
       name: record.name,
+      ...optionalNote(parsed.note),
     };
     await this.store.commitApproval(record, approval);
     return structuredClone(record);
@@ -560,7 +563,36 @@ function parseApprovalInput(input: ApprovalDecisionInput): ApprovalDecisionInput
     );
   }
 
-  return { id: input.id };
+  const note = parseApprovalNote(input.note);
+  return note ? { id: input.id, note } : { id: input.id };
+}
+
+function parseApprovalNote(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "note must be a string");
+  }
+  const text = value.trim();
+  if (!text) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "note is required");
+  }
+  if (text.length > APPROVAL_NOTE_MAX) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "note is too long");
+  }
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "note must not contain control characters",
+      );
+    }
+  }
+  return text;
+}
+
+function optionalNote(note: string | undefined): { note: string } | Record<never, never> {
+  return note ? { note } : {};
 }
 
 function approvalId(

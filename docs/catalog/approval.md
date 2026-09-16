@@ -51,12 +51,15 @@ deno task cli -- catalog approve \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
   --session $HUMAN_AUDITOR_SESSION \
-  --id sql-optimizer
+  --id sql-optimizer \
+  --note "Package coordinate reviewed."
 ```
+
+`--note` 可选：最多 500 个字符，不能含控制字符；空白或过长会被 `INVALID_INPUT` 拒绝且不写目录。备注会追加到审批记录上，已登录身份经 CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 看到同一条；匿名仍是空列表。Portal 与 MCP 不能批准，这不是写入口。
 
 **生效结果**：
 - `catalog.json` 中的 `governanceState` 更新为 `approved_public`，`visibility` 更新为 `public`。
-- `approvals.json` 中永久追加一条由该审计者签名的审计记录，包含当时的记录哈希与审批时间戳。
+- `approvals.json` 中永久追加一条由该审计者签名的审计记录，包含当时的记录哈希与审批时间戳，以及可选备注。
 - 外部匿名访客通过浏览器打开 `/public` 即可立即查看到该服务卡片。
 
 ---
@@ -70,12 +73,15 @@ deno task cli -- catalog reject \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
   --session $HUMAN_AUDITOR_SESSION \
-  --id sql-optimizer
+  --id sql-optimizer \
+  --note "Entry is not a public documentation site."
 ```
+
+`--note` 规则与批准相同。非法备注或自批不会写入审批记录，公开面仍不可达。
 
 **生效结果**：
 - 状态退回到 `rejected`。
-- `approvals.json` 中记录驳回事件。
+- `approvals.json` 中记录驳回事件（含可选备注）。
 - 公开面保持绝对不可见。维护者可以在修改不合规项后重新提交申请。
 
 ---

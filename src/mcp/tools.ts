@@ -164,7 +164,7 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_approvals",
     description:
-      "列出公开边界上的审批记录（通过 / 拒绝 / 撤回）。等价于 CLI `catalog approvals` 与 Portal `GET /api/approvals`。已登录身份看到同一批记录与同一顺序；匿名得到空列表，不泄漏待审或已拒绝入口。读操作不写目录。",
+      "列出公开边界上的审批记录（通过 / 拒绝 / 撤回，含可选 note）。等价于 CLI `catalog approvals` 与 Portal `GET /api/approvals`。已登录身份看到同一批记录与同一顺序；匿名得到空列表，不泄漏待审、已拒绝入口或备注。读操作不写目录。这不是批准入口。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {

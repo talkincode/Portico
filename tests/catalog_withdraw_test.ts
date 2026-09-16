@@ -153,6 +153,29 @@ Deno.test("withdrawal is not idempotent and rejects unknown or secret fields wit
   ]);
 });
 
+Deno.test("auditor withdraw with a note stores it; invalid note does not withdraw", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  await approvedPublic(service);
+  await service.withdraw(auditor, {
+    id: "docs-writer",
+    note: "Public entry retired after the owner left.",
+  });
+  assertEquals(await service.list(anonymous), []);
+  const approvals = await service.listApprovals(reader);
+  const last = approvals[approvals.length - 1];
+  assertEquals(last.decision, "withdrawn");
+  assertEquals(last.note, "Public entry retired after the owner left.");
+
+  const blocked = new CatalogService(new MemoryCatalogStore());
+  await approvedPublic(blocked);
+  await assertRejectsCode(
+    () => blocked.withdraw(auditor, { id: "docs-writer", note: "no\ttab" }),
+    "INVALID_INPUT",
+  );
+  assertEquals((await blocked.get(anonymous, "docs-writer")).governanceState, "approved_public");
+  assertEquals((await blocked.listApprovals(auditor)).map((r) => r.decision), ["approved"]);
+});
+
 Deno.test("a withdrawn surface needs a fresh approval before it is public again", async () => {
   const service = new CatalogService(new MemoryCatalogStore());
   await approvedPublic(service);
