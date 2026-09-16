@@ -342,7 +342,7 @@ Deno.test("the catalog board links the pending_public count to the pending queue
   );
 });
 
-Deno.test("the pending queue escapes candidate names and never links a pending entry", async () => {
+Deno.test("the pending queue shows an escaped entry as text and never links it", async () => {
   const context = await seeded();
   await context.catalog.register(
     maintainer,
@@ -350,7 +350,7 @@ Deno.test("the pending queue escapes candidate names and never links a pending e
       id: "escape-pending",
       name: "<script>alert(1)</script>",
       channels: ["web"],
-      entry: { kind: "url", value: "https://pending.example.test/secret" },
+      entry: { kind: "url", value: "https://pending.example.test/secret?q=<script>" },
     }),
   );
   await context.catalog.publish(maintainer, { id: "escape-pending", visibility: "internal" });
@@ -361,8 +361,23 @@ Deno.test("the pending queue escapes candidate names and never links a pending e
   assert(!page.html.includes("<script>alert(1)</script>"), "raw name markup must not appear");
   assert(page.html.includes("&lt;script&gt;"), "the pending name must be escaped");
   assert(
-    !page.html.includes('href="https://pending.example.test/secret"'),
+    page.html.includes("https://pending.example.test/secret?q="),
+    "the queue must show where the pending entry points",
+  );
+  assert(
+    page.html.includes("secret?q=&lt;script&gt;"),
+    "the pending entry must be escaped as text",
+  );
+  assert(
+    !page.html.includes('href="https://pending.example.test/secret'),
     "a pending entry must not be a clickable target",
+  );
+
+  const asAnon = await get(context, "/internal/pending");
+  assertEquals(asAnon.status, 404);
+  assert(
+    !asAnon.html.includes("pending.example.test"),
+    "anonymous 404 must not leak the pending entry",
   );
 });
 
