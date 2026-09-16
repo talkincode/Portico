@@ -381,6 +381,96 @@ Deno.test("the pending queue shows an escaped entry as text and never links it",
   );
 });
 
+Deno.test("the pending queue labels entry kinds as text and never links them", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-cli",
+      name: "Pending CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/pending-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-web",
+      name: "Pending Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending-web.example.test/app" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-mcp",
+      name: "Pending MCP",
+      channels: ["mcp"],
+      entry: { kind: "mcp_endpoint", value: "https://pending-mcp.example.test/mcp" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "public" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const page = await get(context, "/internal/pending", reader);
+  assertEquals(page.status, 200);
+  assert(page.html.includes("<th>种类</th>"), "queue must name the entry-kind column");
+  assert(page.html.includes('data-entry-kind="url"'), "url pending entry must show its kind");
+  assert(
+    page.html.includes('data-entry-kind="package"'),
+    "package pending entry must show its kind",
+  );
+  assert(
+    page.html.includes('data-entry-kind="mcp_endpoint"'),
+    "mcp pending entry must show its kind",
+  );
+  assert(page.html.includes("Pending Web"), "reader must still see the url candidate");
+  assert(page.html.includes("Pending CLI"), "reader must still see the package candidate");
+  assert(page.html.includes("Pending MCP"), "reader must still see the mcp candidate");
+  assert(
+    !page.html.includes('href="https://pending-web.example.test/app"'),
+    "a url pending entry must not be a clickable target",
+  );
+  assert(
+    !page.html.includes('href="https://pending-mcp.example.test/mcp"'),
+    "an mcp pending entry must not be a clickable target",
+  );
+  assert(
+    !page.html.includes('href="jsr:@example/pending-cli"'),
+    "a package pending entry must not be a clickable target",
+  );
+  assert(!/<form/i.test(page.html), "labeling kinds must not add a write form");
+  assert(!/<button/i.test(page.html), "labeling kinds must not add an approve button");
+
+  const asAnon = await get(context, "/internal/pending");
+  assertEquals(asAnon.status, 404);
+  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak pending names");
+  assert(
+    !asAnon.html.includes("pending-web.example.test"),
+    "anonymous 404 must not leak the url entry",
+  );
+  assert(
+    !asAnon.html.includes("pending-mcp.example.test"),
+    "anonymous 404 must not leak the mcp entry",
+  );
+  assert(
+    !asAnon.html.includes("jsr:@example/pending-cli"),
+    "anonymous 404 must not leak the package coordinate",
+  );
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "labeling pending entry kinds must not dirty the catalog",
+  );
+});
+
 Deno.test("the approvals page escapes auditor notes", async () => {
   const context = await seeded();
   await context.catalog.register(maintainer, surface());

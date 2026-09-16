@@ -34,7 +34,7 @@
 
 ### 0. 列出审批记录 (`catalog approvals`)
 
-公开边界上的通过、拒绝与撤回记录是同一份只读列表。CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 对同一身份返回同一批记录、同一顺序。Portal `/internal/approvals` 用同一份列表渲染无脚本 HTML。已登录身份（只读 / 维护者 / 人类审计者）可以看到记录；匿名 API 得到空列表，匿名 HTML 得到 404，都不泄漏待审或已拒绝入口。待审候选在 `/internal/pending`，不出现在审批记录里。待审队列把入口引用渲染为转义文本，不可点击；批准与驳回仍只走 CLI。这不是写路径：Portal POST 返回 405，读操作不改目录。
+公开边界上的通过、拒绝与撤回记录是同一份只读列表。CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 对同一身份返回同一批记录、同一顺序。Portal `/internal/approvals` 用同一份列表渲染无脚本 HTML。已登录身份（只读 / 维护者 / 人类审计者）可以看到记录；匿名 API 得到空列表，匿名 HTML 得到 404，都不泄漏待审或已拒绝入口。待审候选在 `/internal/pending`，不出现在审批记录里。待审队列标明入口种类（url / package / mcp_endpoint），并把引用渲染为转义文本，不可点击；批准与驳回仍只走 CLI。这不是写路径：Portal POST 返回 405，读操作不改目录。
 
 ```bash
 deno task cli -- catalog approvals \

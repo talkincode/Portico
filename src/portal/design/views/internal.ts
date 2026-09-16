@@ -25,6 +25,7 @@ import {
   countBadge,
   dl,
   emptyState,
+  entryKindChip,
   entryValue,
   esc,
   maintainerChain,
@@ -543,7 +544,7 @@ export function renderPendingView(input: PendingViewInput): string {
   const body = `      <main class="int-page">
         <div class="int-page__head">
           <h1 class="int-page__title">待审队列</h1>
-          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。入口以转义文本展示，不可点击。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
+          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。入口标明种类（url / package / mcp_endpoint），引用以转义文本展示，不可点击。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
         </div>
         ${
     boundaryNote("Portal 不能批准或驳回。公开边界上的决定在审批记录里，待审候选只出现在这里。")
@@ -558,7 +559,7 @@ export function renderPendingView(input: PendingViewInput): string {
           <table class="tk-table">
             <thead>
               <tr>
-                <th>名称</th><th>状态</th><th>提交者</th><th>提交时间</th><th>渠道</th><th>入口</th><th>版本</th>
+                <th>名称</th><th>状态</th><th>提交者</th><th>提交时间</th><th>渠道</th><th>种类</th><th>入口</th><th>版本</th>
               </tr>
             </thead>
             <tbody>
@@ -591,6 +592,7 @@ function renderPendingRow(surface: AgentSurface): string {
                 <td class="tk-meta">${esc(submittedBy)}</td>
                 <td class="tk-meta">${esc(submittedAt)}</td>
                 <td>${channelChips(surface.channels)}</td>
+                <td>${entryKindChip(surface.entry.kind)}</td>
                 <td>${entryValue(surface.entry, { linkable: false })}</td>
                 <td class="tk-num">${esc(surface.version)}</td>
               </tr>`;

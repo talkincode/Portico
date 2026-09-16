@@ -39,6 +39,11 @@ export function channelChips(channels: readonly Channel[]): string {
   return [...channels].sort().map(channelChip).join("");
 }
 
+/** Schema token for an entry: `url` / `package` / `mcp_endpoint`. Never a link. */
+export function entryKindChip(kind: EntryRef["kind"]): string {
+  return `<span class="tk-chip tk-chip--entry" data-entry-kind="${esc(kind)}">${esc(kind)}</span>`;
+}
+
 /** `<dt>/<dd>` pair for a definition list. */
 export function dl(label: string, value: string): string {
   return `<dt>${esc(label)}</dt><dd>${value}</dd>`;

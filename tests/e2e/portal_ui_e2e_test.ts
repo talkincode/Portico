@@ -473,6 +473,11 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
       asReader.body.includes("jsr:@example/docs-writer"),
       "queue must show the pending entry as text",
     );
+    assert(asReader.body.includes("<th>种类</th>"), "queue must name the entry-kind column");
+    assert(
+      asReader.body.includes('data-entry-kind="package"'),
+      "queue must label a package pending entry as package",
+    );
     assert(
       !asReader.body.includes('href="jsr:@example/docs-writer"'),
       "a pending entry must not be a clickable target",
