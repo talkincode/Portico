@@ -475,7 +475,7 @@ export function renderCatalogView(input: CatalogViewInput): string {
         </div>
         <div class="tk-stats">
           ${statBlock(String(ctx.counts.total), "当前可见")}${
-    statBlock(String(ctx.counts.byState.pending_public), "待审公开")
+    statBlock(String(ctx.counts.byState.pending_public), "待审公开", "/internal/pending")
   }${statBlock(String(ctx.counts.byState.approved_public), "已公开")}${
     statBlock(String(ctx.counts.byState.draft), "草稿")
   }
@@ -517,10 +517,12 @@ ${matched.map(renderCatalogRow).join("\n")}
   });
 }
 
-function statBlock(value: string, label: string): string {
-  return `<div class="tk-stat"><span class="tk-stat__value">${
-    esc(value)
-  }</span><span class="tk-stat__label">${esc(label)}</span></div>`;
+function statBlock(value: string, label: string, href?: string): string {
+  const inner = `<span class="tk-stat__value">${esc(value)}</span><span class="tk-stat__label">${
+    esc(label)
+  }</span>`;
+  if (href) return `<a class="tk-stat" href="${esc(href)}">${inner}</a>`;
+  return `<div class="tk-stat">${inner}</div>`;
 }
 
 const DECISION_LABEL: Record<PublicDecision, string> = {

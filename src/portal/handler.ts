@@ -154,8 +154,12 @@ export async function handlePortalRequest(
     if (url.pathname === "/" || surfacePage) {
       const query = parseCatalogQuery({ q: url.searchParams.get("q") });
       if (channel) query.channel = channel;
-      const surfaces = applyCatalogQuery(await context.catalog.list(actor), query);
+      const visible = await context.catalog.list(actor);
+      const surfaces = applyCatalogQuery(visible, query);
       const dash = dashboardFrom(surfaces);
+      const pendingPublic = actor.role === "anonymous"
+        ? undefined
+        : visible.filter((surface) => surface.governanceState === "pending_public").length;
       const page = context.pages ? await context.pages.get(actor) : undefined;
       const picks = (page?.components ?? []).flatMap((item) => {
         if (item.kind !== "catalog_card") return [];
@@ -187,6 +191,7 @@ export async function handlePortalRequest(
             picks,
             path: url.pathname,
             showInternal: actor.role !== "anonymous",
+            pendingPublic,
           }));
         } catch (error) {
           if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
@@ -203,6 +208,7 @@ export async function handlePortalRequest(
         picks,
         path: "/",
         showInternal: actor.role !== "anonymous",
+        pendingPublic,
       }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
