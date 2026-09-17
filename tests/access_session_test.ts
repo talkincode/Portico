@@ -125,6 +125,36 @@ Deno.test("plaintext secret fields are rejected on credential issue", async () =
   assertEquals((await sessions.listCredentials()).length, 0);
 });
 
+Deno.test("bootstrap credential (no actor) can only ever be issued once; a second attempt is forbidden and writes nothing", async () => {
+  const { service, sessions } = await bootstrapped();
+  await service.issueCredential(null, { id: auditor.id });
+  assertEquals((await sessions.listCredentials()).length, 1);
+
+  await assertRejectsCode(
+    () => service.issueCredential(null, { id: auditor.id }),
+    "FORBIDDEN",
+  );
+  assertEquals((await sessions.listCredentials()).length, 1);
+});
+
+Deno.test("bootstrap credential (no actor) is forbidden for an agent maintainer subject; writes nothing", async () => {
+  const { service, sessions } = await bootstrapped();
+  await assertRejectsCode(
+    () => service.issueCredential(null, { id: maintainer.id }),
+    "FORBIDDEN",
+  );
+  assertEquals((await sessions.listCredentials()).length, 0);
+});
+
+Deno.test("bootstrap credential (no actor) is forbidden for a human reader subject; writes nothing", async () => {
+  const { service, sessions } = await bootstrapped();
+  await assertRejectsCode(
+    () => service.issueCredential(null, { id: reader.id }),
+    "FORBIDDEN",
+  );
+  assertEquals((await sessions.listCredentials()).length, 0);
+});
+
 Deno.test("logout revokes the session; a failed logout does not revoke others", async () => {
   const { service, sessions } = await bootstrapped();
   const issued = await service.issueCredential(auditor, { id: reader.id });
