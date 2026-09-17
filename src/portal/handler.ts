@@ -340,7 +340,6 @@ async function internalPage(
     const channel = parseChannel(url.searchParams.get("channel"));
     const pending = applyCatalogQuery(surfaces, {
       governanceState: "pending_public",
-      ...(channel ? { channel } : {}),
     });
     return html(renderPendingView({ ctx: base, surfaces: pending, channel }));
   }

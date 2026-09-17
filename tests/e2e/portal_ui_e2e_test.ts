@@ -621,6 +621,30 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
       asReader.body.includes('href="/internal/pending?channel=cli"'),
       "queue must offer a cli channel filter",
     );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending" aria-current="true">全部<span class="tk-tab__count">3</span>',
+      ),
+      "all-tab must count three pending candidates",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending?channel=cli">CLI<span class="tk-tab__count">1</span>',
+      ),
+      "cli tab must count one pending candidate",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+      ),
+      "web tab must count one pending candidate",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending?channel=mcp">MCP<span class="tk-tab__count">1</span>',
+      ),
+      "mcp tab must count one pending candidate",
+    );
     assert(!/<form/i.test(asReader.body), "channel filter must not ship a form");
     assert(!/<script/i.test(asReader.body), "channel filter must not ship script");
 
@@ -631,6 +655,18 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
     assert(asCli.body.includes("Docs Writer"), "cli filter must keep the cli candidate");
     assert(!asCli.body.includes("Docs Web"), "cli filter must hide the web candidate");
     assert(!asCli.body.includes("Docs MCP"), "cli filter must hide the mcp candidate");
+    assert(
+      asCli.body.includes(
+        'href="/internal/pending">全部<span class="tk-tab__count">3</span>',
+      ),
+      "filtered all-tab must still count every pending candidate",
+    );
+    assert(
+      asCli.body.includes(
+        'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+      ),
+      "filtered web tab must still show its pending count",
+    );
     assert(
       !asCli.body.includes('href="jsr:@example/docs-writer"'),
       "a filtered pending entry must not be a clickable target",

@@ -35,7 +35,7 @@
 - 何时发起过公开申请，审批人是谁，给出的审计意见为何。
 
 ### 4. 待审公开队列 (`/internal/pending`)
-已登录身份（只读及以上）看到当前可见的 `pending_public` 候选，与目录过滤 `state=pending_public` 同一批。草稿、内部记录与已公开记录不出现。可按渠道（`cli` / `mcp` / `web`）只读筛选：`/internal/pending?channel=cli` 只保留含该渠道的待审候选；未知 `channel` 静默忽略，仍展示全部。入口标明种类（`url` / `package` / `mcp_endpoint`），引用以转义文本展示，不可点击，方便人类审计看公开入口将指向何处。页面无脚本、无表单，不能批准或驳回。匿名访问返回 HTML 404，不泄漏候选名称或入口。已作出的决定在审批记录页。
+已登录身份（只读及以上）看到当前可见的 `pending_public` 候选，与目录过滤 `state=pending_public` 同一批。草稿、内部记录与已公开记录不出现。可按渠道（`cli` / `mcp` / `web`）只读筛选：`/internal/pending?channel=cli` 只保留含该渠道的待审候选；未知 `channel` 静默忽略，仍展示全部。筛选 tab 显示该渠道待审计数（全部 tab 为待审总数）；筛选后其它渠道计数不缩小。内部记录不计入这些数字。入口标明种类（`url` / `package` / `mcp_endpoint`），引用以转义文本展示，不可点击，方便人类审计看公开入口将指向何处。页面无脚本、无表单，不能批准或驳回。匿名访问返回 HTML 404，不泄漏候选名称、入口或渠道计数。已作出的决定在审批记录页。
 
 ### 5. 公开边界审批轨迹 (`/internal/approvals`)
 已登录身份（只读及以上）看到与 CLI `catalog approvals`、`GET /api/approvals`、MCP `portico_approvals` 同一批通过 / 驳回 / 撤回记录，含可选审计备注。待审公开不会出现在这里。页面无脚本，不能批准或驳回。匿名访问返回 HTML 404，不泄漏记录名或备注。待审候选在待审队列页。
