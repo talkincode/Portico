@@ -580,6 +580,116 @@ Deno.test("the pending queue filters pending_public candidates by channel as rea
   );
 });
 
+Deno.test("the pending queue channel tabs show pending counts and ignore internal records", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-cli",
+      name: "Pending CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/pending-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-web",
+      name: "Pending Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending-web.example.test/app" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-mcp",
+      name: "Pending MCP",
+      channels: ["mcp"],
+      entry: { kind: "mcp_endpoint", value: "https://pending-mcp.example.test/mcp" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "internal-cli",
+      name: "Internal CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/internal-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "internal-cli", visibility: "internal" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const all = await get(context, "/internal/pending", reader);
+  assertEquals(all.status, 200);
+  assert(!all.html.includes("Internal CLI"), "an internal record must not enter the pending queue");
+  assert(
+    all.html.includes(
+      'href="/internal/pending" aria-current="true">全部<span class="tk-tab__count">3</span>',
+    ),
+    "all-tab must count three pending candidates",
+  );
+  assert(
+    all.html.includes(
+      'href="/internal/pending?channel=cli">CLI<span class="tk-tab__count">1</span>',
+    ),
+    "cli tab must count one pending candidate, not the internal cli record",
+  );
+  assert(
+    all.html.includes(
+      'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+    ),
+    "web tab must count one pending candidate",
+  );
+  assert(
+    all.html.includes(
+      'href="/internal/pending?channel=mcp">MCP<span class="tk-tab__count">1</span>',
+    ),
+    "mcp tab must count one pending candidate",
+  );
+  assert(!/<form/i.test(all.html), "pending counts must not add a write form");
+  assert(!/<button/i.test(all.html), "pending counts must not add an approve button");
+
+  const asCli = await get(context, "/internal/pending?channel=cli", auditor);
+  assertEquals(asCli.status, 200);
+  assert(asCli.html.includes("Pending CLI"), "cli filter must keep the cli candidate");
+  assert(!asCli.html.includes("Pending Web"), "cli filter must hide the web candidate");
+  assert(
+    asCli.html.includes(
+      'href="/internal/pending">全部<span class="tk-tab__count">3</span>',
+    ),
+    "filtered all-tab must still count every pending candidate",
+  );
+  assert(
+    asCli.html.includes(
+      'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+    ),
+    "filtered web tab must still show its pending count",
+  );
+  assert(!/<button/i.test(asCli.html), "auditor must not get an approve button after counting");
+
+  const asAnon = await get(context, "/internal/pending?channel=cli");
+  assertEquals(asAnon.status, 404);
+  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak pending names");
+  assert(
+    !asAnon.html.includes('href="/internal/pending?channel=cli"'),
+    "anonymous 404 must not advertise channel counts",
+  );
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "counting pending channels must not dirty the catalog",
+  );
+});
+
 Deno.test("the approvals page escapes auditor notes", async () => {
   const context = await seeded();
   await context.catalog.register(maintainer, surface());

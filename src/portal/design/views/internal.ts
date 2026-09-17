@@ -534,7 +534,7 @@ const DECISION_LABEL: Record<PublicDecision, string> = {
 
 export interface PendingViewInput {
   ctx: ViewContext;
-  /** Only `pending_public` records the actor can already see. */
+  /** All visible `pending_public` records. Channel filtering happens in the view so tab counts stay unfiltered. */
   surfaces: readonly AgentSurface[];
   /** Read-only channel filter from `?channel=`. Unknown values are ignored. */
   channel?: Channel | null;
@@ -543,13 +543,19 @@ export interface PendingViewInput {
 export function renderPendingView(input: PendingViewInput): string {
   const { ctx, surfaces } = input;
   const channel = input.channel ?? null;
-  const ordered = [...surfaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const byChannel: Record<Channel, number> = { cli: 0, mcp: 0, web: 0 };
+  for (const surface of surfaces) {
+    for (const item of surface.channels) byChannel[item] += 1;
+  }
+  const matched = surfaces.filter((surface) => !channel || surface.channels.includes(channel));
+  const ordered = [...matched].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const tabs = [
-    { label: "全部", href: "/internal/pending", active: channel === null },
+    { label: "全部", href: "/internal/pending", active: channel === null, count: surfaces.length },
     ...(Object.keys(CHANNEL_LABEL) as Channel[]).map((item) => ({
       label: CHANNEL_LABEL[item],
       href: `/internal/pending?channel=${item}`,
       active: channel === item,
+      count: byChannel[item],
     })),
   ];
   const empty = channel
@@ -561,7 +567,7 @@ export function renderPendingView(input: PendingViewInput): string {
   const body = `      <main class="int-page">
         <div class="int-page__head">
           <h1 class="int-page__title">待审队列</h1>
-          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。可按渠道（cli / mcp / web）只读筛选；入口标明种类（url / package / mcp_endpoint），引用以转义文本展示，不可点击。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
+          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。可按渠道（cli / mcp / web）只读筛选，筛选 tab 显示该渠道待审计数；入口标明种类（url / package / mcp_endpoint），引用以转义文本展示，不可点击。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
         </div>
         ${
     boundaryNote("Portal 不能批准或驳回。公开边界上的决定在审批记录里，待审候选只出现在这里。")
@@ -571,7 +577,7 @@ export function renderPendingView(input: PendingViewInput): string {
     tabs.map((tab) =>
       `<a class="tk-tab" href="${tab.href}"${tab.active ? ' aria-current="true"' : ""}>${
         esc(tab.label)
-      }</a>`
+      }${countBadge(tab.count)}</a>`
     ).join("")
   }
         </div>
