@@ -166,6 +166,45 @@ Deno.test("alg none, missing email, wrong iss, and JWKS fetch failure return nul
   );
 });
 
+Deno.test("a not-yet-valid nbf, an unknown kid, and a non-JWT typ all return null", async () => {
+  const keys = await generateRs256();
+  const header = { alg: "RS256", kid: keys.kid, typ: "JWT" };
+  const notYetValid = await mintJwt(
+    keys.privateKey,
+    header,
+    claims({ nbf: Math.floor(Date.now() / 1000) + 600 }),
+  );
+  const unknownKid = await mintJwt(
+    keys.privateKey,
+    { alg: "RS256", kid: "no-such-kid", typ: "JWT" },
+    claims(),
+  );
+  const wrongTyp = await mintJwt(
+    keys.privateKey,
+    { alg: "RS256", kid: keys.kid, typ: "not-a-jwt" },
+    claims(),
+  );
+  const deps = { fetchJwks: () => Promise.resolve(keys.jwks) };
+  const cfg = config();
+  assertEquals(await verifyCfAccessJwt(notYetValid, cfg, deps), null);
+  assertEquals(await verifyCfAccessJwt(unknownKid, cfg, deps), null);
+  assertEquals(await verifyCfAccessJwt(wrongTyp, cfg, deps), null);
+});
+
+Deno.test("an aud array containing the expected audience still verifies", async () => {
+  const keys = await generateRs256();
+  const header = { alg: "RS256", kid: keys.kid, typ: "JWT" };
+  const token = await mintJwt(
+    keys.privateKey,
+    header,
+    claims({ aud: ["other-app", AUD] }),
+  );
+  const verified = await verifyCfAccessJwt(token, config(), {
+    fetchJwks: () => Promise.resolve(keys.jwks),
+  });
+  assertEquals(verified, { email: "reader@example.invalid" });
+});
+
 Deno.test("JWKS URL override is accepted only for loopback http or the team certs URL", () => {
   const loopback = parseCfAccessEnv({
     PORTICO_CF_ACCESS_ENABLED: "yes",
