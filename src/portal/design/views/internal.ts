@@ -536,26 +536,47 @@ export interface PendingViewInput {
   ctx: ViewContext;
   /** Only `pending_public` records the actor can already see. */
   surfaces: readonly AgentSurface[];
+  /** Read-only channel filter from `?channel=`. Unknown values are ignored. */
+  channel?: Channel | null;
 }
 
 export function renderPendingView(input: PendingViewInput): string {
   const { ctx, surfaces } = input;
+  const channel = input.channel ?? null;
   const ordered = [...surfaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const tabs = [
+    { label: "全部", href: "/internal/pending", active: channel === null },
+    ...(Object.keys(CHANNEL_LABEL) as Channel[]).map((item) => ({
+      label: CHANNEL_LABEL[item],
+      href: `/internal/pending?channel=${item}`,
+      active: channel === item,
+    })),
+  ];
+  const empty = channel
+    ? emptyState("没有匹配的待审公开。", "换一个渠道筛选，或先把该渠道的内部记录提交为公开候选。")
+    : emptyState(
+      "当前没有待审公开。",
+      "维护者把内部或草稿提交为公开候选后会出现在这里。匿名始终看不到这些记录。",
+    );
   const body = `      <main class="int-page">
         <div class="int-page__head">
           <h1 class="int-page__title">待审队列</h1>
-          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。入口标明种类（url / package / mcp_endpoint），引用以转义文本展示，不可点击。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
+          <p class="int-page__sub">已提交公开、尚未独立审批的候选。与目录 <code>pending_public</code> 同一批可见记录。可按渠道（cli / mcp / web）只读筛选；入口标明种类（url / package / mcp_endpoint），引用以转义文本展示，不可点击。只读，不能从 Portal 批准或驳回。已作出的决定在 <a class="tk-link" href="/internal/approvals">审批记录</a>。</p>
         </div>
         ${
     boundaryNote("Portal 不能批准或驳回。公开边界上的决定在审批记录里，待审候选只出现在这里。")
   }
+        <div class="int-filters tk-tabs" role="group" aria-label="筛选">
+          ${
+    tabs.map((tab) =>
+      `<a class="tk-tab" href="${tab.href}"${tab.active ? ' aria-current="true"' : ""}>${
+        esc(tab.label)
+      }</a>`
+    ).join("")
+  }
+        </div>
         ${
-    ordered.length === 0
-      ? emptyState(
-        "当前没有待审公开。",
-        "维护者把内部或草稿提交为公开候选后会出现在这里。匿名始终看不到这些记录。",
-      )
-      : `<div class="tk-panel">
+    ordered.length === 0 ? empty : `<div class="tk-panel">
           <table class="tk-table">
             <thead>
               <tr>

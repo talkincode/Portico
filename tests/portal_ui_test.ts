@@ -471,6 +471,115 @@ Deno.test("the pending queue labels entry kinds as text and never links them", a
   );
 });
 
+Deno.test("the pending queue filters pending_public candidates by channel as read-only links", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-cli",
+      name: "Pending CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/pending-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-web",
+      name: "Pending Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending-web.example.test/app" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-mcp",
+      name: "Pending MCP",
+      channels: ["mcp"],
+      entry: { kind: "mcp_endpoint", value: "https://pending-mcp.example.test/mcp" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "public" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const all = await get(context, "/internal/pending", reader);
+  assertEquals(all.status, 200);
+  assert(all.html.includes("Pending CLI"), "unfiltered queue must list the cli candidate");
+  assert(all.html.includes("Pending Web"), "unfiltered queue must list the web candidate");
+  assert(all.html.includes("Pending MCP"), "unfiltered queue must list the mcp candidate");
+  assert(
+    all.html.includes('href="/internal/pending?channel=cli"'),
+    "queue must offer a cli channel filter",
+  );
+  assert(
+    all.html.includes('href="/internal/pending?channel=web"'),
+    "queue must offer a web channel filter",
+  );
+  assert(
+    all.html.includes('href="/internal/pending?channel=mcp"'),
+    "queue must offer an mcp channel filter",
+  );
+  assert(
+    all.html.includes('aria-label="筛选"'),
+    "queue must name the channel filter as a read-only group",
+  );
+  assert(!/<form/i.test(all.html), "channel filter must not add a write form");
+  assert(!/<button/i.test(all.html), "channel filter must not add an approve button");
+  assert(!/<script/i.test(all.html), "channel filter must not ship script");
+
+  const asCli = await get(context, "/internal/pending?channel=cli", reader);
+  assertEquals(asCli.status, 200);
+  assert(asCli.html.includes("Pending CLI"), "cli filter must keep the cli candidate");
+  assert(!asCli.html.includes("Pending Web"), "cli filter must hide the web candidate");
+  assert(!asCli.html.includes("Pending MCP"), "cli filter must hide the mcp candidate");
+  assert(
+    asCli.html.includes('href="/internal/pending?channel=cli"'),
+    "filtered queue must keep channel filter links",
+  );
+  assert(
+    asCli.html.includes('aria-current="true"'),
+    "the selected channel filter must be marked current",
+  );
+  assert(
+    !asCli.html.includes('href="jsr:@example/pending-cli"'),
+    "a filtered pending entry must still not be a clickable target",
+  );
+
+  const asWeb = await get(context, "/internal/pending?channel=web", auditor);
+  assertEquals(asWeb.status, 200);
+  assert(asWeb.html.includes("Pending Web"), "auditor web filter must keep the web candidate");
+  assert(!asWeb.html.includes("Pending CLI"), "auditor web filter must hide the cli candidate");
+  assert(!asWeb.html.includes("Pending MCP"), "auditor web filter must hide the mcp candidate");
+  assert(!/<button/i.test(asWeb.html), "auditor must not get an approve button after filtering");
+
+  const unknown = await get(context, "/internal/pending?channel=ftp", reader);
+  assertEquals(unknown.status, 200, "an unknown channel must not 500 the HTML queue");
+  assert(unknown.html.includes("Pending CLI"), "unknown channel must fall back to the full queue");
+  assert(unknown.html.includes("Pending Web"), "unknown channel must still list web candidates");
+  assert(unknown.html.includes("Pending MCP"), "unknown channel must still list mcp candidates");
+
+  const asAnon = await get(context, "/internal/pending?channel=cli");
+  assertEquals(asAnon.status, 404);
+  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak filtered names");
+  assert(
+    !asAnon.html.includes("jsr:@example/pending-cli"),
+    "anonymous 404 must not leak a filtered package coordinate",
+  );
+  assert(!asAnon.html.includes("待审队列"), "anonymous 404 must not advertise the queue");
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "filtering the pending queue must not dirty the catalog",
+  );
+});
+
 Deno.test("the approvals page escapes auditor notes", async () => {
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
