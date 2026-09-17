@@ -221,7 +221,7 @@ Deno.test("CLI catalog list filters visible records and does not search entry UR
     "web",
   ], env);
   assertEquals(
-    ((byChannel.stdout as { data: Array<{ id: string }> }).data).map((item) => item.id),
+    (byChannel.stdout as { data: Array<{ id: string }> }).data.map((item) => item.id),
     ["docs-web"],
   );
 
@@ -235,7 +235,7 @@ Deno.test("CLI catalog list filters visible records and does not search entry UR
     "internal",
   ], env);
   assertEquals(
-    ((byState.stdout as { data: Array<{ id: string }> }).data).map((item) => item.id),
+    (byState.stdout as { data: Array<{ id: string }> }).data.map((item) => item.id),
     ["docs-writer"],
   );
 
@@ -258,7 +258,7 @@ Deno.test("CLI catalog list filters visible records and does not search entry UR
     "Web",
   ]);
   assertEquals(
-    ((anonPublic.stdout as { data: Array<{ id: string }> }).data).map((item) => item.id),
+    (anonPublic.stdout as { data: Array<{ id: string }> }).data.map((item) => item.id),
     ["docs-web"],
   );
 
@@ -274,7 +274,11 @@ Deno.test("CLI catalog list filters visible records and does not search entry UR
   ], env);
   assertEquals(bad.code, 1);
   assertEquals((bad.stdout as { error: { code: string } }).error.code, "INVALID_INPUT");
-  assertEquals(await Deno.readFile(catalog), before, "invalid list query must not rewrite the catalog");
+  assertEquals(
+    await Deno.readFile(catalog),
+    before,
+    "invalid list query must not rewrite the catalog",
+  );
 });
 
 Deno.test("CLI anonymous list hides internal records", async () => {

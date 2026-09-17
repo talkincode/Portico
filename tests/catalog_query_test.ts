@@ -5,11 +5,7 @@ import {
   type Channel,
   type GovernanceState,
 } from "../src/catalog/mod.ts";
-import {
-  applyCatalogQuery,
-  CATALOG_QUERY_MAX_Q,
-  parseCatalogQuery,
-} from "../src/catalog/query.ts";
+import { applyCatalogQuery, CATALOG_QUERY_MAX_Q, parseCatalogQuery } from "../src/catalog/query.ts";
 
 function surface(
   id: string,

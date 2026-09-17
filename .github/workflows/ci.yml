@@ -16,6 +16,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: "2.9.6"
+      - name: fmt
+        run: deno fmt --check
       - name: lint
         run: deno task lint
       - name: check

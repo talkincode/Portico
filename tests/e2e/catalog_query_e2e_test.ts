@@ -216,7 +216,11 @@ Deno.test("E2E: CLI, Portal and MCP apply the same catalog query to visible reco
     assertEquals(idsOf(mcpPublic.data), ["docs-web"]);
 
     const before = await Deno.readFile(catalog);
-    const cliBad = await cliList(catalog, identities, [...readerAuth, "--channel", "carrier-pigeon"]);
+    const cliBad = await cliList(catalog, identities, [
+      ...readerAuth,
+      "--channel",
+      "carrier-pigeon",
+    ]);
     const portalBad = await portalList(portalUrl, readerSession, "?channel=carrier-pigeon");
     const mcpBad = await mcpList<Array<{ id: string }>>(mcpUrl, readerSession, {
       channel: "carrier-pigeon",
