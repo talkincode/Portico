@@ -9,7 +9,7 @@
 当一个 Agent 处于 `pending_public` 状态、等待批准公开发布时，人类审计者必须逐一核验以下 5 项指标：
 
 ### 1. 入口端点是否包含内网资产或明文凭证？
-- **检查内容**：审查 `entry.mcp_endpoint` 或 `entry.url`。Portal `/internal/pending` 把入口渲染为转义文本（不可点击），便于对照；批准仍只走 CLI。
+- **检查内容**：审查 `entry.mcp_endpoint` 或 `entry.url`。Portal `/internal/pending` 可按渠道只读筛选，并把入口渲染为转义文本（不可点击），便于对照；批准仍只走 CLI。
 - **红线**：若端点包含内网私有 IP（如 `10.x.x.x`、`192.168.x.x`、`127.0.0.1`）但被申请公开发布，或者 URL 中携带 `?token=...`、`api_key=...`，必须**果断驳回（reject）**！
 
 ### 2. 功能描述是否存在误导或越界承诺？
