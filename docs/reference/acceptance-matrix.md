@@ -17,7 +17,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 
 | 一级功能模块 | 风险级别 | 覆盖范围重点 | 核心测试证据文件 |
 | :--- | :---: | :--- | :--- |
-| **Registry 登记与目录** | 高 | 维护者登记内部表面，只读者读取；拦截非法偷写公开、明文密钥，以及指向自身阅读页的 Web 入口。 | `tests/catalog_service_test.ts`、`tests/web_channel_test.ts`、`tests/e2e/cli_catalog_e2e_test.ts` |
+| **Registry 登记与目录** | 高 | 维护者登记内部表面，只读者读取；拦截非法偷写公开、明文密钥（含 URL 查询值与 fragment），以及指向自身阅读页的 Web 入口。 | `tests/catalog_service_test.ts`、`tests/web_channel_test.ts`、`tests/e2e/cli_catalog_e2e_test.ts` |
 | **受治理表面更新** | 高 | 维护者更新 draft/internal/rejected；禁止直接改 pending_public/approved_public；禁止把 web entry 改成自身阅读页。 | `tests/catalog_update_test.ts`、`tests/e2e/cli_update_e2e_test.ts` |
 | **Publisher 内部发布** | 高 | 草稿发布为内部；提交公开候选；匿名渠道保持完全不可见。 | `tests/catalog_publisher_test.ts`、`tests/e2e/cli_publish_e2e_test.ts` |
 | **Approval 公开审批** | 高 | 人类审计者通过/驳回（可选 `--note`）；严格触发 SELF_APPROVAL 拦截；禁止 Agent 审批；非法备注不写。 | `tests/catalog_approval_test.ts`、`tests/e2e/cli_approval_e2e_test.ts`、`tests/e2e/catalog_approvals_e2e_test.ts` |
@@ -42,7 +42,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **CLI 发布与查询** | 高 | `identity grant` 后 `catalog register`，reader `list`/`get`；`draft`→`publish internal` 后 reader 可见；`approve` 后匿名可见；越权与自批全部拒绝。 | `tests/e2e/cli_catalog_e2e_test.ts`、`tests/e2e/cli_publish_e2e_test.ts`、`tests/e2e/cli_approval_e2e_test.ts`、`tests/e2e/cli_access_e2e_test.ts` |
 | **Portal 发现与双平面** | 中 | `/internal` 内部笔记台；`/internal/pending` 待审公开队列（可按渠道 cli / mcp / web 只读筛选；筛选 tab 显示该渠道待审计数；入口标明种类 url / package / mcp_endpoint，引用为转义文本、不可点击）；目录看板与已登录杂志壳把待审计数链到该队列；`/internal/approvals` 公开边界审批轨迹；`/public` 公开发布目录；主题平滑降级；零 JS。 | `tests/portal_ui_test.ts`、`tests/portal_theme_test.ts`、`tests/e2e/portal_ui_e2e_test.ts` |
 | **MCP 渠道与网关鉴权** | 高 | 外部 MCP 连接信息发现；CLI / Portal / MCP 三入口同一 `listMcp` 载荷；网关准入鉴权流水追加；严禁代理工具调用。 | `tests/mcp_channel_test.ts`、`tests/gateway_service_test.ts`、`tests/e2e/cli_gateway_e2e_test.ts`、`tests/e2e/mcp_list_e2e_test.ts` |
-| **Web 渠道登记与已授权入口** | 高 | 维护者登记 url；CLI / Portal / MCP 三入口同一批连接信息；密钥查询/userinfo/`javascript:`/自身阅读页入口被拒；未审批公开对匿名不可达。 | `tests/web_channel_test.ts`、`tests/catalog_update_test.ts`、`tests/mcp_protocol_test.ts`、`tests/e2e/cli_web_e2e_test.ts`、`tests/e2e/portal_web_e2e_test.ts`、`tests/e2e/web_list_e2e_test.ts`、`tests/portal_handler_test.ts` |
+| **Web 渠道登记与已授权入口** | 高 | 维护者登记 url；CLI / Portal / MCP 三入口同一批连接信息；密钥查询名/查询值/fragment/userinfo/`javascript:`/自身阅读页入口被拒；未审批公开对匿名不可达。 | `tests/web_channel_test.ts`、`tests/catalog_update_test.ts`、`tests/mcp_protocol_test.ts`、`tests/e2e/cli_web_e2e_test.ts`、`tests/e2e/portal_web_e2e_test.ts`、`tests/e2e/web_list_e2e_test.ts`、`tests/portal_handler_test.ts` |
 | **CLI 渠道登记与已授权包坐标** | 高 | 维护者登记 package；CLI / Portal / MCP 三入口同一批包坐标；命令式/`npx`/URL/未知 registry 被拒；未审批公开对匿名不可达。 | `tests/cli_channel_test.ts`、`tests/mcp_protocol_test.ts`、`tests/e2e/cli_package_e2e_test.ts`、`tests/e2e/portal_cli_e2e_test.ts`、`tests/e2e/cli_list_e2e_test.ts`、`tests/portal_handler_test.ts` |
 | **Gateway 访问审计只读查询** | 高 | 人类审计者在 CLI / Portal / MCP 看到同一访问审计；维护者/只读/匿名拒绝；读操作不改目录或审计文件。 | `tests/gateway_service_test.ts`、`tests/e2e/gateway_audit_e2e_test.ts` |
 | **UI Components 门户页维护** | 中 | 维护者 `page set` 组合固定种类组件；CLI / Portal / MCP 三入口同一张卡；未知种类/HTML/密钥字段被拒；内部与待审公开对匿名不可见。 | `tests/ui_page_test.ts`、`tests/portal_page_handler_test.ts`、`tests/mcp_protocol_test.ts`、`tests/e2e/cli_page_e2e_test.ts`、`tests/e2e/portal_page_e2e_test.ts`、`tests/e2e/page_get_e2e_test.ts` |

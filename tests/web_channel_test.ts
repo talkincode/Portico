@@ -256,6 +256,65 @@ Deno.test("any query key ending in a secret-shaped suffix is rejected, not just 
   assertEquals(await store.list(), []);
 });
 
+Deno.test("plaintext secret values in a web URL query are rejected even when the key name is innocuous", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // Key names like `ref` / `q` / `state` are ordinary catalog/OAuth parameters.
+  // The leak is the value: a maintainer who pastes a live token into any query
+  // slot should still be refused, or the catalog becomes a secret store.
+  const values = [
+    "sk-live-not-a-real-secret",
+    "ghp_notARealGitHubToken1",
+    "github_pat_notARealGitHubToken1",
+    "glpat-not-a-real-gitlab",
+    "xoxb-not-a-real-slack",
+    "sk_test_notARealStripeKey",
+  ];
+
+  for (const value of values) {
+    const input = internalWeb();
+    input.entry = {
+      kind: "url",
+      value: `https://docs.example.test/portals/docs-writer?ref=${value}`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("plaintext secrets in a web URL fragment are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // Implicit-flow OAuth and some dashboards put tokens in the hash, which
+  // searchParams never sees. A fragment key with a secret-shaped suffix, or a
+  // fragment value with a live-token prefix, must still fail closed.
+  const hrefs = [
+    "https://docs.example.test/portals/docs-writer#access_token=not-a-real-secret",
+    "https://docs.example.test/portals/docs-writer#ref=sk-live-not-a-real-secret",
+    "https://docs.example.test/portals/docs-writer#state=ok&id_token=not-a-real-secret",
+  ];
+
+  for (const href of hrefs) {
+    const input = internalWeb();
+    input.entry = { kind: "url", value: href };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("web URL documentation fragment and a path named token still register", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  const input = internalWeb();
+  input.entry = {
+    kind: "url",
+    value: "https://docs.example.test/auth/token#installation",
+  };
+
+  const created = await service.register(maintainer, input);
+  assertEquals(created.entry.value, "https://docs.example.test/auth/token#installation");
+});
+
 Deno.test("web URL userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

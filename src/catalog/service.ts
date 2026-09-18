@@ -93,6 +93,21 @@ function isSecretShapedQueryKey(key: string): boolean {
   const normalized = normalizeSecretQueryKey(key);
   return SECRET_QUERY_KEY_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
 }
+
+/**
+ * Query *values* can leak live credentials even when the key is ordinary
+ * (`ref`, `q`, `state`). Match well-known issuer prefixes only — a path
+ * segment named `token` or a docs slug is not a secret.
+ */
+function looksLikePlaintextSecretValue(value: string): boolean {
+  const text = value.trim();
+  if (text.length < 12) return false;
+  if (/^sk[-_][A-Za-z0-9_-]{8,}/.test(text)) return true;
+  if (/^(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)/.test(text)) return true;
+  if (/^glpat-/.test(text)) return true;
+  if (/^xox[baprs]-/i.test(text)) return true;
+  return false;
+}
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
@@ -983,8 +998,16 @@ function parseHttpHref(value: string, field: "mcp_endpoint" | "url"): void {
       `${field} must not include userinfo; store a secret reference instead`,
     );
   }
-  for (const key of url.searchParams.keys()) {
-    if (isSecretShapedQueryKey(key)) {
+  rejectPlaintextSecretsInParams(url.searchParams);
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  if (fragment.includes("=")) {
+    rejectPlaintextSecretsInParams(new URLSearchParams(fragment));
+  }
+}
+
+function rejectPlaintextSecretsInParams(params: URLSearchParams): void {
+  for (const [key, paramValue] of params.entries()) {
+    if (isSecretShapedQueryKey(key) || looksLikePlaintextSecretValue(paramValue)) {
       throw new CatalogError(
         ErrorCode.INVALID_INPUT,
         "plaintext secret fields are not allowed; store a reference instead",
