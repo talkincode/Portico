@@ -228,6 +228,32 @@ Deno.test("OAuth client-assertion and webhook signing-secret spellings in an MCP
   assertEquals(await store.list(), []);
 });
 
+Deno.test("any query key ending in a secret-shaped suffix is rejected in an MCP endpoint, not just the literal spellings on the deny list", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // None of these exact compound names are on the historical literal deny list,
+  // but each ends in a word (token / secret / credential / apikey) that is.
+  const aliases = [
+    "shared_secret",
+    "renewal_token",
+    "personal_access_token",
+    "device_secret",
+    "vault_credential",
+    "partner_apikey",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("MCP endpoint userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

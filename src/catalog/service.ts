@@ -65,9 +65,12 @@ const SECRET_KEYS = new Set([
   "credentials",
 ]);
 // URL query keys accept arbitrary caller spelling (unlike object field names, which are
-// already constrained by an allow-list), so a secret-shaped key is matched after stripping
-// case and separators rather than by exact string.
-const SECRET_QUERY_KEY_TOKENS = new Set([
+// already constrained by an allow-list). Real credential-parameter spellings across OAuth,
+// AWS SigV4, webhooks, GitLab, and friends are compound words that end in one of a small
+// number of secret-shaped suffixes (`client_assertion`, `xamzsecuritytoken`, ...). Matching
+// by suffix after stripping case and separators catches spellings nobody has enumerated yet
+// instead of only the literal strings a deny list happens to already contain.
+const SECRET_QUERY_KEY_SUFFIXES = [
   "token",
   "password",
   "secret",
@@ -75,31 +78,20 @@ const SECRET_QUERY_KEY_TOKENS = new Set([
   "privatekey",
   "credential",
   "credentials",
-  "accesstoken",
-  "authtoken",
-  "refreshtoken",
-  "clientsecret",
   "bearer",
   "authorization",
-  "sessiontoken",
-  "idtoken",
-  "securitytoken",
-  "sastoken",
   "signature",
   "sig",
-  "xamzsecuritytoken",
-  "xamzsignature",
-  "xamzcredential",
-  "clientassertion",
-  "consumersecret",
-  "oauthtokensecret",
-  "webhooksecret",
-  "signingsecret",
-  "privatetoken",
-]);
+  "assertion",
+];
 
 function normalizeSecretQueryKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isSecretShapedQueryKey(key: string): boolean {
+  const normalized = normalizeSecretQueryKey(key);
+  return SECRET_QUERY_KEY_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
 }
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
@@ -992,7 +984,7 @@ function parseHttpHref(value: string, field: "mcp_endpoint" | "url"): void {
     );
   }
   for (const key of url.searchParams.keys()) {
-    if (SECRET_QUERY_KEY_TOKENS.has(normalizeSecretQueryKey(key))) {
+    if (isSecretShapedQueryKey(key)) {
       throw new CatalogError(
         ErrorCode.INVALID_INPUT,
         "plaintext secret fields are not allowed; store a reference instead",

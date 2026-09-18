@@ -228,6 +228,34 @@ Deno.test("OAuth client-assertion and webhook signing-secret spellings in a web 
   assertEquals(await store.list(), []);
 });
 
+Deno.test("any query key ending in a secret-shaped suffix is rejected, not just the literal spellings on the deny list", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // None of these exact compound names are on the historical literal deny list,
+  // but each ends in a word (token / secret / credential / apikey) that is.
+  // A maintainer who registers with one of these should not slip past review
+  // just because nobody enumerated their exact spelling ahead of time.
+  const aliases = [
+    "shared_secret",
+    "renewal_token",
+    "personal_access_token",
+    "device_secret",
+    "vault_credential",
+    "partner_apikey",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalWeb();
+    input.entry = {
+      kind: "url",
+      value: `https://docs.example.test/portals/docs-writer?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("web URL userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);
