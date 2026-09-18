@@ -81,6 +81,15 @@ const SECRET_QUERY_KEY_TOKENS = new Set([
   "clientsecret",
   "bearer",
   "authorization",
+  "sessiontoken",
+  "idtoken",
+  "securitytoken",
+  "sastoken",
+  "signature",
+  "sig",
+  "xamzsecuritytoken",
+  "xamzsignature",
+  "xamzcredential",
 ]);
 
 function normalizeSecretQueryKey(key: string): string {

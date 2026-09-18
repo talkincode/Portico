@@ -177,6 +177,33 @@ Deno.test("common secret query param spellings in a web URL are rejected with no
   assertEquals(await store.list(), []);
 });
 
+Deno.test("session/ID token and cloud presigned-URL signature spellings in a web URL are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "session_token",
+    "id_token",
+    "security_token",
+    "sas_token",
+    "signature",
+    "sig",
+    "X-Amz-Security-Token",
+    "X-Amz-Signature",
+    "X-Amz-Credential",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalWeb();
+    input.entry = {
+      kind: "url",
+      value: `https://docs.example.test/portals/docs-writer?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("web URL userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

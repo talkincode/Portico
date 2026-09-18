@@ -177,6 +177,33 @@ Deno.test("common secret query param spellings in an MCP endpoint are rejected w
   assertEquals(await store.list(), []);
 });
 
+Deno.test("session/ID token and cloud presigned-URL signature spellings in an MCP endpoint are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "session_token",
+    "id_token",
+    "security_token",
+    "sas_token",
+    "signature",
+    "sig",
+    "X-Amz-Security-Token",
+    "X-Amz-Signature",
+    "X-Amz-Credential",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("MCP endpoint userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);
