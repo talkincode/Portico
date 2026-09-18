@@ -307,6 +307,22 @@ Deno.test("MCP endpoint documentation fragment and a path named token still regi
   assertEquals(created.entry.value, "https://mcp.example.test/auth/token#installation");
 });
 
+Deno.test("plaintext secret value in an MCP endpoint path is rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const hrefs = [
+    "https://mcp.example.test/servers/sk-live-not-a-real-secret-0123456789",
+    "https://mcp.example.test/connect/ghp_notARealGitHubToken1234567890",
+  ];
+
+  for (const href of hrefs) {
+    const input = internalMcp();
+    input.entry = { kind: "mcp_endpoint", value: href };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("MCP endpoint userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

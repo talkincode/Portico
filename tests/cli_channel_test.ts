@@ -183,6 +183,26 @@ Deno.test("URL package coordinate is rejected so Portico does not download or ex
   assertEquals(await store.list(), []);
 });
 
+Deno.test("package coordinate with a secret-shaped scope or name is rejected and does not write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // JSR/NPM scope and name characters (`[a-z0-9._-]`) are permissive enough
+  // to fit a live-token prefix. A maintainer pasting one into a package
+  // coordinate should not slip past just because it satisfies the jsr:/npm:
+  // shape check.
+  const coordinates = [
+    "npm:@sk-live-not-a-real-secret-0123456789/docs-writer",
+    "jsr:@example/ghp_notARealGitHubToken1234567890",
+  ];
+
+  for (const value of coordinates) {
+    const input = internalCli();
+    input.entry = { kind: "package", value };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("unknown registry prefix is rejected and does not write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

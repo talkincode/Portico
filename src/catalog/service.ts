@@ -108,6 +108,24 @@ function looksLikePlaintextSecretValue(value: string): boolean {
   if (/^xox[baprs]-/i.test(text)) return true;
   return false;
 }
+
+// Same issuer-prefix families as `looksLikePlaintextSecretValue`, but unanchored:
+// free text (name/description/version), a full href, or a package coordinate
+// can carry a live credential anywhere inside them, not only as the entire
+// field value. A negative lookbehind keeps a prefix from matching mid-word
+// (so a package named `desklight-tools` does not trip the `sk` family).
+const SECRET_SHAPED_SUBSTRING =
+  /(?<![A-Za-z0-9_])(?:sk[-_][A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9_-]{8,}|gho_[A-Za-z0-9_-]{8,}|ghu_[A-Za-z0-9_-]{8,}|ghs_[A-Za-z0-9_-]{8,}|ghr_[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9_-]{8,}|glpat-[A-Za-z0-9_-]{8,}|xox[baprs]-[A-Za-z0-9-]{8,})/i;
+
+/**
+ * Free text (name/description/version) and identifiers (href, package
+ * coordinate) are stored and, once approved, rendered on public pages. A live
+ * credential pasted anywhere inside them is a public leak just like one in a
+ * URL query, even though it is not the entire field value.
+ */
+function containsPlaintextSecretValue(value: string): boolean {
+  return SECRET_SHAPED_SUBSTRING.test(value);
+}
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
@@ -1069,6 +1087,15 @@ function requireText(value: unknown, field: string, max: number): string {
   }
   if (text.length > max) {
     throw new CatalogError(ErrorCode.INVALID_INPUT, `${field} is too long`);
+  }
+  // Every call site (name, description, version, entry.value) is stored and,
+  // once approved, rendered on public pages — so a live credential pasted
+  // anywhere inside any of them must fail closed here, once, for all of them.
+  if (containsPlaintextSecretValue(text)) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "plaintext secret fields are not allowed; store a reference instead",
+    );
   }
   return text;
 }

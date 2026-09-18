@@ -315,6 +315,25 @@ Deno.test("web URL documentation fragment and a path named token still register"
   assertEquals(created.entry.value, "https://docs.example.test/auth/token#installation");
 });
 
+Deno.test("plaintext secret value in a web URL path is rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // A live credential does not stop being a leak just because it landed in the
+  // path instead of a query key/value. `rejectPlaintextSecretsInParams` never
+  // sees path segments, so this must be caught by scanning the full href.
+  const hrefs = [
+    "https://docs.example.test/webhooks/sk-live-not-a-real-secret-0123456789",
+    "https://docs.example.test/deploy/ghp_notARealGitHubToken1234567890",
+  ];
+
+  for (const href of hrefs) {
+    const input = internalWeb();
+    input.entry = { kind: "url", value: href };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("web URL userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);
