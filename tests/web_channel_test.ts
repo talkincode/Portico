@@ -204,6 +204,30 @@ Deno.test("session/ID token and cloud presigned-URL signature spellings in a web
   assertEquals(await store.list(), []);
 });
 
+Deno.test("OAuth client-assertion and webhook signing-secret spellings in a web URL are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "client_assertion",
+    "consumer_secret",
+    "oauth_token_secret",
+    "webhook_secret",
+    "signing_secret",
+    "private_token",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalWeb();
+    input.entry = {
+      kind: "url",
+      value: `https://docs.example.test/portals/docs-writer?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("web URL userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);
