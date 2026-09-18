@@ -152,6 +152,31 @@ Deno.test("plaintext secret in a web URL query is rejected with no write", async
   assertEquals(await store.list(), []);
 });
 
+Deno.test("common secret query param spellings in a web URL are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "apikey",
+    "access_token",
+    "auth_token",
+    "client_secret",
+    "refresh_token",
+    "Authorization",
+    "bearer",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalWeb();
+    input.entry = {
+      kind: "url",
+      value: `https://docs.example.test/portals/docs-writer?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("web URL userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

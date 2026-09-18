@@ -64,6 +64,28 @@ const SECRET_KEYS = new Set([
   "credential",
   "credentials",
 ]);
+// URL query keys accept arbitrary caller spelling (unlike object field names, which are
+// already constrained by an allow-list), so a secret-shaped key is matched after stripping
+// case and separators rather than by exact string.
+const SECRET_QUERY_KEY_TOKENS = new Set([
+  "token",
+  "password",
+  "secret",
+  "apikey",
+  "privatekey",
+  "credential",
+  "credentials",
+  "accesstoken",
+  "authtoken",
+  "refreshtoken",
+  "clientsecret",
+  "bearer",
+  "authorization",
+]);
+
+function normalizeSecretQueryKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
@@ -955,7 +977,7 @@ function parseHttpHref(value: string, field: "mcp_endpoint" | "url"): void {
     );
   }
   for (const key of url.searchParams.keys()) {
-    if (SECRET_KEYS.has(key) || SECRET_KEYS.has(key.toLowerCase())) {
+    if (SECRET_QUERY_KEY_TOKENS.has(normalizeSecretQueryKey(key))) {
       throw new CatalogError(
         ErrorCode.INVALID_INPUT,
         "plaintext secret fields are not allowed; store a reference instead",
