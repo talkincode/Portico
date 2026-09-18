@@ -158,6 +158,26 @@ Deno.test("plaintext secret fields are rejected with no write", async () => {
   assertEquals(await store.list(), []);
 });
 
+Deno.test("plaintext secret values in name, description, or version are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // name/description/version are free text rendered on public cards and
+  // detail pages once approved. A live credential pasted anywhere inside
+  // them is as much a public leak as one in an entry URL, even though it
+  // is not anchored at the start of the field.
+  const cases: Array<Partial<RegisterInput>> = [
+    { name: "sk-live-not-a-real-secret-0123456789" },
+    { description: "Uses key ghp_notARealGitHubToken1234567890 to call the API." },
+    { version: "glpat-not-a-real-gitlab-01234" },
+  ];
+
+  for (const fields of cases) {
+    const input = { ...internalCli(), ...fields };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("file store failed public register leaves catalog file absent", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-catalog-" });
   const path = `${dir}/catalog.json`;

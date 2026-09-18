@@ -201,6 +201,28 @@ Deno.test("update rejects plaintext secret fields, unknown fields, and empty upd
   assertEquals(got.version, "1.0.0");
 });
 
+Deno.test("update rejects plaintext secret values in name, description, or version without writing", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  await service.register(maintainer, surface());
+
+  const cases = [
+    { id: "docs-writer", name: "sk-live-not-a-real-secret-0123456789" },
+    {
+      id: "docs-writer",
+      description: "Uses key ghp_notARealGitHubToken1234567890 in requests.",
+    },
+    { id: "docs-writer", version: "glpat-not-a-real-gitlab-01234" },
+  ];
+
+  for (const input of cases) {
+    await assertRejectsCode(() => service.update(maintainer, input), "INVALID_INPUT");
+  }
+
+  const got = await service.get(reader, "docs-writer");
+  assertEquals(got.name, "Docs Writer");
+  assertEquals(got.version, "1.0.0");
+});
+
 Deno.test("update of a missing id fails without writing", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);
