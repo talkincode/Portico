@@ -277,12 +277,21 @@ export function scanText(text: string, path: string): Finding[] {
 
 const decoder = new TextDecoder();
 
-async function gitLines(root: string, args: string[]): Promise<string[]> {
-  const output = await new Deno.Command("git", {
-    args: ["-C", root, ...args],
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
+const gitUnavailable = (binary: string): string =>
+  `the public-surface scan reads the tracked file list with \`${binary} ls-files\`, and \`${binary}\` is not runnable here; ` +
+  "refusing to report a clean public surface without being able to read it";
+
+async function gitLines(root: string, args: string[], binary: string): Promise<string[]> {
+  let output: Deno.CommandOutput;
+  try {
+    output = await new Deno.Command(binary, {
+      args: ["-C", root, ...args],
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+  } catch (cause) {
+    throw new Error(`${gitUnavailable(binary)} (${(cause as Error).message})`, { cause });
+  }
   if (!output.success) {
     throw new Error(
       `git ${args.join(" ")} failed: ${decoder.decode(output.stderr).trim()}`,
@@ -295,15 +304,22 @@ async function gitLines(root: string, args: string[]): Promise<string[]> {
  * The public surface is exactly what git would publish: tracked files. Build
  * output, local data and untracked scratch files are not in it, which is why
  * this asks git instead of walking the working tree.
+ *
+ * `binary` is injectable so the "git is not installed" path can be exercised
+ * for real rather than mocked.
  */
-export async function listPublicSurfaceFiles(root = "."): Promise<string[]> {
-  return await gitLines(root, ["ls-files", "-z"]);
+export async function listPublicSurfaceFiles(
+  root = ".",
+  binary = "git",
+): Promise<string[]> {
+  return await gitLines(root, ["ls-files", "-z"], binary);
 }
 
 export async function scanRepository(
   root = ".",
+  binary = "git",
 ): Promise<{ scanned: number; findings: Finding[] }> {
-  const files = await listPublicSurfaceFiles(root);
+  const files = await listPublicSurfaceFiles(root, binary);
   const findings: Finding[] = [];
   let scanned = 0;
   for (const file of files) {
