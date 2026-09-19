@@ -1,6 +1,13 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
-import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
+import {
+  applyAuditQuery,
+  applyConclusionQuery,
+  AuditService,
+  type ConclusionService,
+  parseAuditQuery,
+  parseConclusionQuery,
+} from "../audit/mod.ts";
 import {
   type Actor,
   type AgentSurface,
@@ -41,6 +48,11 @@ export interface PortalContext {
   access: AccessService;
   gateway?: GatewayService;
   pages?: PageService;
+  /**
+   * Optional auditor security conclusions. The Portal reads them; it never
+   * writes one — the process runs without `--allow-write`.
+   */
+  conclusions?: ConclusionService;
   /**
    * Optional Portal-only Cloudflare Access mapping. Absent means the feature
    * is off: `Cf-Access-Jwt-Assertion` is ignored. CLI / Gateway / MCP must
@@ -120,6 +132,19 @@ export async function handlePortalRequest(
     }
     if (url.pathname === "/api/gateway-audit") {
       return jsonOk(await listGatewayAudit(context.gateway, actor));
+    }
+    if (url.pathname === "/api/conclusions") {
+      if (!context.conclusions) return jsonOk([]);
+      // List first: the role check lives in `ConclusionService.list`, and a
+      // caller who may not read conclusions must not be told that its filter
+      // was malformed. `/api/audit` reads the same way.
+      const records = await context.conclusions.list(actor);
+      const query = parseConclusionQuery({
+        subject: url.searchParams.get("subject") ?? undefined,
+        scope: url.searchParams.get("scope") ?? undefined,
+        verdict: url.searchParams.get("verdict") ?? undefined,
+      });
+      return jsonOk(applyConclusionQuery(records, query));
     }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));

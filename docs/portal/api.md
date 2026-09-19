@@ -86,6 +86,22 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/gateway-audit
 
 ---
 
+### 4b. 安全审计结论 (`GET /api/conclusions`)
+列出人类审计者对登记表面的追加式安全结论。与 CLI `audit conclusions`、MCP `portico_conclusions` 同一载荷，读同一个结论文件。
+
+```bash
+# 全部结论
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/conclusions
+
+# 按主体 / 作用域 / 判定过滤
+curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions?subject=<id>&scope=public_boundary&verdict=flagged"
+```
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`；非法枚举过滤器（`scope` / `verdict`）与未知过滤键得到 `INVALID_INPUT`。这是只读面：记录结论必须经 CLI `audit conclude`，`POST` 返回 `405`。结论与维护轨迹分开存储，维护者身份不能覆盖。读操作不创建结论文件。
+
+---
+
 ### 5. 授权轨迹接口 (`GET /api/grants`)
 列出追加式身份授权记录。与 CLI `identity grants`、MCP `portico_grants` 同一载荷。
 

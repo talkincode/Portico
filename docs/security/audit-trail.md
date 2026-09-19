@@ -81,3 +81,30 @@ deno task cli -- audit list \
 **不可篡改保证**：
 - 维护者（Maintainer）即使拥有写 Catalog 的权限，也无法调用任何“清空审计记录”或“修改审计时间戳”的命令。
 - 试图通过 CLI、API 或 MCP 篡改审计日志的请求将被直接判定为非法语义而拒绝。
+
+---
+
+## 审计结论：与维护轨迹分开存储
+
+时间线记录的是**发生了什么**（谁登记、谁批准、谁被拒）。人类安全审计者的判断——公开边界是否守得住、入口指向何处、权限是否被放开、有无密钥泄漏、Gateway 是否越权——是**对事件的看法**，不是事件本身，因此单独存在 `conclusions.json` 里，**不并入上面的聚合时间线**。合并会让一条判定渲染得像一条系统事实。
+
+```typescript
+interface AuditConclusion {
+  id: string;                      // ccl-<subject>-<scope>-<stamp>-<seq>
+  subjectId: string;               // 被审计的目录登记
+  scope: ConclusionScope;          // public_boundary | entry_target | permission_change | secret_leakage | gateway_scope
+  verdict: ConclusionVerdict;      // cleared | flagged
+  auditorId: string;               // 写下判定的人类审计者
+  at: string;                      // ISO 8601
+  note?: string;                   // flagged 必填；含明文密钥或控制字符被拒
+}
+```
+
+约束与上述四大支柱一致，并额外要求审计独立性：
+
+- **只能追加。** 没有 update、没有 delete；复评同一主体同一作用域会追加第二条记录，第一条仍然可读。重复 id 得到 `ALREADY_EXISTS`，不是覆盖。
+- **只有人类审计者能写。** 维护者、只读者、匿名与 Agent 一律 `FORBIDDEN`；Agent 连 auditor 角色都拿不到，所以伪造 actor 是唯一入口，而它在这里同样被拒。
+- **维护权 ≠ 审计权。** 审计者若是该主体的维护者之一，得到 `SELF_AUDIT`（与公开边界的 `SELF_APPROVAL` 同源），判定不落盘。
+- **密钥只引用，不落明文。** note 走与目录同一套明文密钥扫描器，命中即 `INVALID_INPUT`。
+
+只读查询有三处同一答案：CLI `audit conclusions`、Portal `GET /api/conclusions`、MCP `portico_conclusions`。Portal 与 MCP 没有写权限，记录结论只能经 CLI `audit conclude`。

@@ -53,7 +53,7 @@ const UPDATE_MUTABLE_KEYS = new Set([
 ]);
 const ALLOWED_APPROVAL_KEYS = new Set(["id", "note"]);
 const APPROVAL_NOTE_MAX = 500;
-const SECRET_KEYS = new Set([
+export const SECRET_KEYS = new Set([
   "token",
   "password",
   "secret",
@@ -180,7 +180,7 @@ const SECRET_SHAPED_SUBSTRING = new RegExp(
  * credential pasted anywhere inside them is a public leak just like one in a
  * URL query, even though it is not the entire field value.
  */
-function containsPlaintextSecretValue(value: string): boolean {
+export function containsPlaintextSecretValue(value: string): boolean {
   return SECRET_SHAPED_SUBSTRING.test(value) || matchesFixedShapeSecret(value);
 }
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
@@ -642,7 +642,7 @@ function canSee(actor: Actor, record: AgentSurface): boolean {
     actor.role === "auditor";
 }
 
-function assertActor(actor: Actor): void {
+export function assertActor(actor: Actor): void {
   if (!actor || typeof actor !== "object") {
     throw new CatalogError(ErrorCode.INVALID_INPUT, "actor is required");
   }

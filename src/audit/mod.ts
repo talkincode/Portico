@@ -7,4 +7,22 @@ export {
 } from "./query.ts";
 export type { AuditQuery } from "./query.ts";
 export { AuditService } from "./service.ts";
+export {
+  applyConclusionQuery,
+  CONCLUSION_NOTE_MAX,
+  CONCLUSION_SCOPES,
+  CONCLUSION_VERDICTS,
+  ConclusionService,
+  FileConclusionStore,
+  MemoryConclusionStore,
+  parseConclusionQuery,
+} from "./conclusions.ts";
+export type {
+  AuditConclusion,
+  ConclusionInput,
+  ConclusionQuery,
+  ConclusionScope,
+  ConclusionStore,
+  ConclusionVerdict,
+} from "./conclusions.ts";
 export type { AuditActor, AuditEvent, AuditKind } from "./types.ts";

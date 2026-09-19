@@ -27,6 +27,7 @@ if (import.meta.main) {
       sessionsPath: env.PORTICO_SESSIONS_PATH,
       gatewayAuditPath: env.PORTICO_GATEWAY_AUDIT_PATH,
       pagePath: env.PORTICO_PAGE_PATH,
+      conclusionsPath: env.PORTICO_CONCLUSIONS_PATH,
       hostname,
       port,
       onListen: (addr) => {
