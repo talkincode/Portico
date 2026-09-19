@@ -17,6 +17,7 @@
   "tasks": {
     "test": "deno test --allow-read --allow-write --allow-env --allow-run --allow-net=127.0.0.1 tests/",
     "check:redaction": "deno test --allow-read --allow-run tests/public_surface_redaction_test.ts",
+    "check:runtime-boundary": "deno test --allow-read --allow-run tests/runtime_boundary_test.ts",
     "check": "deno check src/cli/main.ts src/catalog/mod.ts src/access/mod.ts src/audit/mod.ts src/portal/mod.ts src/portal/main.ts src/gateway/mod.ts src/gateway/main.ts src/mcp/mod.ts src/mcp/main.ts src/ui/mod.ts src/up/main.ts src/build/main.ts src/runtime/bind.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
