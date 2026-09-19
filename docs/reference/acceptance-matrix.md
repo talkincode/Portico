@@ -17,7 +17,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 
 | 一级功能模块 | 风险级别 | 覆盖范围重点 | 核心测试证据文件 |
 | :--- | :---: | :--- | :--- |
-| **Registry 登记与目录** | 高 | 维护者登记内部表面，只读者读取；拦截非法偷写公开、明文密钥（含 URL 查询值/fragment/路径、包坐标，以及 name/description/version 内嵌的密钥子串，含 AWS Access Key ID `AKIA`/`ASIA` 形值），以及指向自身阅读页的 Web 入口。 | `tests/catalog_service_test.ts`、`tests/web_channel_test.ts`、`tests/e2e/cli_catalog_e2e_test.ts` |
+| **Registry 登记与目录** | 高 | 维护者登记内部表面，只读者读取；拦截非法偷写公开、明文密钥（含 URL 查询值/fragment/路径、包坐标，以及 name/description/version 内嵌的密钥子串，含 AWS Access Key ID `AKIA`/`ASIA` 形值、Google API Key `AIza` 形值、PEM 私钥头与 npm 访问令牌 `npm_` 形值），以及指向自身阅读页的 Web 入口。 | `tests/catalog_service_test.ts`、`tests/web_channel_test.ts`、`tests/e2e/cli_catalog_e2e_test.ts` |
 | **受治理表面更新** | 高 | 维护者更新 draft/internal/rejected；禁止直接改 pending_public/approved_public；禁止把 web entry 改成自身阅读页。 | `tests/catalog_update_test.ts`、`tests/e2e/cli_update_e2e_test.ts` |
 | **Publisher 内部发布** | 高 | 草稿发布为内部；提交公开候选；匿名渠道保持完全不可见。 | `tests/catalog_publisher_test.ts`、`tests/e2e/cli_publish_e2e_test.ts` |
 | **Approval 公开审批** | 高 | 人类审计者通过/驳回（可选 `--note`）；严格触发 SELF_APPROVAL 拦截；禁止 Agent 审批；非法备注不写。 | `tests/catalog_approval_test.ts`、`tests/e2e/cli_approval_e2e_test.ts`、`tests/e2e/catalog_approvals_e2e_test.ts` |

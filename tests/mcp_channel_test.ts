@@ -267,6 +267,7 @@ Deno.test("plaintext secret values in an MCP endpoint query are rejected even wh
     "AKIANOTAREALAWSKEY01",
     "ASIANOTAREALSTSKEY01",
     "AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1",
+    "npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   ];
 
   for (const value of values) {
@@ -318,6 +319,7 @@ Deno.test("plaintext secret value in an MCP endpoint path is rejected with no wr
     "https://mcp.example.test/connect/ghp_notARealGitHubToken1234567890",
     "https://mcp.example.test/keys/AKIANOTAREALAWSKEY01",
     "https://mcp.example.test/keys/AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1",
+    "https://mcp.example.test/keys/npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   ];
 
   for (const href of hrefs) {

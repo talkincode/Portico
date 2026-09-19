@@ -217,6 +217,7 @@ Deno.test("update rejects plaintext secret values in name, description, or versi
       id: "docs-writer",
       description: "Rotate ASIANOTAREALSTSKEY01 after the incident.",
     },
+    { id: "docs-writer", name: "npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" },
   ];
 
   for (const input of cases) {

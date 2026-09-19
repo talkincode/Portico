@@ -126,12 +126,18 @@ const GOOGLE_API_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])
 // (RSA, EC, DSA, OpenSSH, or the generic PKCS#8 "PRIVATE KEY") or of where in
 // the field it appears — "-----BEGIN" text is never legitimate catalog prose.
 const PEM_PRIVATE_KEY_HEADER = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+// npm access/automation tokens are `npm_` followed by exactly 36
+// alphanumeric characters (40 total) — a fixed shape like AWS/Google above,
+// not an arbitrary-length issuer prefix, so it belongs in this list rather
+// than SECRET_PREFIX_PATTERNS.
+const NPM_ACCESS_TOKEN = /(?<![A-Za-z0-9_])npm_[A-Za-z0-9]{36}(?![A-Za-z0-9])/;
 // Every fixed-shape (non-prefix-family) secret pattern, checked in both the
 // anchored whole-value scanner and the unanchored substring scanner below.
 const FIXED_SHAPE_SECRET_PATTERNS = [
   AWS_ACCESS_KEY_ID,
   GOOGLE_API_KEY,
   PEM_PRIVATE_KEY_HEADER,
+  NPM_ACCESS_TOKEN,
 ];
 
 function matchesFixedShapeSecret(value: string): boolean {

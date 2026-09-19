@@ -194,6 +194,12 @@ Deno.test("plaintext secret values in name, description, or version are rejected
     { name: "-----BEGIN PRIVATE KEY-----" },
     { description: "Rotate this: -----BEGIN RSA PRIVATE KEY----- MIIE..." },
     { version: "-----BEGIN OPENSSH PRIVATE KEY-----" },
+    // npm access/automation tokens are a fixed-shape family too: `npm_`
+    // followed by exactly 36 alphanumeric characters, distinct from the
+    // issuer-prefix families above (no trailing-character minimum, exact
+    // length instead).
+    { name: "npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" },
+    { description: "Publish uses npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 in CI." },
   ];
 
   for (const fields of cases) {
@@ -219,7 +225,8 @@ Deno.test("prose mentioning private keys or a short AIza-looking token without t
     ...internalCli(),
     name: "Key Rotation Docs",
     description:
-      "Explains our private key rotation policy. Sample prefix only: AIzaShort, not a real key.",
+      "Explains our private key rotation policy. Sample prefix only: AIzaShort, not a real key. " +
+      "Publish tokens look like npm_ but a bare mention or a short npm_abc is not the real shape.",
   });
   assertEquals(created.name, "Key Rotation Docs");
 });
