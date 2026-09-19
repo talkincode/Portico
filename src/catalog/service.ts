@@ -110,6 +110,13 @@ const SECRET_PREFIX_PATTERNS = [
   "glpat-",
   "xox[baprs]-",
 ];
+// AWS Access Key IDs are 20-character uppercase identifiers: AKIA (long-lived)
+// or ASIA (temporary) plus 16 A-Z/0-9 chars. They are case-sensitive so a
+// description of an "asia-pacific" surface does not trip the scanner. The
+// existing issuer-prefix list above is case-insensitive and hyphen-tolerant;
+// folding AKIA/ASIA into it would either miss real keys or reject ordinary
+// region names.
+const AWS_ACCESS_KEY_ID = /(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])/;
 
 /**
  * Query *values* can leak live credentials even when the key is ordinary
@@ -124,7 +131,7 @@ const PLAINTEXT_SECRET_PREFIX_AT_START = new RegExp(
 function looksLikePlaintextSecretValue(value: string): boolean {
   const text = value.trim();
   if (text.length < 12) return false;
-  return PLAINTEXT_SECRET_PREFIX_AT_START.test(text);
+  return PLAINTEXT_SECRET_PREFIX_AT_START.test(text) || AWS_ACCESS_KEY_ID.test(text);
 }
 
 // Same issuer-prefix families as `looksLikePlaintextSecretValue`, but unanchored:
@@ -148,7 +155,7 @@ const SECRET_SHAPED_SUBSTRING = new RegExp(
  * URL query, even though it is not the entire field value.
  */
 function containsPlaintextSecretValue(value: string): boolean {
-  return SECRET_SHAPED_SUBSTRING.test(value);
+  return SECRET_SHAPED_SUBSTRING.test(value) || AWS_ACCESS_KEY_ID.test(value);
 }
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
