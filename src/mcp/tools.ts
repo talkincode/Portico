@@ -1,9 +1,14 @@
 import {
   applyAuditQuery,
+  applyConclusionQuery,
   AUDIT_ACTIONS,
   AUDIT_KINDS,
   type AuditService,
+  CONCLUSION_SCOPES,
+  CONCLUSION_VERDICTS,
+  type ConclusionService,
   parseAuditQuery,
+  parseConclusionQuery,
 } from "../audit/mod.ts";
 import type { AccessService } from "../access/mod.ts";
 import {
@@ -57,6 +62,8 @@ export interface McpToolDeps {
   access: AccessService;
   pages?: PageService;
   gateway?: GatewayService;
+  /** Read-only: the MCP entrance never records a conclusion. */
+  conclusions?: ConclusionService;
 }
 
 export const TOOLS: readonly McpTool[] = [
@@ -216,6 +223,31 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_conclusions",
+    description:
+      "列出人类审计者记录的追加式安全审计结论（主体 / 审计范围 / 判定 / 审计者 / 时间 / 可选说明）。等价于 CLI `audit conclusions` 与 Portal `GET /api/conclusions`。审计范围是公开边界、入口指向、权限变化、密钥泄漏或网关越权之一。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写结论文件或目录。这不是记录入口：结论由 CLI `audit conclude` 写入，Portal 与 MCP 只读。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subject: {
+          type: "string",
+          description: "只返回该目录记录 id 的结论",
+        },
+        scope: {
+          type: "string",
+          enum: [...CONCLUSION_SCOPES],
+          description: "只返回该审计范围的结论",
+        },
+        verdict: {
+          type: "string",
+          enum: [...CONCLUSION_VERDICTS],
+          description: "只返回该判定的结论",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "portico_page",
     description:
       "读取维护者排布的门户组件盒（当前身份可见的卡片与提示）。等价于 CLI `page get` 与 Portal `GET /api/page`。匿名看不到内部卡片；读操作不写 page 或目录。Portico 不是 CMS，不能通过此工具改页面。",
@@ -289,6 +321,13 @@ export async function callTool(
       return await deps.access.listCredentialRevokes(actor);
     case "portico_gateway_audit":
       return await listGatewayAudit(deps.gateway, actor);
+    case "portico_conclusions": {
+      if (!deps.conclusions) return [];
+      // Role check first, filter second — same order as `portico_audit`, so a
+      // non-auditor cannot probe the filter grammar.
+      const records = await deps.conclusions.list(actor);
+      return applyConclusionQuery(records, parseConclusionQuery(input));
+    }
     case "portico_page":
       if (!deps.pages) return { components: [] };
       return await deps.pages.get(actor);

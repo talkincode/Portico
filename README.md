@@ -100,7 +100,16 @@ deno task cli -- catalog publish --id my-agent --visibility public ...
 
 # 独立人类安全员审核通过（写入 approvals.json 并正式对全网公开）
 deno task cli -- catalog approve --id my-agent ...
+
+# 人类安全员写下独立的安全结论（追加式，与维护轨迹分开存储）
+deno task cli -- audit conclude --id my-agent --scope public_boundary \
+  --verdict flagged --note "入口指向审批范围之外的主机" ...
+
+# 三处入口读同一批结论：CLI / Portal `GET /api/conclusions` / MCP `portico_conclusions`
+deno task cli -- audit conclusions ...
 ```
+
+维护者不能写下或改写安全结论；审计者若是该登记表面的维护者之一，会被拒（`SELF_AUDIT`）——维护权不等于审计权。
 
 ---
 

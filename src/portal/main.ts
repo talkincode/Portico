@@ -29,6 +29,7 @@ if (import.meta.main) {
       pagePath: env.PORTICO_PAGE_PATH,
       gatewayAuditPath: env.PORTICO_GATEWAY_AUDIT_PATH,
       cfAccess: cfAccess.enabled ? new CfAccessVerifier(cfAccess) : undefined,
+      conclusionsPath: env.PORTICO_CONCLUSIONS_PATH,
       hostname,
       port,
       onListen: (addr) => {

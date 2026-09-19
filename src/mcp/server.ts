@@ -1,5 +1,5 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
-import { AuditService } from "../audit/mod.ts";
+import { AuditService, ConclusionService, FileConclusionStore } from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
@@ -19,6 +19,13 @@ export interface McpListenOptions {
    * and Portal `GET /api/page`. Absent means an empty composition.
    */
   pagePath?: string;
+  /**
+   * When set, `portico_conclusions` returns the auditor's own security
+   * conclusions, the same records CLI `audit conclusions` and Portal
+   * `GET /api/conclusions` return. The MCP entrance is read-only: it can read
+   * a conclusion but never record one.
+   */
+  conclusionsPath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -41,12 +48,15 @@ export function listenMcp(options: McpListenOptions): Deno.HttpServer {
       new AuditService(catalog, access, gateway),
     )
     : undefined;
+  const conclusions = options.conclusionsPath
+    ? new ConclusionService(new FileConclusionStore(options.conclusionsPath), catalog)
+    : undefined;
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
     signal: options.signal,
     onListen: options.onListen ?? (() => {}),
-  }, (request) => handleMcpRequest(request, { catalog, access, gateway, pages }));
+  }, (request) => handleMcpRequest(request, { catalog, access, gateway, pages, conclusions }));
 }
 
 export function mcpUrl(server: Deno.HttpServer): string {

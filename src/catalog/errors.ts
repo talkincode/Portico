@@ -6,6 +6,7 @@ export const ErrorCode = {
   NOT_FOUND: "NOT_FOUND",
   INVALID_STATE: "INVALID_STATE",
   SELF_APPROVAL: "SELF_APPROVAL",
+  SELF_AUDIT: "SELF_AUDIT",
   USAGE: "USAGE",
 } as const;
 

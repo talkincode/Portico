@@ -4,7 +4,16 @@ import {
   FileSessionStore,
   type GrantInput,
 } from "../access/mod.ts";
-import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
+import {
+  applyAuditQuery,
+  applyConclusionQuery,
+  AuditService,
+  type ConclusionInput,
+  ConclusionService,
+  FileConclusionStore,
+  parseAuditQuery,
+  parseConclusionQuery,
+} from "../audit/mod.ts";
 import {
   type Actor,
   type ActorKind,
@@ -60,6 +69,8 @@ Commands:
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
   audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
+  audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope public_boundary|entry_target|permission_change|secret_leakage|gateway_scope --verdict cleared|flagged [--note <text>]
+  audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope public_boundary|entry_target|permission_change|secret_leakage|gateway_scope] [--verdict cleared|flagged]
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   page get          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
 
@@ -67,6 +78,7 @@ Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
 Session path may also be set with PORTICO_SESSIONS_PATH.
 Gateway audit path may also be set with PORTICO_GATEWAY_AUDIT_PATH.
+Conclusion path may also be set with PORTICO_CONCLUSIONS_PATH.
 Page path may also be set with PORTICO_PAGE_PATH.
 A non-anonymous command proves its identity with --session; --actor-* alone is
 refused (USAGE). With no identity flags at all a command runs as anonymous.
@@ -337,7 +349,7 @@ async function runAudit(
   flags: Record<string, string>,
   env: Record<string, string | undefined>,
 ): Promise<CliResult> {
-  if (action !== "list") {
+  if (action !== "list" && action !== "conclude" && action !== "conclusions") {
     throw new UsageError(action ? `unknown audit action '${action}'` : "missing audit action");
   }
   const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
@@ -346,6 +358,38 @@ async function runAudit(
   }
   const actor = await resolveFlagsActor(flags, env);
   const catalog = new CatalogService(new FileCatalogStore(catalogPath));
+
+  if (action === "conclude" || action === "conclusions") {
+    const conclusionsPath = flags.conclusions ?? env.PORTICO_CONCLUSIONS_PATH;
+    if (!conclusionsPath) {
+      throw new UsageError("missing --conclusions or PORTICO_CONCLUSIONS_PATH");
+    }
+    const conclusions = new ConclusionService(
+      new FileConclusionStore(conclusionsPath),
+      catalog,
+    );
+    if (action === "conclusions") {
+      // Role check first, filter second — same order as `audit list`.
+      const records = await conclusions.list(actor);
+      const query = parseConclusionQuery({
+        subject: flags.subject,
+        scope: flags.scope,
+        verdict: flags.verdict,
+      });
+      return ok(applyConclusionQuery(records, query));
+    }
+    if (!flags.id) throw new UsageError("missing --id");
+    if (!flags.scope) throw new UsageError("missing --scope");
+    if (!flags.verdict) throw new UsageError("missing --verdict");
+    const payload: ConclusionInput = {
+      id: flags.id,
+      scope: flags.scope as ConclusionInput["scope"],
+      verdict: flags.verdict as ConclusionInput["verdict"],
+    };
+    if (flags.note !== undefined) payload.note = flags.note;
+    return ok(await conclusions.record(actor, payload));
+  }
+
   const access = new AccessService(new FileIdentityStore(readIdentitiesPath(flags, env)));
   const auditPath = flags.audit ?? env.PORTICO_GATEWAY_AUDIT_PATH;
   const gateway = auditPath

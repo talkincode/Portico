@@ -135,6 +135,13 @@ portico gateway audit --identities <path> --sessions <path> --audit <audit.json>
 # 查询系统全局聚合审计时间线
 portico audit list --catalog <path> --identities <path> --sessions <path> --session <token> [--limit <n>]
 
+# 写下一条安全审计结论（仅人类审计者；审计者不能审自己维护的主体）
+portico audit conclude --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
+  --id <subject> --scope public_boundary --verdict flagged --note "…"
+
+# 查询追加式安全结论（全部，或按主体 / 作用域 / 判定过滤）
+portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
+
 # 设置自定义门户卡片配置
 portico page set --page <path> --catalog <path> --identities <path> --sessions <path> --session <token> --input <page.json>
 

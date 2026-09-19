@@ -10,6 +10,7 @@ export {
 } from "./query.ts";
 export type { CatalogQuery } from "./query.ts";
 export { CatalogService } from "./service.ts";
+export { assertActor, containsPlaintextSecretValue, SECRET_KEYS } from "./service.ts";
 export { FileCatalogStore, MemoryCatalogStore } from "./store.ts";
 export type { CatalogStore } from "./store.ts";
 export type {
