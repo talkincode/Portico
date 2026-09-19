@@ -94,28 +94,52 @@ function isSecretShapedQueryKey(key: string): boolean {
   return SECRET_QUERY_KEY_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
 }
 
+// Single source of truth for every recognized issuer-prefix family, shared by
+// both `looksLikePlaintextSecretValue` (anchored, whole-value) and
+// `containsPlaintextSecretValue` (unanchored, embedded-substring) below. A
+// prefix added or removed here changes both checks at once, so the two can
+// no longer drift apart the way they could when each kept its own copy.
+const SECRET_PREFIX_PATTERNS = [
+  "sk[-_]",
+  "ghp_",
+  "gho_",
+  "ghu_",
+  "ghs_",
+  "ghr_",
+  "github_pat_",
+  "glpat-",
+  "xox[baprs]-",
+];
+
 /**
  * Query *values* can leak live credentials even when the key is ordinary
  * (`ref`, `q`, `state`). Match well-known issuer prefixes only — a path
  * segment named `token` or a docs slug is not a secret.
  */
+const PLAINTEXT_SECRET_PREFIX_AT_START = new RegExp(
+  `^(?:${SECRET_PREFIX_PATTERNS.join("|")})`,
+  "i",
+);
+
 function looksLikePlaintextSecretValue(value: string): boolean {
   const text = value.trim();
   if (text.length < 12) return false;
-  if (/^sk[-_][A-Za-z0-9_-]{8,}/.test(text)) return true;
-  if (/^(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)/.test(text)) return true;
-  if (/^glpat-/.test(text)) return true;
-  if (/^xox[baprs]-/i.test(text)) return true;
-  return false;
+  return PLAINTEXT_SECRET_PREFIX_AT_START.test(text);
 }
 
 // Same issuer-prefix families as `looksLikePlaintextSecretValue`, but unanchored:
 // free text (name/description/version), a full href, or a package coordinate
 // can carry a live credential anywhere inside them, not only as the entire
 // field value. A negative lookbehind keeps a prefix from matching mid-word
-// (so a package named `desklight-tools` does not trip the `sk` family).
-const SECRET_SHAPED_SUBSTRING =
-  /(?<![A-Za-z0-9_])(?:sk[-_][A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9_-]{8,}|gho_[A-Za-z0-9_-]{8,}|ghu_[A-Za-z0-9_-]{8,}|ghs_[A-Za-z0-9_-]{8,}|ghr_[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9_-]{8,}|glpat-[A-Za-z0-9_-]{8,}|xox[baprs]-[A-Za-z0-9-]{8,})/i;
+// (so a package named `desklight-tools` does not trip the `sk` family), and
+// each prefix requires 8+ trailing token characters so a bare mention of the
+// prefix in prose does not by itself trip the scanner.
+const SECRET_SHAPED_SUBSTRING = new RegExp(
+  `(?<![A-Za-z0-9_])(?:${
+    SECRET_PREFIX_PATTERNS.map((prefix) => `${prefix}[A-Za-z0-9_-]{8,}`).join("|")
+  })`,
+  "i",
+);
 
 /**
  * Free text (name/description/version) and identifiers (href, package
