@@ -179,6 +179,11 @@ Deno.test("plaintext secret values in name, description, or version are rejected
     { description: "Server token ghr_notARealGitHubToken1234567890 leaked in logs." },
     { name: "github_pat_notARealGitHubToken1234567890" },
     { description: "Slack webhook uses xoxb-not-a-real-slack-01234567890." },
+    // AWS Access Key IDs are named in docs/security/secrets.md as a plaintext
+    // class to refuse. They are 20-char uppercase ids (AKIA long-lived, ASIA
+    // temporary). A description that only says "asia-pacific" is not a key.
+    { name: "AKIANOTAREALAWSKEY01" },
+    { description: "Rotate ASIANOTAREALSTSKEY01 after the incident." },
   ];
 
   for (const fields of cases) {
@@ -186,6 +191,16 @@ Deno.test("plaintext secret values in name, description, or version are rejected
     await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
   }
   assertEquals(await store.list(), []);
+});
+
+Deno.test("asia-pacific names and a bare AKIA mention are not access key ids", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  const created = await service.register(maintainer, {
+    ...internalCli(),
+    name: "Asia-Pacific Docs Writer",
+    description: "Serves the asia-pacific region. Never paste an AKIA key here.",
+  });
+  assertEquals(created.name, "Asia-Pacific Docs Writer");
 });
 
 Deno.test("file store failed public register leaves catalog file absent", async () => {

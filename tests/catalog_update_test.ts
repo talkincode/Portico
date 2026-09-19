@@ -212,6 +212,11 @@ Deno.test("update rejects plaintext secret values in name, description, or versi
       description: "Uses key ghp_notARealGitHubToken1234567890 in requests.",
     },
     { id: "docs-writer", version: "glpat-not-a-real-gitlab-01234" },
+    { id: "docs-writer", name: "AKIANOTAREALAWSKEY01" },
+    {
+      id: "docs-writer",
+      description: "Rotate ASIANOTAREALSTSKEY01 after the incident.",
+    },
   ];
 
   for (const input of cases) {
