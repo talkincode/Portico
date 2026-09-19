@@ -145,6 +145,25 @@ Deno.test("the tracked public surface is what the scan reads", async () => {
   assert(files.length > 150, `expected the whole tracked tree, saw ${files.length} files`);
 });
 
+Deno.test("the scan refuses to report a clean surface when git cannot run", async () => {
+  const missing = "git-not-installed-here";
+  let message = "";
+  try {
+    await listPublicSurfaceFiles(".", missing);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  assert(message.includes(missing), `the refusal must name the binary: ${message}`);
+  assert(message.includes("refus"), `the refusal must say it is refusing: ${message}`);
+  let propagated = false;
+  try {
+    await scanRepository(".", missing);
+  } catch {
+    propagated = true;
+  }
+  assert(propagated, "scanRepository must not swallow an unreadable tracked tree");
+});
+
 Deno.test("no tracked file carries a credential or a live intranet coordinate", async () => {
   const { scanned, findings } = await scanRepository();
   assertEquals(findings.map(formatFinding), []);
