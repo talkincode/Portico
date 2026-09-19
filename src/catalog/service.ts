@@ -500,6 +500,9 @@ export class CatalogService {
         "the identity that submitted public cannot decide the same request",
       );
     }
+    if (decision === "approved") {
+      assertEntryIsPubliclyReachable(existing);
+    }
 
     const now = new Date().toISOString();
     const record: AgentSurface = {
@@ -1089,6 +1092,69 @@ function rejectPlaintextSecretsInParams(params: URLSearchParams): void {
       );
     }
   }
+}
+
+/**
+ * Approving a surface publishes its entry coordinate to anonymous callers, so
+ * an internal-only host would turn private topology into public information.
+ * The check lives on the public boundary rather than on register/update on
+ * purpose: the Registry's job is to describe internal surfaces, and an
+ * internal endpoint is a legitimate internal record. Only crossing the trust
+ * boundary — which `approve` alone does — makes the coordinate public.
+ */
+function assertEntryIsPubliclyReachable(record: AgentSurface): void {
+  if (record.entry.kind === "package") return;
+  let host: string;
+  try {
+    host = new URL(record.entry.value).hostname;
+  } catch {
+    return;
+  }
+  if (!isInternalOnlyHost(host)) return;
+  throw new CatalogError(
+    ErrorCode.INVALID_STATE,
+    "a public approval cannot expose an internal-only entry coordinate; " +
+      "update the entry to a publicly reachable host first",
+  );
+}
+
+/**
+ * Hosts that the public internet cannot reach. Single-label names are included
+ * because public DNS requires a dot, which also makes this rule generic: naming
+ * the internal hosts explicitly would put those names in a public repository.
+ */
+function isInternalOnlyHost(hostname: string): boolean {
+  const bare = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+  const host = bare.endsWith(".") ? bare.slice(0, -1) : bare;
+  const lower = host.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost")) return true;
+  if (lower.includes(":")) return isInternalOnlyIpv6(lower);
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(lower)) return isInternalOnlyIpv4(lower);
+  return !lower.includes(".");
+}
+
+function isInternalOnlyIpv4(host: string): boolean {
+  const octets = host.split(".").map(Number);
+  const [a, b] = octets;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+function isInternalOnlyIpv6(host: string): boolean {
+  const [leading] = host.split(":");
+  // A leading empty group means zero-compression, so the address is nowhere
+  // near global unicast; anything unparseable fails closed.
+  if (leading === "") return true;
+  const hextet = parseInt(leading, 16);
+  if (Number.isNaN(hextet)) return true;
+  // Only 2000::/3 is global unicast. ULA, link-local, IPv4-mapped and the
+  // deprecated site-local range cannot be reached from the public internet.
+  return (hextet & 0xe000) !== 0x2000;
 }
 
 function parseEntry(value: unknown): EntryRef {
