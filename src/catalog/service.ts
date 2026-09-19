@@ -117,6 +117,26 @@ const SECRET_PREFIX_PATTERNS = [
 // folding AKIA/ASIA into it would either miss real keys or reject ordinary
 // region names.
 const AWS_ACCESS_KEY_ID = /(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])/;
+// Google API keys are a fixed-shape family, not a prefix-plus-arbitrary-tail
+// family: `AIza` followed by exactly 35 base64url-alphabet characters (39
+// total). Anchoring the length keeps a short, unrelated "AIza..." mention in
+// prose from tripping the scanner the way a bare "AKIA" mention does not.
+const GOOGLE_API_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])/;
+// A PEM header is a private key regardless of the key type that follows it
+// (RSA, EC, DSA, OpenSSH, or the generic PKCS#8 "PRIVATE KEY") or of where in
+// the field it appears — "-----BEGIN" text is never legitimate catalog prose.
+const PEM_PRIVATE_KEY_HEADER = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+// Every fixed-shape (non-prefix-family) secret pattern, checked in both the
+// anchored whole-value scanner and the unanchored substring scanner below.
+const FIXED_SHAPE_SECRET_PATTERNS = [
+  AWS_ACCESS_KEY_ID,
+  GOOGLE_API_KEY,
+  PEM_PRIVATE_KEY_HEADER,
+];
+
+function matchesFixedShapeSecret(value: string): boolean {
+  return FIXED_SHAPE_SECRET_PATTERNS.some((pattern) => pattern.test(value));
+}
 
 /**
  * Query *values* can leak live credentials even when the key is ordinary
@@ -131,7 +151,7 @@ const PLAINTEXT_SECRET_PREFIX_AT_START = new RegExp(
 function looksLikePlaintextSecretValue(value: string): boolean {
   const text = value.trim();
   if (text.length < 12) return false;
-  return PLAINTEXT_SECRET_PREFIX_AT_START.test(text) || AWS_ACCESS_KEY_ID.test(text);
+  return PLAINTEXT_SECRET_PREFIX_AT_START.test(text) || matchesFixedShapeSecret(text);
 }
 
 // Same issuer-prefix families as `looksLikePlaintextSecretValue`, but unanchored:
@@ -155,7 +175,7 @@ const SECRET_SHAPED_SUBSTRING = new RegExp(
  * URL query, even though it is not the entire field value.
  */
 function containsPlaintextSecretValue(value: string): boolean {
-  return SECRET_SHAPED_SUBSTRING.test(value) || AWS_ACCESS_KEY_ID.test(value);
+  return SECRET_SHAPED_SUBSTRING.test(value) || matchesFixedShapeSecret(value);
 }
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);

@@ -184,6 +184,16 @@ Deno.test("plaintext secret values in name, description, or version are rejected
     // temporary). A description that only says "asia-pacific" is not a key.
     { name: "AKIANOTAREALAWSKEY01" },
     { description: "Rotate ASIANOTAREALSTSKEY01 after the incident." },
+    // Google API keys are a fixed-shape `AIza` + 35 base64url-alphabet
+    // characters (39 total). Unlike the issuer-prefix family above, the
+    // shape is defined by exact length, not a trailing-character minimum.
+    { name: "AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1" },
+    { description: "Maps key AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1 is live." },
+    // A PEM private-key header is a leak regardless of which key type
+    // follows it or where in the field it appears.
+    { name: "-----BEGIN PRIVATE KEY-----" },
+    { description: "Rotate this: -----BEGIN RSA PRIVATE KEY----- MIIE..." },
+    { version: "-----BEGIN OPENSSH PRIVATE KEY-----" },
   ];
 
   for (const fields of cases) {
@@ -201,6 +211,17 @@ Deno.test("asia-pacific names and a bare AKIA mention are not access key ids", a
     description: "Serves the asia-pacific region. Never paste an AKIA key here.",
   });
   assertEquals(created.name, "Asia-Pacific Docs Writer");
+});
+
+Deno.test("prose mentioning private keys or a short AIza-looking token without the real shape is not rejected", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  const created = await service.register(maintainer, {
+    ...internalCli(),
+    name: "Key Rotation Docs",
+    description:
+      "Explains our private key rotation policy. Sample prefix only: AIzaShort, not a real key.",
+  });
+  assertEquals(created.name, "Key Rotation Docs");
 });
 
 Deno.test("file store failed public register leaves catalog file absent", async () => {
