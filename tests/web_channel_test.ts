@@ -271,8 +271,8 @@ Deno.test("plaintext secret values in a web URL query are rejected even when the
     "sk_test_notARealStripeKey",
     "AKIANOTAREALAWSKEY01",
     "ASIANOTAREALSTSKEY01",
-    "AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1",
-    "npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc",
+    "npm_NOTAREALTOKEN0123456789abcdefghijklm",
   ];
 
   for (const value of values) {
@@ -329,8 +329,8 @@ Deno.test("plaintext secret value in a web URL path is rejected with no write", 
     "https://docs.example.test/webhooks/sk-live-not-a-real-secret-0123456789",
     "https://docs.example.test/deploy/ghp_notARealGitHubToken1234567890",
     "https://docs.example.test/keys/AKIANOTAREALAWSKEY01",
-    "https://docs.example.test/keys/AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1",
-    "https://docs.example.test/keys/npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "https://docs.example.test/keys/AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc",
+    "https://docs.example.test/keys/npm_NOTAREALTOKEN0123456789abcdefghijklm",
   ];
 
   for (const href of hrefs) {

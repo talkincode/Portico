@@ -194,8 +194,8 @@ Deno.test("package coordinate with a secret-shaped scope or name is rejected and
     "npm:@sk-live-not-a-real-secret-0123456789/docs-writer",
     "jsr:@example/ghp_notARealGitHubToken1234567890",
     "npm:@example/AKIANOTAREALAWSKEY01",
-    "npm:@example/AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1",
-    "npm:@example/npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    "npm:@example/AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc",
+    "npm:@example/npm_NOTAREALTOKEN0123456789abcdefghijklm",
   ];
 
   for (const value of coordinates) {
