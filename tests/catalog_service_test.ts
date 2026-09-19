@@ -169,6 +169,16 @@ Deno.test("plaintext secret values in name, description, or version are rejected
     { name: "sk-live-not-a-real-secret-0123456789" },
     { description: "Uses key ghp_notARealGitHubToken1234567890 to call the API." },
     { version: "glpat-not-a-real-gitlab-01234" },
+    // The remaining issuer-prefix families share the same substring scanner
+    // as sk-/ghp_/glpat- above; each one needs its own case or a future
+    // change to the shared prefix list could silently drop a family without
+    // any test noticing.
+    { description: "Rotate gho_notARealGitHubToken1234567890 before shipping." },
+    { name: "ghu_notARealGitHubToken1234567890" },
+    { version: "ghs_notARealGitHubToken1234567890" },
+    { description: "Server token ghr_notARealGitHubToken1234567890 leaked in logs." },
+    { name: "github_pat_notARealGitHubToken1234567890" },
+    { description: "Slack webhook uses xoxb-not-a-real-slack-01234567890." },
   ];
 
   for (const fields of cases) {
