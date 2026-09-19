@@ -187,19 +187,19 @@ Deno.test("plaintext secret values in name, description, or version are rejected
     // Google API keys are a fixed-shape `AIza` + 35 base64url-alphabet
     // characters (39 total). Unlike the issuer-prefix family above, the
     // shape is defined by exact length, not a trailing-character minimum.
-    { name: "AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1" },
-    { description: "Maps key AIzaSyDaGmWKa4JsXZHjGw7ISLn3namBGewQeX1 is live." },
+    { name: "AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc" },
+    { description: "Maps key AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc is live." },
     // A PEM private-key header is a leak regardless of which key type
     // follows it or where in the field it appears.
-    { name: "-----BEGIN PRIVATE KEY-----" },
-    { description: "Rotate this: -----BEGIN RSA PRIVATE KEY----- MIIE..." },
-    { version: "-----BEGIN OPENSSH PRIVATE KEY-----" },
+    { name: "-----BEGIN PRIVATE KEY-----" }, // synthetic fixture: a PEM header is never legitimate text
+    { description: "Rotate this: -----BEGIN RSA PRIVATE KEY----- MIIE..." }, // synthetic fixture: a PEM header is never legitimate text
+    { version: "-----BEGIN OPENSSH PRIVATE KEY-----" }, // synthetic fixture: a PEM header is never legitimate text
     // npm access/automation tokens are a fixed-shape family too: `npm_`
     // followed by exactly 36 alphanumeric characters, distinct from the
     // issuer-prefix families above (no trailing-character minimum, exact
     // length instead).
-    { name: "npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" },
-    { description: "Publish uses npm_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 in CI." },
+    { name: "npm_NOTAREALTOKEN0123456789abcdefghijklm" },
+    { description: "Publish uses npm_NOTAREALTOKEN0123456789abcdefghijklm in CI." },
   ];
 
   for (const fields of cases) {
