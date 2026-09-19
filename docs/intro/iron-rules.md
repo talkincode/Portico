@@ -34,6 +34,7 @@ Portico 在设计之初即确立了不可触碰的产品红线。任何新功能
 - 严禁把 Node.js 或 Bun 加入产品依赖、CI 流程或可分发产物。
 - 权限默认全拒，禁止使用 `--allow-all` 或等价的无节制通配授权。
 - CLI 分发产物必须为纯自包含二进制，运行绝不依赖机器上的 `node` 或 `bun` 命令。
+- 本节形状由**仓库合同检查**执行：`deno task check:runtime-boundary` 扫描 tracked 树，拒绝 Node/Bun 依赖根与锁文件、vendored `node_modules`、CI 里的 Node/Bun 安装、`src/` 里的 `node:` 导入与 node/npm/npx/bun 子进程调用，以及 `--allow-all` / `-A` / 裸 `--allow-net` / 裸 `--allow-ffi` 授权。
 
 ---
 
