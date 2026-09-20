@@ -9,12 +9,15 @@ import type {
   ApprovalDecision,
   ApprovalDecisionInput,
   ApprovalRecord,
+  AudienceReport,
+  BoundaryMismatch,
   CatalogChangeAction,
   CatalogChangeRecord,
   Channel,
   CliPackageInfo,
   EntryKind,
   EntryRef,
+  GovernanceState,
   MaintainerRef,
   McpConnectionInfo,
   PublicDecision,
@@ -592,6 +595,60 @@ export class CatalogService {
     return structuredClone(governed);
   }
 
+  /**
+   * One surface seen from the public trust boundary.
+   *
+   * Reports what the record claims, what the read path serves, which decision
+   * the trail holds and who that reaches, in a single read: a caller is never
+   * told a surface is public while the trail says otherwise, and an auditor does
+   * not have to line up two separate reads to notice a disagreement.
+   *
+   * The gate is the one `get` applies, so the report cannot become a side
+   * channel that confirms a draft its asker may not read.
+   */
+  async boundary(
+    actor: Actor,
+    id: string,
+    audience: readonly Actor[] = [],
+  ): Promise<AudienceReport> {
+    assertActor(actor);
+    if (!id || typeof id !== "string") {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "id is required");
+    }
+    const [stored, approvals] = await Promise.all([
+      this.store.get(id),
+      this.store.listApprovals(),
+    ]);
+    if (!stored) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+    const served = underPublicGrant(stored, publicGrant(approvals));
+    if (!canSee(actor, served)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+
+    const latest = latestDecision(approvals, id);
+    const trailApproved = latest?.decision === "approved";
+
+    return {
+      id: stored.id,
+      name: stored.name,
+      claimed: surfaceStanding(stored),
+      served: surfaceStanding(served),
+      reachable: isPubliclyReachable(served),
+      decision: latest?.decision ?? null,
+      mismatch: boundaryMismatch(stored, trailApproved, served),
+      subjects: audience
+        .map((subject) => ({
+          id: subject.id,
+          kind: subject.kind,
+          role: subject.role,
+          reachable: canSee(subject, served),
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    };
+  }
+
   async list(actor: Actor): Promise<AgentSurface[]> {
     assertActor(actor);
     const [records, approvals] = await Promise.all([
@@ -692,18 +749,55 @@ export class CatalogService {
  * publishes a record that a later governed write put back to internal.
  */
 function publicGrant(approvals: ApprovalRecord[]): Set<string> {
-  const latest = new Map<string, ApprovalRecord>();
-  for (const approval of approvals) {
-    const current = latest.get(approval.surfaceId);
-    if (!current || supersedes(current, approval)) {
-      latest.set(approval.surfaceId, approval);
+  const granted = new Set<string>();
+  for (const surfaceId of new Set(approvals.map((item) => item.surfaceId))) {
+    if (latestDecision(approvals, surfaceId)?.decision === "approved") {
+      granted.add(surfaceId);
     }
   }
-  const granted = new Set<string>();
-  for (const [surfaceId, approval] of latest) {
-    if (approval.decision === "approved") granted.add(surfaceId);
-  }
   return granted;
+}
+
+/** The newest trail entry for one surface: the rule public reachability reads. */
+function latestDecision(
+  approvals: ApprovalRecord[],
+  surfaceId: string,
+): ApprovalRecord | undefined {
+  let latest: ApprovalRecord | undefined;
+  for (const approval of approvals) {
+    if (approval.surfaceId !== surfaceId) continue;
+    if (!latest || supersedes(latest, approval)) latest = approval;
+  }
+  return latest;
+}
+
+/**
+ * Where a surface's own bytes stand against its trail, if they disagree.
+ *
+ * Both directions are governance findings, not repair instructions: the caller
+ * sees a mismatch and the trail, and deciding what to do about it stays with a
+ * human auditor. Neither branch adds reachability — `claimed` is never used to
+ * widen what a read returns.
+ */
+function boundaryMismatch(
+  stored: AgentSurface,
+  trailApproved: boolean,
+  served: AgentSurface,
+): BoundaryMismatch | null {
+  if (isPubliclyReachable(stored) && !trailApproved) {
+    return "claimed_public_without_approval";
+  }
+  if (trailApproved && !isPubliclyReachable(served)) {
+    return "approved_without_public_record";
+  }
+  return null;
+}
+
+/** The two fields a caller reads to decide whether a surface is public. */
+function surfaceStanding(
+  record: AgentSurface,
+): { visibility: Visibility; governanceState: GovernanceState } {
+  return { visibility: record.visibility, governanceState: record.governanceState };
 }
 
 /**
@@ -740,15 +834,15 @@ function canSee(actor: Actor, record: AgentSurface): boolean {
   if (record.governanceState === "draft") {
     return actor.role === "maintainer";
   }
-  if (
-    record.visibility === "public" &&
-    record.governanceState === "approved_public"
-  ) {
-    return true;
-  }
+  if (isPubliclyReachable(record)) return true;
   if (actor.role === "anonymous") return false;
   return actor.role === "reader" || actor.role === "maintainer" ||
     actor.role === "auditor";
+}
+
+/** Public reachability needs the claim *and* the state, never one of them. */
+function isPubliclyReachable(record: AgentSurface): boolean {
+  return record.visibility === "public" && record.governanceState === "approved_public";
 }
 
 export function assertActor(actor: Actor): void {

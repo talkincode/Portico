@@ -17,6 +17,7 @@ import type { AccessService } from "../access/mod.ts";
 import {
   type Actor,
   applyCatalogQuery,
+  audienceReport,
   CATALOG_CHANNELS,
   CATALOG_GOVERNANCE_STATES,
   CatalogError,
@@ -146,6 +147,22 @@ export const TOOLS: readonly McpTool[] = [
     description:
       "治理概览：当前身份可见的记录数与各治理状态计数。等价于 CLI `catalog dashboard` 与 Portal `GET /api/dashboard`。这不是运行指标大盘。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_audience",
+    description:
+      "单个入口在公开信任边界上的状态：记录自身声明的可见性（claimed）、读路径实际返回的状态（served）、审批线索上最新一次决定（approved / rejected / withdrawn / 无），以及名册中每个身份是否可达（含匿名）。等价于 CLI `catalog audience` 与 Portal `GET /api/audience/<id>`。仅维护者与人类审计者可读；只读与匿名得到 FORBIDDEN，草稿对审计者同样不可见。claimed 与 served 不一致时给出 mismatch，用于发现绕过审批的直写。只读：不写目录、不写审批线索，也不是批准入口。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "目录记录 id",
+        },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
   },
   {
     name: "portico_audit",
@@ -322,6 +339,13 @@ export async function callTool(
       return await deps.catalog.listCli(actor);
     case "portico_dashboard":
       return dashboardFrom(await deps.catalog.list(actor));
+    case "portico_audience":
+      return await audienceReport(
+        deps.catalog,
+        deps.access,
+        actor,
+        requireId(input.id),
+      );
     case "portico_audit": {
       const events = await deps.audit.list(actor);
       return applyAuditQuery(events, parseAuditQuery(input));

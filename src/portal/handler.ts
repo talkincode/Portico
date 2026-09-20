@@ -44,6 +44,7 @@ import {
 import { parseChannel, parseTheme, renderMagazinePage, renderNotFoundPage } from "./html.ts";
 import type { ReviewEntry } from "./review-entry.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
+import { audienceReport } from "../catalog/audience.ts";
 
 export interface PortalCfAccess {
   verify(assertion: string): Promise<{ email: string } | null>;
@@ -139,6 +140,15 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
       return jsonOk(dashboardFrom(surfaces));
+    }
+    const audience = url.pathname.match(/^\/api\/audience\/([a-z][a-z0-9-]{1,62})$/);
+    if (audience) {
+      // One surface at the public trust boundary: what it claims, what the read
+      // path serves, and who that reaches. The service refuses anyone who is
+      // not an auditor or maintainer, and hides a draft from both.
+      return jsonOk(
+        await audienceReport(context.catalog, context.access, actor, audience[1]),
+      );
     }
     if (url.pathname === "/api/identities") {
       return jsonOk(await context.access.list(actor));

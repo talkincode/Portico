@@ -1,6 +1,7 @@
 export { CatalogError, ErrorCode } from "./errors.ts";
 export { dashboardFrom } from "./dashboard.ts";
 export type { DashboardView } from "./dashboard.ts";
+export { audienceReport } from "./audience.ts";
 export {
   applyCatalogQuery,
   CATALOG_CHANNELS,
@@ -21,6 +22,9 @@ export type {
   ApprovalDecision,
   ApprovalDecisionInput,
   ApprovalRecord,
+  AudienceReport,
+  AudienceSubject,
+  BoundaryMismatch,
   CatalogChangeAction,
   CatalogChangeRecord,
   Channel,
@@ -34,6 +38,7 @@ export type {
   PublicSubmission,
   PublishInput,
   RegisterInput,
+  SurfaceBoundary,
   UpdateInput,
   Visibility,
   WebConnectionInfo,
