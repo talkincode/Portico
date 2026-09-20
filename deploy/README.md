@@ -70,6 +70,11 @@ sudo launchctl kickstart -k system/net.portico.cloudflared
 ./deploy/macos/verify.sh
 ```
 
+注意：`kickstart -k` 只重启进程，不重读 plist 文件；改了 plist 内容
+（新增环境变量、路径）后必须 `bootout` + `bootstrap` 一次，否则旧定义
+继续生效（已因此丢过一次 `PORTICO_EDGE_BIND`，cloudflared 起不来）。纯
+代码更新用 `kickstart -k` 即可。
+
 `render.sh` 是无 sudo 的确定性渲染：模板里的 `/Users/example`、
 `TUNNEL_ID`、`EDGE_BIND_IP`、daemon 用户全部来自上述四个变量；
 `portico.env` 只在首次不存在时从示例创建，之后永不覆盖；渲染后自动
