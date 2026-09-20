@@ -50,7 +50,8 @@ bash -n "$HOME_DIR/run.sh"
 bash -n "$HOME_DIR/run-cloudflared.sh"
 if command -v plutil >/dev/null 2>&1; then
   plutil -lint "$HOME_DIR/net.portico.macstudio.plist"
-  plutil -lint "$HOME_DIR/net.portico.cloudflared.plist"i
+  plutil -lint "$HOME_DIR/net.portico.cloudflared.plist"
+fi
 if [ -x "$HOME_DIR/bin/cloudflared" ]; then
   "$HOME_DIR/bin/cloudflared" tunnel --config "$HOME_DIR/config.yml" ingress validate
 fi
