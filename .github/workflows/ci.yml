@@ -18,11 +18,20 @@ jobs:
           deno-version: "2.9.6"
       - name: fmt
         run: deno fmt --check
+      # Each gate names `if: always()` so one failure cannot hide the others.
+      # A skipped step still leaves the job red, but the diagnosis would stop at
+      # the first problem: a formatting drift would report "fmt failed" while
+      # saying nothing about whether the revision compiles or passes its tests,
+      # and the next person would fix one thing, push, and wait to find the next.
       - name: lint
+        if: always()
         run: deno task lint
       - name: check
+        if: always()
         run: deno task check
       - name: test
+        if: always()
         run: deno task test
       - name: build
+        if: always()
         run: deno task build
