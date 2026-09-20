@@ -168,12 +168,19 @@ Deno.test("review github login is allowlisted and mints a session for the roster
   };
   const exchange = (_config: unknown, code: string) => {
     if (code !== "good-code") throw new Error("bad code");
-    return Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: ["jamiesun@example.com"] });
+    return Promise.resolve({
+      login: "jamiesun",
+      email: "jamiesun@example.com",
+      emails: ["jamiesun@example.com"],
+    });
   };
   const github = { config: { allowlist: ["jamiesun"] }, exchange } as never;
   const context = { catalog: {}, access, github } as never;
   // Start redirects to github.com with the callback and a state cookie.
-  const start = await handleReviewRequest(new Request("http://127.0.0.1/review/oauth/start"), context);
+  const start = await handleReviewRequest(
+    new Request("http://127.0.0.1/review/oauth/start"),
+    context,
+  );
   assertEquals(start.status, 303);
   const location = start.headers.get("location") ?? "";
   assertEquals(location.startsWith("https://github.com/login/oauth/authorize"), true);
@@ -182,12 +189,20 @@ Deno.test("review github login is allowlisted and mints a session for the roster
   assertEquals(state.length, 32);
   // Callback with a stranger login is rejected even with a valid code.
   const strangerExchange = () =>
-    Promise.resolve({ login: "mallory", email: "mallory@example.com", emails: ["mallory@example.com"] });
+    Promise.resolve({
+      login: "mallory",
+      email: "mallory@example.com",
+      emails: ["mallory@example.com"],
+    });
   const stranger = await handleReviewRequest(
     new Request(`http://127.0.0.1/review/oauth/callback?code=good-code&state=${state}`, {
       headers: { cookie: `portico_oauth_state=${state}` },
     }),
-    { catalog: {}, access, github: { config: { allowlist: ["jamiesun"] }, exchange: strangerExchange } } as never,
+    {
+      catalog: {},
+      access,
+      github: { config: { allowlist: ["jamiesun"] }, exchange: strangerExchange },
+    } as never,
   );
   assertEquals(stranger.status, 403);
   assertEquals(sessions.length, 0);
@@ -201,7 +216,11 @@ Deno.test("review github login is allowlisted and mints a session for the roster
     new Request("http://127.0.0.1/review/oauth/callback?code=good-code&state=wrong", {
       headers: { cookie: `portico_oauth_state=${state}` },
     }),
-    { catalog: {}, access, github: { config: { allowlist: ["jamiesun"] }, exchange: counting } } as never,
+    {
+      catalog: {},
+      access,
+      github: { config: { allowlist: ["jamiesun"] }, exchange: counting },
+    } as never,
   );
   assertEquals(badState.status, 400);
   assertEquals(exchanged, false);
@@ -219,7 +238,7 @@ Deno.test("review github login is allowlisted and mints a session for the roster
   assertEquals(cookies.some((value) => value.startsWith("portico_session=pst1_test")), true);
 });
 
-Deno.test("review github env parses allowlist and fails closed", async () => {
+Deno.test("review github env parses allowlist and fails closed", () => {
   assertEquals(parseGithubEnv({}).enabled, false);
   assertEquals(parseGithubEnv({ PORTICO_REVIEW_GITHUB_ENABLED: "true" }).enabled, false);
   assertEquals(
@@ -240,9 +259,17 @@ Deno.test("review github env parses allowlist and fails closed", async () => {
   });
   assertEquals(parsed.enabled, true);
   if (parsed.enabled) assertEquals(parsed.allowlist, ["jamiesun", "friend@example.com"]);
-  assertEquals(parseAllowlist("Jamiesun;; friend@example.com\n"), ["jamiesun", "friend@example.com"]);
+  assertEquals(parseAllowlist("Jamiesun;; friend@example.com\n"), [
+    "jamiesun",
+    "friend@example.com",
+  ]);
   assertEquals(isAllowedGithubUser({ login: "jamiesun", emails: [] }, ["jamiesun"]), true);
   assertEquals(isAllowedGithubUser({ login: "mallory", emails: [] }, ["jamiesun"]), false);
-  assertEquals(isAllowedGithubUser({ login: "mallory", emails: ["Jamiesun@Example.com"] }, ["jamiesun@example.com"]), true);
+  assertEquals(
+    isAllowedGithubUser({ login: "mallory", emails: ["Jamiesun@Example.com"] }, [
+      "jamiesun@example.com",
+    ]),
+    true,
+  );
   assertEquals(isAllowedGithubUser({ login: "jamiesun", emails: [] }, []), false);
 });

@@ -4,7 +4,6 @@ import { CatalogError, CatalogService, ErrorCode } from "../catalog/mod.ts";
 import type { Actor, RegisterInput } from "../catalog/mod.ts";
 import {
   type ExchangeGithubCode,
-  exchangeGithubCode,
   githubAuthorizeUrl,
   type GithubOauthConfig,
   isAllowedGithubUser,
@@ -44,7 +43,9 @@ export async function handleReviewRequest(
     const url = new URL(request.url);
     if (url.pathname === "/review/login") return await handleLogin(request, context);
     if (url.pathname === "/review/oauth/start") return handleOauthStart(context);
-    if (url.pathname === "/review/oauth/callback") return await handleOauthCallback(request, context);
+    if (url.pathname === "/review/oauth/callback") {
+      return await handleOauthCallback(request, context);
+    }
     if (
       url.pathname !== "/review" && url.pathname !== "/review/" &&
       url.pathname !== "/review/approve" && url.pathname !== "/review/reject" &&
@@ -160,7 +161,8 @@ function handleOauthStart(context: ReviewContext): Response {
     status: 303,
     headers: {
       "location": githubAuthorizeUrl(context.github.config, state),
-      "set-cookie": `portico_oauth_state=${state}; Path=/review/oauth/callback; Secure; HttpOnly; SameSite=Lax; Max-Age=600`,
+      "set-cookie":
+        `portico_oauth_state=${state}; Path=/review/oauth/callback; Secure; HttpOnly; SameSite=Lax; Max-Age=600`,
     },
   });
 }
@@ -194,14 +196,21 @@ async function handleOauthCallback(request: Request, context: ReviewContext): Pr
     }
   }
   if (!session) {
-    return jsonError(403, `no roster human matches this login (${emails[0] ?? "no email"}); ask the operator to bind it`);
+    return jsonError(
+      403,
+      `no roster human matches this login (${
+        emails[0] ?? "no email"
+      }); ask the operator to bind it`,
+    );
   }
   return new Response(null, {
     status: 303,
     headers: {
       "location": "/review",
       "set-cookie": [
-        `portico_session=${encodeURIComponent(session.token)}; Path=/review; Secure; HttpOnly; SameSite=Lax`,
+        `portico_session=${
+          encodeURIComponent(session.token)
+        }; Path=/review; Secure; HttpOnly; SameSite=Lax`,
         "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0",
       ].join(", "),
     },

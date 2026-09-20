@@ -39,6 +39,26 @@ sudo systemctl enable --now portico-portal portico-gateway portico-mcp
 
 端口仍是 8788/8789/8790。不要改成 `0.0.0.0`，不要占用无关生产端口。`tests/deploy_contract_test.ts` 同样解析这些 unit。
 
+## 验证（`verify.sh`）
+
+部署之后跑只读门禁，确认**在服务的是新修订、而且是产品页**：
+
+```sh
+./deploy/verify.sh
+PORTICO_EXPECT_SHA=$(git rev-parse origin/main) ./deploy/verify.sh
+```
+
+不打补丁、不重启、不需要 sudo、不写数据目录；唯一临时文件在 `$TMPDIR`。每条承诺按名字报 `ok` / `FAIL` / `skip`，任一 `FAIL` 即非零退出，所以「重启后没验证」不会被说成「已更新」。
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `PORTICO_DEPLOY_BIND` | `127.0.0.1` | 与 `run-*.sh` 同一个监听地址；内网实地用 drop-in / `EnvironmentFile` 注入，不要写进仓库 |
+| `PORTICO_DEPLOY_PORTAL_PORT` / `PORTICO_DEPLOY_GATEWAY_PORT` / `PORTICO_DEPLOY_MCP_PORT` | 8788 / 8789 / 8790 | 三个入口的端口 |
+| `PORTICO_DEPLOY_TREE` | 脚本的上一级 | 入口所服务的检出；用来判断监听进程是否比代码旧 |
+| `PORTICO_EXPECT_SHA` | 不设 | 钉住检出修订；不设时该条报 `skip`，不冒充通过 |
+
+它分开检查的三件事各自都像成功：端口有回答、页面有标题、进程还在跑。发现页与 404 壳共用同一个 `<title>`，所以门禁按发现壳的结构标记判断，而不是只看状态码。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。
+
 # macOS（macstudio，LaunchDaemon）
 
 模板在 `macos/`：`run.sh`（单监管整体，非三入口三守护）、

@@ -185,11 +185,11 @@ L0 从散文变成会红的检查。`tests/runtime_boundary.ts` + `tests/runtime
 
 - Portal Cloudflare Access JWT 映射
 
-`src/access/cf-access.ts` 用 Web Crypto 校验 RS256 JWT（`aud` / `iss` / `exp` / 签名）。默认关闭：`PORTICO_CF_ACCESS_ENABLED` 未显式打开，或缺少合法 team/aud 时，现有会话路径不变。启用后 Portal 在没有会话时读取 `Cf-Access-Jwt-Assertion`，用已校验 email 查名册人类身份；明文 `Cf-Access-Authenticated-User-Email` 不是证明。命中则与该身份的会话看到同一治理状态；失败为匿名（`/internal` HTML 404）。不写 `identities.json` / `sessions.json`，不签发 `pst1_` 会话。CLI / Gateway / MCP 不读该头。JWKS URL 只允许 loopback 测试地址或该 team 的 Cloudflare certs 路径。这不是 GitHub OAuth 客户端，也不托管 Tunnel。
+`src/access/cf-access.ts` 用 Web Crypto 校验 RS256 JWT（`aud` / `iss` / `exp` / 签名）。默认关闭：`PORTICO_CF_ACCESS_ENABLED` 未显式打开，或缺少合法 team/aud 时，现有会话路径不变。启用后 Portal 在没有会话时读取 `Cf-Access-Jwt-Assertion`，用已校验 email 查名册人类身份；明文 `Cf-Access-Authenticated-User-Email` 不是证明。命中则与该身份的会话看到同一治理状态；失败为匿名（`/internal` HTML 404）。不写 `identities.json` / `sessions.json`，不签发 `pst1_` 会话。CLI / Gateway / MCP 不读该头。JWKS URL 只允许 loopback 测试地址或该 team 的 Cloudflare certs 路径。这条映射路径不是 GitHub OAuth 客户端，也不托管 Tunnel；Review 面另有一条自己的 GitHub OAuth 登录（见下条），两者互不依赖。
 
 - 尚未实现
 
-GitHub OAuth / 邮箱 OTP 登录界面，以及 Cloudflare Tunnel / `cloudflared` 配置。它们属于边缘 IdP 与基础设施，不进本仓库。标为待核验以外的“已有能力”一律不应被写出。
+邮箱 OTP 登录界面，以及 Cloudflare Tunnel / `cloudflared` 配置。它们属于边缘 IdP 与基础设施，不进本仓库。GitHub OAuth 登录**已实现**在 Review 面（`src/review/github.ts`，2026-09-20 起）：默认关闭，缺 client / secret / callback 即关闭，allowlist 为空即全拒，校验过的邮箱只用来查名册人类身份——角色由名册决定，GitHub 本身不能授予 auditor；`tests/review_handler_test.ts` 覆盖开关、全拒与角色不可自封。标为待核验以外的“已有能力”一律不应被写出。
 
 ## 目标功能清单
 
@@ -345,6 +345,10 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 | 公开面脱敏（开源公开合同） | 高 | ✅ `git ls-files` 的每个 tracked 文件扫完为 0 命中；`deno task check:redaction` 可单独跑，`deno task test` 与 CI 一并执行；回环地址、形似数字的公开域名（`10.1.2.3.docs.example.com`）、CIDR 简写（`10/8`）与散文里的 issuer 前缀都不误报 | ✅ 粘贴的凭据（issuer 前缀族与固定形状族）、RFC1918 / 链路本地 / CGNAT IPv4、ULA / 链路本地 IPv6、单标签主机 URL 任一出现即失败；失败输出只给 `文件:行:规则:掩码值`，不回显原值；tracked 树读不出来（git 不可用）时 fail closed，不静默通过 | ✅ 不适用：不消费身份名册，与角色无关；维护者、Agent 与人类审计者提交的文件同样被扫 | ✅ 合成夹具必须在同一行带合成标记；每条豁免都要写理由且必须仍被命中，过期豁免即失败（防止豁免烂成放行） | `tests/public_surface_redaction_test.ts`；`tests/redaction.ts` |
 | 运行时边界（L0 公开合同） | 高 | ✅ tracked 树 0 命中：无 Node/Bun 依赖根与锁文件（`package.json` / `package-lock.json` / `yarn.lock` / `pnpm-lock.yaml` / `bun.lock` / `.nvmrc` 等，任意深度）、无 vendored `node_modules`、CI 只跑 deno、`src/` 无 `node:` 导入且不启动 node/npm/npx/bun、任务与脚本无全开授权；`deno task check:runtime-boundary` 可单独跑，并随 `deno task test` 在 CI 执行；`npm:` 适配导入、裸 `--allow-read`/`--allow-write`/`--allow-env`/`--allow-run`、门户页渲染给读者的第三方包运行命令都不误报 | ✅ 真实违规报红已验证：tracked `package.json` 命中 `node-manifest`，CI 加 `actions/setup-node@v5` 命中 `node-toolchain-in-ci`；合成夹具另覆盖 `node:` 导入、`Deno.Command("node")`/`npx`/`bun` 子进程调用、`--allow-all`/`-A`/裸 `--allow-net`/裸 `--allow-ffi`、`run: npm ci` 等；tracked 树读不出来（git 不可用）时 fail closed，不静默通过 | ✅ 不适用：不消费身份名册，与角色无关；维护者、Agent 与人类审计者提交的文件同样被扫 | ✅ 内容范围只覆盖会 ship 或会跑的 `src/`、`deno.json`、`deploy/`、`.github/`，`tests/` 只受清单路径规则约束（夹具必须能写出被拒形状）；每条声明规则都必须有夹具命中，规则清单不能长成空转 | `tests/runtime_boundary_test.ts`；`tests/runtime_boundary.ts` |
 
+| 部署契约与入口健康门禁 | 中 | ✅ 只读门禁打三个真实入口：发现页（按发现壳结构判产品页，不只看 200）、`/public` 200、`/internal` 404、目录 `ok:true` 信封、Portal 写方法 405、Gateway 工具调用 POST 405、Gateway 审计匿名 403、MCP `initialize` 返回 `portico`、MCP GET 405、监听进程不比它服务的树更旧 | ✅ 入口停机、错误页冒充产品页（同 `<title>` 同壳）、匿名 `/internal` 返 200、监听进程早于树的写入、`PORTICO_EXPECT_SHA` 与检出不符——每条按名字报 `FAIL` 且非零退出 | ✅ 不适用：门禁只用匿名只读探测，不需要身份也不需要 sudo；Portal 与 MCP 仍不持 `--allow-write`，门禁不碰名册 | ✅ 门禁自身无副作用：失败只报名字与非零退出，不重启、不改目录、不留残文件（临时戳只在 `$TMPDIR`）；`skip` 只在不适用时出现，且不冒充通过 | `tests/e2e/deploy_verify_e2e_test.ts`；`tests/deploy_contract_test.ts` |
+
 缺口的最低期望：每行至少先有一条跨入口的 Happy Path（发布或发现能在 CLI 与 Portal 对上）；所有高风险行必须再有失败路径（未审批公开、越权、自批）；权限行必须打两种身份；写操作必须证明失败后公开面与目录不被脏写。
 
 三个入口各有**进程级**启动烟测（`tests/e2e/entrypoint_boot_e2e_test.ts`）：spawn 真实的 `src/portal/main.ts` / `src/gateway/main.ts` / `src/cli/main.ts`，读它播报的那行 JSON，再打一次请求。`up` 整机起动另有系统级 E2E（`tests/e2e/system_up_e2e_test.ts`）：空数据目录 → `up` → 治理动作 → 重启 → 断言状态仍在，并断言停下后端口真的关闭。这两条覆盖的是**产物进程本身**，不是直接 import 的 `listen*` 函数——`src/gateway/main.ts` 曾经在 275 个测试全绿的情况下完全无法启动，原因就是当时没有任何用例执行过它。
+
+`deploy/verify.sh` 接着管**已经在跑的那一套**：部署之后只读地打三个入口，按名字断言发现页（不是同 `<title>` 的错误壳）、`/public`、`/internal` 的 404、目录信封、Portal 写方法 405、Gateway 不执行工具与审计 403、MCP `initialize`，再比较每个监听进程的启动时间与它服务的树、以及 `PORTICO_EXPECT_SHA`。之所以要单独一条：`systemctl restart` 的 sudo 被拒时命令非零退出，而旧容器仍在同一批端口上照常服务，于是「端口有回答」看起来和「新修订在服务」一样——上一轮部署就是这么绕过验证的。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。

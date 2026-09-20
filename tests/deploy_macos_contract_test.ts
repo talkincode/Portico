@@ -87,7 +87,10 @@ Deno.test("deploy macos: review github hosts stay closed unless GitHub login is 
   const plain = reviewPerms("127.0.0.1", paths);
   assert(!plain.some((flag) => flag.includes("github.com")), "no github hosts without login");
   const withGithub = reviewPerms("127.0.0.1", paths, [...githubNetHosts()]);
-  assert(withGithub.includes("--allow-net=github.com"), "github authorize host granted when enabled");
+  assert(
+    withGithub.includes("--allow-net=github.com"),
+    "github authorize host granted when enabled",
+  );
   assert(withGithub.includes("--allow-net=api.github.com"), "github api host granted when enabled");
 });
 
