@@ -2,7 +2,7 @@
 
 Portico 不是身份提供者，也不托管登录界面。Portal 与 Review 在**显式启用**时，可以把 Cloudflare Access 签发的 JWT 映射到本地名册上的人类身份。这不是第二套可写身份，也不会签发 `pst1_` 会话。
 
-CLI、Gateway 与 MCP 继续只认 Portico 会话。GitHub 登录与邮箱 One-time PIN 如果要存在，只存在于 Cloudflare 边缘，不进入本仓库。
+CLI、Gateway 与 MCP 继续只认 Portico 会话。Cloudflare 边缘的 GitHub/邮箱登录如果要存在，只存在于边缘，不进入本仓库；Review 自带的 GitHub OAuth 见下节。
 
 ---
 
@@ -72,7 +72,15 @@ JWT 校验口径见 [Validating JSON Web Tokens](https://developers.cloudflare.c
 
 ## 明确不做
 
-- 不在 Portico 实现 GitHub OAuth 客户端、邮箱 OTP 或本地 SMTP。
+- 不在 Portal 实现 GitHub OAuth 客户端、邮箱 OTP 或本地 SMTP（Review 的 GitHub 登录见下节，是另一条显式启用的浏览器路径）。
 - 不把 Cloudflare Tunnel / `cloudflared` 配置、隧道 token 或反代模板收进本仓库。那是边缘基础设施。
 - 不把 JWT 扩到 CLI、Gateway 或 MCP。
 - 不把未审批对象变成公开可达。匿名与失败映射看到的仍是公开面。
+
+---
+
+## Review GitHub OAuth 登录（mira 模式）
+
+Cloudflare 只做哑隧道时，人工登录走 Review 自带的 GitHub OAuth：`GET /review/oauth/start` 跳到 github.com（带 state cookie 防 CSRF），`GET /review/oauth/callback` 换 code、取用户与 verified 邮箱。allowlist（`PORTICO_REVIEW_ALLOWLIST`，GitHub login 或邮箱，空即全拒）先过，再用 verified 邮箱命中名册人类并签发普通 Portico 会话（`Secure; HttpOnly; SameSite=Lax` cookie）。GitHub 决定“你是谁”，名册决定“你能审什么”；非 auditor 照样不能批准。一次性凭证登录表单保留作恢复入口。
+
+环境变量（默认全关，缺任一项即关闭）：`PORTICO_REVIEW_GITHUB_ENABLED`、`PORTICO_REVIEW_GITHUB_CLIENT_ID`、`PORTICO_REVIEW_GITHUB_CLIENT_SECRET`（只在主机）、`PORTICO_REVIEW_GITHUB_CALLBACK`（必须 https）、`PORTICO_REVIEW_ALLOWLIST`。启用时 `up`/`build` 给 Review 进程追加且仅追加 `github.com` 与 `api.github.com` 出站。GitHub OAuth App 的 Authorization callback URL 填公网 `https://portico.talkincode.net/review/oauth/callback`。

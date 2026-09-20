@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { cfAccessNetHost, reviewPerms } from "../src/perms.ts";
+import { cfAccessNetHost, githubNetHosts, reviewPerms } from "../src/perms.ts";
 
 /**
  * macOS (LaunchDaemon) deployment contract. The Linux docker/systemd scripts
@@ -76,6 +76,19 @@ Deno.test("deploy macos: review extra net stays closed unless Access mapping is 
     "JWKS host granted when enabled",
   );
   assertEquals(cfAccessNetHost("example"), "example.cloudflareaccess.com");
+});
+
+Deno.test("deploy macos: review github hosts stay closed unless GitHub login is on", () => {
+  const paths = {
+    catalog: "/app/data/catalog.json",
+    identities: "/app/data/identities.json",
+    sessions: "/app/data/sessions.json",
+  };
+  const plain = reviewPerms("127.0.0.1", paths);
+  assert(!plain.some((flag) => flag.includes("github.com")), "no github hosts without login");
+  const withGithub = reviewPerms("127.0.0.1", paths, [...githubNetHosts()]);
+  assert(withGithub.includes("--allow-net=github.com"), "github authorize host granted when enabled");
+  assert(withGithub.includes("--allow-net=api.github.com"), "github api host granted when enabled");
 });
 
 Deno.test("deploy macos: template keeps the live host out of the repo", async () => {

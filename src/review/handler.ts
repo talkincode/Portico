@@ -2,6 +2,13 @@ import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
 import { CatalogError, CatalogService, ErrorCode } from "../catalog/mod.ts";
 import type { Actor, RegisterInput } from "../catalog/mod.ts";
+import {
+  type ExchangeGithubCode,
+  exchangeGithubCode,
+  githubAuthorizeUrl,
+  type GithubOauthConfig,
+  isAllowedGithubUser,
+} from "./github.ts";
 
 export interface ReviewContext {
   catalog: CatalogService;
@@ -12,6 +19,17 @@ export interface ReviewContext {
    * and a presented Portico session always outranks it. Absent means off.
    */
   cfAccess?: ReviewCfAccess;
+  /**
+   * Optional Review GitHub OAuth login (mira pattern). Verified,
+   * allowlisted GitHub users mint a normal Portico browser session for the
+   * roster human their email matches. Absent means off.
+   */
+  github?: ReviewGithub;
+}
+
+export interface ReviewGithub {
+  config: GithubOauthConfig;
+  exchange: ExchangeGithubCode;
 }
 
 export interface ReviewCfAccess {
@@ -25,6 +43,8 @@ export async function handleReviewRequest(
   try {
     const url = new URL(request.url);
     if (url.pathname === "/review/login") return await handleLogin(request, context);
+    if (url.pathname === "/review/oauth/start") return handleOauthStart(context);
+    if (url.pathname === "/review/oauth/callback") return await handleOauthCallback(request, context);
     if (
       url.pathname !== "/review" && url.pathname !== "/review/" &&
       url.pathname !== "/review/approve" && url.pathname !== "/review/reject" &&
@@ -126,15 +146,89 @@ async function resolveActor(request: Request, context: ReviewContext): Promise<A
 function anonymous(): Actor {
   return { id: "anonymous", kind: "human", role: "anonymous" };
 }
-function readSessionCookie(request: Request): string | null {
+/**
+ * GitHub OAuth login (mira pattern, Review-only). The state token is a
+ * short-lived CSRF binding held in an HttpOnly cookie, never in the URL
+ * beyond the provider round-trip. Only allowlisted GitHub logins/emails
+ * proceed, and only to the roster human their verified email matches —
+ * GitHub never grants a role by itself.
+ */
+function handleOauthStart(context: ReviewContext): Response {
+  if (!context.github) return jsonError(501, "github login is not configured");
+  const state = randomState();
+  return new Response(null, {
+    status: 303,
+    headers: {
+      "location": githubAuthorizeUrl(context.github.config, state),
+      "set-cookie": `portico_oauth_state=${state}; Path=/review/oauth/callback; Secure; HttpOnly; SameSite=Lax; Max-Age=600`,
+    },
+  });
+}
+
+async function handleOauthCallback(request: Request, context: ReviewContext): Promise<Response> {
+  if (!context.github) return jsonError(501, "github login is not configured");
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const expected = readCookie(request, "portico_oauth_state");
+  if (!code || !state || !expected || state !== expected) {
+    return jsonError(400, "invalid oauth callback");
+  }
+  let user;
+  try {
+    user = await context.github.exchange(context.github.config, code);
+  } catch {
+    return jsonError(502, "github exchange failed");
+  }
+  if (!isAllowedGithubUser(user, context.github.config.allowlist)) {
+    return jsonError(403, "this GitHub account is not allowlisted");
+  }
+  const emails = [user.email, ...user.emails].filter((email): email is string => !!email);
+  let session = null;
+  for (const email of emails) {
+    try {
+      session = await context.access.createBrowserSession(email);
+      break;
+    } catch {
+      // Try the next verified email; a roster miss is not fatal yet.
+    }
+  }
+  if (!session) {
+    return jsonError(403, `no roster human matches this login (${emails[0] ?? "no email"}); ask the operator to bind it`);
+  }
+  return new Response(null, {
+    status: 303,
+    headers: {
+      "location": "/review",
+      "set-cookie": [
+        `portico_session=${encodeURIComponent(session.token)}; Path=/review; Secure; HttpOnly; SameSite=Lax`,
+        "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0",
+      ].join(", "),
+    },
+  });
+}
+
+function readCookie(request: Request, name: string): string | null {
   const cookies = request.headers.get("cookie") ?? "";
-  const match = /(?:^|;\s*)portico_session=([^;]+)/.exec(cookies);
+  const match = new RegExp(`(?:^|;\\s*)${name}=([^;]+)`).exec(cookies);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function randomState(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function readSessionCookie(request: Request): string | null {
+  return readCookie(request, "portico_session");
 }
 async function handleLogin(request: Request, context: ReviewContext): Promise<Response> {
   if (request.method === "GET") {
+    const github = context.github
+      ? `<p><a href="/review/oauth/start">Sign in with GitHub</a></p>`
+      : "";
     return new Response(
-      `<!doctype html><meta charset="utf-8"><title>Portico review login</title><form method="post"><label>Identity <input name="id" required></label><label>One-time credential <input name="token" type="password" required></label><button>Sign in</button></form>`,
+      `<!doctype html><meta charset="utf-8"><title>Portico review login</title>${github}<form method="post"><label>Identity <input name="id" required></label><label>One-time credential <input name="token" type="password" required></label><button>Sign in</button></form>`,
       { headers: securityHeaders("text/html; charset=utf-8") },
     );
   }

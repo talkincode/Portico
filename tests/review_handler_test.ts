@@ -1,5 +1,6 @@
 import { assertEquals } from "./assert.ts";
 import { handleReviewRequest } from "../src/review/handler.ts";
+import { isAllowedGithubUser, parseAllowlist, parseGithubEnv } from "../src/review/github.ts";
 
 const pending = { id: "candidate", name: "Candidate", governanceState: "pending_public" };
 function context(
@@ -146,4 +147,102 @@ Deno.test("review POST routes approve and reject and GET is HTML", async () => {
   );
   assertEquals(page.status, 200);
   assertEquals((await page.text()).includes("Human review"), true);
+});
+
+Deno.test("review github login is allowlisted and mints a session for the roster human", async () => {
+  const auditor = { id: "human:auditor", kind: "human", role: "auditor" } as const;
+  const sessions: string[] = [];
+  const access = {
+    resolveSession: () => Promise.reject(new Error("no session")),
+    lookupHumanByEmail: (email: string) =>
+      Promise.resolve(email === "jamiesun@example.com" ? { ...auditor } : null),
+    createBrowserSession: (email: string) => {
+      sessions.push(email);
+      return Promise.resolve({
+        sessionId: "ses-1",
+        token: "pst1_test",
+        actor: { ...auditor },
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      });
+    },
+  };
+  const exchange = (_config: unknown, code: string) => {
+    if (code !== "good-code") throw new Error("bad code");
+    return Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: ["jamiesun@example.com"] });
+  };
+  const github = { config: { allowlist: ["jamiesun"] }, exchange } as never;
+  const context = { catalog: {}, access, github } as never;
+  // Start redirects to github.com with the callback and a state cookie.
+  const start = await handleReviewRequest(new Request("http://127.0.0.1/review/oauth/start"), context);
+  assertEquals(start.status, 303);
+  const location = start.headers.get("location") ?? "";
+  assertEquals(location.startsWith("https://github.com/login/oauth/authorize"), true);
+  const stateCookie = start.headers.get("set-cookie") ?? "";
+  const state = /portico_oauth_state=([0-9a-f]+)/.exec(stateCookie)?.[1] ?? "";
+  assertEquals(state.length, 32);
+  // Callback with a stranger login is rejected even with a valid code.
+  const strangerExchange = () =>
+    Promise.resolve({ login: "mallory", email: "mallory@example.com", emails: ["mallory@example.com"] });
+  const stranger = await handleReviewRequest(
+    new Request(`http://127.0.0.1/review/oauth/callback?code=good-code&state=${state}`, {
+      headers: { cookie: `portico_oauth_state=${state}` },
+    }),
+    { catalog: {}, access, github: { config: { allowlist: ["jamiesun"] }, exchange: strangerExchange } } as never,
+  );
+  assertEquals(stranger.status, 403);
+  assertEquals(sessions.length, 0);
+  // Callback with mismatched state is rejected before any exchange.
+  let exchanged = false;
+  const counting = () => {
+    exchanged = true;
+    return exchange(null, "good-code");
+  };
+  const badState = await handleReviewRequest(
+    new Request("http://127.0.0.1/review/oauth/callback?code=good-code&state=wrong", {
+      headers: { cookie: `portico_oauth_state=${state}` },
+    }),
+    { catalog: {}, access, github: { config: { allowlist: ["jamiesun"] }, exchange: counting } } as never,
+  );
+  assertEquals(badState.status, 400);
+  assertEquals(exchanged, false);
+  // Happy path mints one session and sets the cookie.
+  const done = await handleReviewRequest(
+    new Request(`http://127.0.0.1/review/oauth/callback?code=good-code&state=${state}`, {
+      headers: { cookie: `portico_oauth_state=${state}` },
+    }),
+    context,
+  );
+  assertEquals(done.status, 303);
+  assertEquals(done.headers.get("location"), "/review");
+  assertEquals(sessions, ["jamiesun@example.com"]);
+  const cookies = done.headers.getSetCookie();
+  assertEquals(cookies.some((value) => value.startsWith("portico_session=pst1_test")), true);
+});
+
+Deno.test("review github env parses allowlist and fails closed", async () => {
+  assertEquals(parseGithubEnv({}).enabled, false);
+  assertEquals(parseGithubEnv({ PORTICO_REVIEW_GITHUB_ENABLED: "true" }).enabled, false);
+  assertEquals(
+    parseGithubEnv({
+      PORTICO_REVIEW_GITHUB_ENABLED: "true",
+      PORTICO_REVIEW_GITHUB_CLIENT_ID: "id",
+      PORTICO_REVIEW_GITHUB_CLIENT_SECRET: "secret",
+      PORTICO_REVIEW_GITHUB_CALLBACK: "http://callback.invalid/review/oauth/callback",
+    }).enabled,
+    false,
+  );
+  const parsed = parseGithubEnv({
+    PORTICO_REVIEW_GITHUB_ENABLED: "yes",
+    PORTICO_REVIEW_GITHUB_CLIENT_ID: "id",
+    PORTICO_REVIEW_GITHUB_CLIENT_SECRET: "secret",
+    PORTICO_REVIEW_GITHUB_CALLBACK: "https://portico.talkincode.net/review/oauth/callback",
+    PORTICO_REVIEW_ALLOWLIST: "jamiesun, Friend@example.com",
+  });
+  assertEquals(parsed.enabled, true);
+  if (parsed.enabled) assertEquals(parsed.allowlist, ["jamiesun", "friend@example.com"]);
+  assertEquals(parseAllowlist("Jamiesun;; friend@example.com\n"), ["jamiesun", "friend@example.com"]);
+  assertEquals(isAllowedGithubUser({ login: "jamiesun", emails: [] }, ["jamiesun"]), true);
+  assertEquals(isAllowedGithubUser({ login: "mallory", emails: [] }, ["jamiesun"]), false);
+  assertEquals(isAllowedGithubUser({ login: "mallory", emails: ["Jamiesun@Example.com"] }, ["jamiesun@example.com"]), true);
+  assertEquals(isAllowedGithubUser({ login: "jamiesun", emails: [] }, []), false);
 });

@@ -1,6 +1,7 @@
 import { CfAccessVerifier, parseCfAccessEnv } from "../access/mod.ts";
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
+import { parseGithubEnv } from "./github.ts";
 import { listenReview } from "./server.ts";
 
 if (import.meta.main) {
@@ -15,11 +16,13 @@ if (import.meta.main) {
       ] as const
     ) if (!env[name]) throw new CatalogError(ErrorCode.USAGE, `missing ${name}`);
     const cfAccess = parseCfAccessEnv(env);
+    const github = parseGithubEnv(env);
     const server = listenReview({
       catalogPath: env.PORTICO_CATALOG_PATH!,
       identitiesPath: env.PORTICO_IDENTITIES_PATH!,
       sessionsPath: env.PORTICO_SESSIONS_PATH!,
       cfAccess: cfAccess.enabled ? new CfAccessVerifier(cfAccess) : undefined,
+      github: github.enabled ? { config: github } : undefined,
       hostname,
       port,
       onListen: (addr) =>

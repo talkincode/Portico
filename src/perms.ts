@@ -71,6 +71,11 @@ export function reviewPerms(
 export function cfAccessNetHost(team: string): string {
   return `${team}.cloudflareaccess.com`;
 }
+
+/** Outbound hosts the Review GitHub OAuth exchange needs. */
+export function githubNetHosts(): readonly string[] {
+  return ["github.com", "api.github.com"];
+}
 export const CLI_PERMS: readonly string[] = cliPerms();
 export const PORTAL_PERMS: readonly string[] = readOnlyHttpPerms();
 export const MCP_PERMS: readonly string[] = readOnlyHttpPerms();

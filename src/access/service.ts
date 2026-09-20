@@ -430,6 +430,45 @@ export class AccessService {
     };
   }
 
+  /**
+   * Mints a browser session for an *already verified* human email.
+   *
+   * The caller must have proved the email first: a completed GitHub OAuth
+   * exchange for an allowlisted login (see `src/review/github.ts`). This
+   * method performs no proof of its own — it maps the email onto a roster
+   * human and records a normal session, so approve/reject, audit trails,
+   * and revocation treat it exactly like a one-time-token login. Non-human
+   * records and roster misses are `FORBIDDEN`, never anonymous.
+   */
+  async createBrowserSession(email: string): Promise<SessionView> {
+    const sessions = this.#requireSessions();
+    const actor = await this.lookupHumanByEmail(email);
+    if (!actor) {
+      throw new CatalogError(ErrorCode.FORBIDDEN, "no roster human matches this login");
+    }
+    const subject = await this.store.get(actor.id);
+    if (!subject) {
+      throw new CatalogError(ErrorCode.FORBIDDEN, "no roster human matches this login");
+    }
+    const createdAt = this.clock();
+    const expiresAt = new Date(createdAt.getTime() + DEFAULT_SESSION_TTL_SECONDS * 1000);
+    const token = randomToken("pst1_");
+    const record: SessionRecord = {
+      id: issuedId("ses", subject.id, createdAt.toISOString()),
+      subjectId: subject.id,
+      tokenHash: await sha256Hex(token),
+      createdAt: createdAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+    await sessions.commitSession(record);
+    return {
+      sessionId: record.id,
+      token,
+      actor: { id: subject.id, kind: subject.kind, role: subject.role },
+      expiresAt: record.expiresAt,
+    };
+  }
+
   async resolveSession(token: string): Promise<Actor> {
     const record = await this.#findActiveSession(token);
     const subject = await this.store.get(record.subjectId);

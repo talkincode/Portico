@@ -1,6 +1,11 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { handleReviewRequest } from "./handler.ts";
+import {
+  type ExchangeGithubCode,
+  exchangeGithubCode,
+  type GithubOauthConfig,
+} from "./github.ts";
 
 export interface ReviewListenOptions {
   catalogPath: string;
@@ -16,6 +21,14 @@ export interface ReviewListenOptions {
    * presented Portico session always outranks it. Absent means off.
    */
   cfAccess?: ReviewCfAccess;
+  /**
+   * Optional Review GitHub OAuth login. `exchange` defaults to the live
+   * github.com exchange; tests inject a stub. Absent means off.
+   */
+  github?: {
+    config: GithubOauthConfig;
+    exchange?: ExchangeGithubCode;
+  };
 }
 
 export interface ReviewCfAccess {
@@ -41,5 +54,13 @@ export function listenReview(options: ReviewListenOptions): Deno.HttpServer {
     port: options.port ?? 8791,
     signal: options.signal,
     onListen: options.onListen ?? (() => {}),
-  }, (request) => handleReviewRequest(request, { catalog, access, cfAccess: options.cfAccess }));
+  }, (request) =>
+    handleReviewRequest(request, {
+      catalog,
+      access,
+      cfAccess: options.cfAccess,
+      github: options.github
+        ? { config: options.github.config, exchange: options.github.exchange ?? exchangeGithubCode }
+        : undefined,
+    }));
 }

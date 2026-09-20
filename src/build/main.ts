@@ -4,9 +4,11 @@ import {
   cfAccessNetHost,
   cliPerms,
   gatewayPerms,
+  githubNetHosts,
   readOnlyHttpPerms,
   reviewPerms,
 } from "../perms.ts";
+import { parseGithubEnv } from "../review/github.ts";
 import { parseBindHostname } from "../runtime/bind.ts";
 
 /**
@@ -91,7 +93,11 @@ if (import.meta.main) {
     // Access team is read here so a review artifact built for Access can
     // fetch its JWKS host. Default (unset team) keeps loopback-only net.
     const cfAccess = parseCfAccessEnv(env);
-    const available = targets(hostname, cfAccess.enabled ? [cfAccessNetHost(cfAccess.team)] : []);
+    const extraNet = [
+      ...(cfAccess.enabled ? [cfAccessNetHost(cfAccess.team)] : []),
+      ...(parseGithubEnv(env).enabled ? [...githubNetHosts()] : []),
+    ];
+    const available = targets(hostname, extraNet);
     const chosen = selected(available, Deno.args);
     await Deno.mkdir(`${ROOT}/${distDir}`, { recursive: true });
 

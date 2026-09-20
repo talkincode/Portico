@@ -3,9 +3,11 @@ import { parseCfAccessEnv } from "../access/mod.ts";
 import {
   cfAccessNetHost,
   gatewayPerms as gatewayPermsFor,
+  githubNetHosts,
   readOnlyHttpPerms,
   reviewPerms,
 } from "../perms.ts";
+import { parseGithubEnv } from "../review/github.ts";
 import { parseBindHostname, parseBindPort } from "../runtime/bind.ts";
 
 /**
@@ -203,10 +205,13 @@ async function stopAll(started: Started[]): Promise<void> {
   }));
 }
 
-/** Outbound JWKS host the review child needs iff Access JWT mapping is on. */
+/** Outbound hosts the review child needs: JWKS iff Access mapping is on, github iff GitHub login is on. */
 function reviewExtraNet(env: Record<string, string | undefined>): readonly string[] {
+  const extra: string[] = [];
   const cfAccess = parseCfAccessEnv(env);
-  return cfAccess.enabled ? [cfAccessNetHost(cfAccess.team)] : [];
+  if (cfAccess.enabled) extra.push(cfAccessNetHost(cfAccess.team));
+  if (parseGithubEnv(env).enabled) extra.push(...githubNetHosts());
+  return extra;
 }
 
 if (import.meta.main) {
