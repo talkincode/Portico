@@ -206,17 +206,33 @@ Deno.test("deploy macos: env example carries all four processes", async () => {
 
 Deno.test("deploy macos: verify gates local and public without writes", async () => {
   const source = await text("deploy/macos/verify.sh");
+  // The shipped deployment is the default: four entrances on the loopback and
+  // one public origin. They are read from the environment so the gate can be
+  // pointed at a deployment (and at a test's own listeners) without editing it.
   for (
     const probe of [
-      "127.0.0.1:8788",
-      "127.0.0.1:8791",
-      "portico.talkincode.net/public",
-      "portico.talkincode.net/review/login",
+      "PORTICO_DEPLOY_BIND:-127.0.0.1",
+      "PORTICO_DEPLOY_PORTAL_PORT:-8788",
+      "PORTICO_DEPLOY_GATEWAY_PORT:-8789",
+      "PORTICO_DEPLOY_MCP_PORT:-8790",
+      "PORTICO_DEPLOY_REVIEW_PORT:-8791",
+      "PORTICO_DEPLOY_PUBLIC_ORIGIN:-https://portico.talkincode.net",
+      "/public",
+      "/review/login",
+      "/api/catalog",
       "/internal",
     ]
   ) {
     assert(source.includes(probe), `verify.sh must probe ${probe}`);
   }
+  // Ports answering is not the claim: the gate has to name the process serving
+  // each entrance, ask the Gateway whether it executes tools, and ask MCP who
+  // it is.
+  for (const check of ["running-code-not-stale", "gateway-does-not-execute-tools"]) {
+    assert(source.includes(check), `verify.sh must report ${check}`);
+  }
+  assert(source.includes("mcp-jsonrpc-initialize"), "verify.sh must report mcp-jsonrpc-initialize");
+  assert(source.includes('"name":"portico"'), "verify.sh must accept only a portico initialize");
   assert(source.includes('exit "$fail"'), "verify.sh must fail loudly");
 });
 
