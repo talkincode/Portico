@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { reviewPerms } from "../src/perms.ts";
+import { cfAccessNetHost, reviewPerms } from "../src/perms.ts";
 
 /**
  * macOS (LaunchDaemon) deployment contract. The Linux docker/systemd scripts
@@ -43,6 +43,19 @@ Deno.test("deploy macos: review scoped perms cover both tmp siblings for read an
   }
   assert(!read.includes("/app/data/identities.json.tmp"), "review never writes identities");
   assert(!write.includes("identities"), "review never writes identities");
+});
+
+Deno.test("deploy macos: review extra net stays closed unless Access mapping is on", () => {
+  const paths = {
+    catalog: "/app/data/catalog.json",
+    identities: "/app/data/identities.json",
+    sessions: "/app/data/sessions.json",
+  };
+  const plain = reviewPerms("127.0.0.1", paths);
+  assert(!plain.some((flag) => flag.includes("cloudflareaccess.com")), "no JWKS host without Access");
+  const withAccess = reviewPerms("127.0.0.1", paths, [cfAccessNetHost("example")]);
+  assert(withAccess.includes("--allow-net=example.cloudflareaccess.com"), "JWKS host granted when enabled");
+  assertEquals(cfAccessNetHost("example"), "example.cloudflareaccess.com");
 });
 
 Deno.test("deploy macos: template keeps the live host out of the repo", async () => {

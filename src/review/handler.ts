@@ -6,6 +6,16 @@ import type { Actor, RegisterInput } from "../catalog/mod.ts";
 export interface ReviewContext {
   catalog: CatalogService;
   access: AccessService;
+  /**
+   * Optional Review-only Cloudflare Access mapping. Same contract as the
+   * Portal: a verified JWT maps to a roster human, never writes a session,
+   * and a presented Portico session always outranks it. Absent means off.
+   */
+  cfAccess?: ReviewCfAccess;
+}
+
+export interface ReviewCfAccess {
+  verify(assertion: string): Promise<{ email: string } | null>;
 }
 
 export async function handleReviewRequest(
@@ -21,7 +31,7 @@ export async function handleReviewRequest(
       url.pathname !== "/review/approve" && url.pathname !== "/review/reject" &&
       url.pathname !== "/review/api/submit"
     ) return new Response("Not found", { status: 404 });
-    const actor = token ? await context.access.resolveSession(token) : anonymous();
+    const actor = await resolveActor(request, context);
     if (request.method === "GET") {
       if (url.pathname !== "/review" && url.pathname !== "/review/") {
         return new Response("Not found", { status: 404 });
@@ -82,6 +92,33 @@ export async function handleReviewRequest(
     }
     return jsonError(500, error instanceof Error ? error.message : String(error));
   }
+}
+
+/**
+ * Review callers prove who they are with a session, or with a verified
+ * Cloudflare Access JWT when the operator enabled the mapping. Session
+ * always outranks JWT; a forged assertion or an email outside the roster
+ * fails closed to anonymous. The plaintext
+ * `Cf-Access-Authenticated-User-Email` header is never proof.
+ */
+async function resolveActor(request: Request, context: ReviewContext): Promise<Actor> {
+  const token = readSessionToken(request) ?? readSessionCookie(request);
+  if (token) return await context.access.resolveSession(token);
+  if (context.cfAccess) {
+    const assertion = request.headers.get("cf-access-jwt-assertion");
+    if (assertion) {
+      try {
+        const verified = await context.cfAccess.verify(assertion);
+        if (verified?.email) {
+          const mapped = await context.access.lookupHumanByEmail(verified.email);
+          if (mapped) return mapped;
+        }
+      } catch {
+        // Fail closed to anonymous.
+      }
+    }
+  }
+  return anonymous();
 }
 
 function anonymous(): Actor {

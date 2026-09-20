@@ -1,3 +1,4 @@
+import { CfAccessVerifier, parseCfAccessEnv } from "../access/mod.ts";
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
 import { listenReview } from "./server.ts";
@@ -13,10 +14,12 @@ if (import.meta.main) {
         "PORTICO_SESSIONS_PATH",
       ] as const
     ) if (!env[name]) throw new CatalogError(ErrorCode.USAGE, `missing ${name}`);
+    const cfAccess = parseCfAccessEnv(env);
     const server = listenReview({
       catalogPath: env.PORTICO_CATALOG_PATH!,
       identitiesPath: env.PORTICO_IDENTITIES_PATH!,
       sessionsPath: env.PORTICO_SESSIONS_PATH!,
+      cfAccess: cfAccess.enabled ? new CfAccessVerifier(cfAccess) : undefined,
       hostname,
       port,
       onListen: (addr) =>

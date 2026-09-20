@@ -89,7 +89,7 @@ L0 从散文变成会红的检查。`tests/runtime_boundary.ts` + `tests/runtime
 
 - 独立人类审核服务
 
-`src/review/` 独立于只读 Portal，默认监听 `127.0.0.1:8791`（`PORTICO_REVIEW_PORT`）。`GET /review` 只接受 Portico 登录会话并渲染待审公开候选；`POST /review/approve` 与 `/review/reject` 只接受 human auditor 会话，主体由 `AccessService.resolveSession` 得出，不能靠声明头或 JWT。审批仍由 `CatalogService` 执行，因此自批、非审计者、非法状态和失败无脏写规则不分叉。Review 进程可读 catalog/identities/sessions，只能写 catalog 与 sessions 及其 `.tmp`；Portal 保持无写权限。`GET /review/login` 与 `POST /review/login` 提供人工会话入口，成功后设置 `Secure; HttpOnly; SameSite=Lax` 的 `portico_session` cookie，不回显 token。Mira 等已认证 maintainer 可 `POST /review/api/submit` 提交 `RegisterInput`，显式 `action: "public"` 才提交公开候选，但不能审批。Cloudflare Access JWT 仍是 Portal-only；Review、CLI、Gateway、MCP 只认 Portico session。
+`src/review/` 独立于只读 Portal，默认监听 `127.0.0.1:8791`（`PORTICO_REVIEW_PORT`）。`GET /review` 接受 Portico 登录会话或已校验的 Cloudflare Access JWT 并渲染待审公开候选；`POST /review/approve` 与 `/review/reject` 只接受 human auditor（会话或映射后的名册人类），主体由 session 或已校验 email 查名册得出，不能靠声明头或明文邮箱头。已出示的 Portico 会话永远优先于 JWT；JWT 失败一律匿名，不写 identities/sessions，不签发会话。审批仍由 `CatalogService` 执行，因此自批、非审计者、非法状态和失败无脏写规则不分叉。Review 进程可读 catalog/identities/sessions，只能写 catalog 与 sessions 及其 `.tmp`；启用 JWT 映射时 `up`/`build` 给 Review 进程追加且仅追加该 team 的 JWKS 出站主机（默认关闭则无）。Portal 保持无写权限。`GET /review/login` 与 `POST /review/login` 提供人工会话入口，成功后设置 `Secure; HttpOnly; SameSite=Lax` 的 `portico_session` cookie，不回显 token。Mira 等已认证 maintainer 可 `POST /review/api/submit` 提交 `RegisterInput`，显式 `action: "public"` 才提交公开候选，但不能审批。CLI、Gateway、MCP 仍只认 Portico session，不读 Access 头。
 
 - Registry 内部目录
 

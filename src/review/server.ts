@@ -10,6 +10,16 @@ export interface ReviewListenOptions {
   port?: number;
   signal?: AbortSignal;
   onListen?: (addr: { hostname: string; port: number }) => void;
+  /**
+   * Optional Review Cloudflare Access mapping. Same contract as the Portal:
+   * a verified JWT maps to a roster human, never writes sessions, and a
+   * presented Portico session always outranks it. Absent means off.
+   */
+  cfAccess?: ReviewCfAccess;
+}
+
+export interface ReviewCfAccess {
+  verify(assertion: string): Promise<{ email: string } | null>;
 }
 export function listenReview(options: ReviewListenOptions): Deno.HttpServer {
   const catalog = new CatalogService(new FileCatalogStore(options.catalogPath));
@@ -22,5 +32,5 @@ export function listenReview(options: ReviewListenOptions): Deno.HttpServer {
     port: options.port ?? 8791,
     signal: options.signal,
     onListen: options.onListen ?? (() => {}),
-  }, (request) => handleReviewRequest(request, { catalog, access }));
+  }, (request) => handleReviewRequest(request, { catalog, access, cfAccess: options.cfAccess }));
 }

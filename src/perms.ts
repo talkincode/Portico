@@ -42,10 +42,16 @@ export function gatewayPerms(hostname: string = LOOPBACK_HOSTNAME): readonly str
  * Review reads the roster and catalog, creates browser sessions, and atomically
  * updates catalog decisions. It never writes identities: granting/revoking
  * identities and issuing credentials remain CLI-only trust-root operations.
+ *
+ * `extraNet` carries hosts the process may call outbound, currently only the
+ * Cloudflare Access JWKS host when JWT mapping is enabled. Loopback/bind
+ * hosts stay in `netAllow`; anything else must be named explicitly so the
+ * allow-list never silently widens.
  */
 export function reviewPerms(
   hostname: string = LOOPBACK_HOSTNAME,
   paths?: { catalog: string; identities: string; sessions: string },
+  extraNet: readonly string[] = [],
 ): readonly string[] {
   // Deno write grants do not imply read: the atomic store touches `<file>.tmp`
   // while writing, so both siblings need read access too. Missing one turns
@@ -57,9 +63,14 @@ export function reviewPerms(
   const write = paths
     ? `--allow-write=${paths.catalog},${paths.catalog}.tmp,${paths.sessions},${paths.sessions}.tmp`
     : "--allow-write";
-  return [read, write, "--allow-env", netAllow(hostname)];
+  const net = [netAllow(hostname), ...extraNet.map((host) => `--allow-net=${host}`)];
+  return [read, write, "--allow-env", ...net];
 }
 
+/** Outbound host a process needs to verify Cloudflare Access JWTs. */
+export function cfAccessNetHost(team: string): string {
+  return `${team}.cloudflareaccess.com`;
+}
 export const CLI_PERMS: readonly string[] = cliPerms();
 export const PORTAL_PERMS: readonly string[] = readOnlyHttpPerms();
 export const MCP_PERMS: readonly string[] = readOnlyHttpPerms();

@@ -1,5 +1,6 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
-import { cliPerms, gatewayPerms, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
+import { parseCfAccessEnv } from "../access/mod.ts";
+import { cliPerms, cfAccessNetHost, gatewayPerms, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
 import { parseBindHostname } from "../runtime/bind.ts";
 
 /**
@@ -25,13 +26,13 @@ interface Target {
 
 const ROOT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 
-function targets(hostname: string): Target[] {
+function targets(hostname: string, reviewExtraNet: readonly string[]): Target[] {
   return [
     { name: "portico", entry: "src/cli/main.ts", perms: cliPerms() },
     { name: "portico-portal", entry: "src/portal/main.ts", perms: readOnlyHttpPerms(hostname) },
     { name: "portico-gateway", entry: "src/gateway/main.ts", perms: gatewayPerms(hostname) },
     { name: "portico-mcp", entry: "src/mcp/main.ts", perms: readOnlyHttpPerms(hostname) },
-    { name: "portico-review", entry: "src/review/main.ts", perms: reviewPerms(hostname) },
+    { name: "portico-review", entry: "src/review/main.ts", perms: reviewPerms(hostname, undefined, reviewExtraNet) },
   ];
 }
 
@@ -76,7 +77,11 @@ if (import.meta.main) {
     const env = Deno.env.toObject();
     const hostname = parseBindHostname(env.PORTICO_BIND);
     const distDir = env.PORTICO_DIST_DIR ?? "dist";
-    const available = targets(hostname);
+    // Baked permissions cannot be widened later: like PORTICO_BIND, the
+    // Access team is read here so a review artifact built for Access can
+    // fetch its JWKS host. Default (unset team) keeps loopback-only net.
+    const cfAccess = parseCfAccessEnv(env);
+    const available = targets(hostname, cfAccess.enabled ? [cfAccessNetHost(cfAccess.team)] : []);
     const chosen = selected(available, Deno.args);
     await Deno.mkdir(`${ROOT}/${distDir}`, { recursive: true });
 

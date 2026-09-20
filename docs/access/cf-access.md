@@ -1,6 +1,6 @@
-# Cloudflare Access JWT 映射（Portal 可选）
+# Cloudflare Access JWT 映射（Portal 与 Review 可选）
 
-Portico 不是身份提供者，也不托管登录界面。Portal 在**显式启用**时，可以把 Cloudflare Access 签发的 JWT 映射到本地名册上的人类身份。这不是第二套可写身份，也不会签发 `pst1_` 会话。
+Portico 不是身份提供者，也不托管登录界面。Portal 与 Review 在**显式启用**时，可以把 Cloudflare Access 签发的 JWT 映射到本地名册上的人类身份。这不是第二套可写身份，也不会签发 `pst1_` 会话。
 
 CLI、Gateway 与 MCP 继续只认 Portico 会话。GitHub 登录与邮箱 One-time PIN 如果要存在，只存在于 Cloudflare 边缘，不进入本仓库。
 

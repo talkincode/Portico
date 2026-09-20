@@ -1,5 +1,6 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
-import { gatewayPerms as gatewayPermsFor, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
+import { parseCfAccessEnv } from "../access/mod.ts";
+import { gatewayPerms as gatewayPermsFor, cfAccessNetHost, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
 import { parseBindHostname, parseBindPort } from "../runtime/bind.ts";
 
 /**
@@ -197,6 +198,12 @@ async function stopAll(started: Started[]): Promise<void> {
   }));
 }
 
+/** Outbound JWKS host the review child needs iff Access JWT mapping is on. */
+function reviewExtraNet(env: Record<string, string | undefined>): readonly string[] {
+  const cfAccess = parseCfAccessEnv(env);
+  return cfAccess.enabled ? [cfAccessNetHost(cfAccess.team)] : [];
+}
+
 if (import.meta.main) {
   const started: Started[] = [];
   let stopping = false;
@@ -234,7 +241,7 @@ if (import.meta.main) {
   const portalPerms = readOnlyHttpPerms(setup.hostname);
   const gatewayPerms = gatewayPermsFor(setup.hostname);
   const mcpPerms = readOnlyHttpPerms(setup.hostname);
-  const reviewPermsFor = reviewPerms(setup.hostname, { catalog: setup.catalog, identities: setup.identities, sessions: setup.sessions });
+  const reviewPermsFor = reviewPerms(setup.hostname, { catalog: setup.catalog, identities: setup.identities, sessions: setup.sessions }, reviewExtraNet(Deno.env.toObject()));
 
   try {
     started.push(
