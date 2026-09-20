@@ -1,5 +1,6 @@
 import { CatalogError, CatalogService, ErrorCode } from "../catalog/mod.ts";
 import type { Actor } from "../catalog/types.ts";
+import type { SealEntry } from "../audit/seal.ts";
 import type { GatewayAuditStore } from "./store.ts";
 import type { GatewayAuditRecord, GatewayRoute } from "./types.ts";
 
@@ -8,6 +9,11 @@ export class GatewayService {
     private readonly catalog: CatalogService,
     private readonly audit: GatewayAuditStore,
   ) {}
+
+  /** The gateway audit seal chain. */
+  listSeal(): Promise<SealEntry[]> {
+    return this.audit.listSeal();
+  }
 
   async authorize(actor: Actor, surfaceId: string): Promise<GatewayRoute> {
     try {

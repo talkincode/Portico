@@ -2,66 +2,128 @@
 
 Portico 拒绝可被任意篡改或静默清空的传统日志。系统的核心治理行为均转化为**结构化追加写审计事件（Append-Only Audit Trail）**。
 
+"只能追加"是 API 的性质：没有任何命令可以 update 或 delete 一条记录。但记录终究是磁盘上的 JSON 文件，凡是拿到写权限的进程（或任何拿到 shell 的人）都能直接改写它。因此本文件分两层说明：**写入路径**（谁能产生一条记录）与**封条校验**（这些字节是否还是写入时的样子）。
+
 ---
 
 ## 审计事件源的四大支柱
 
-系统的全局审计时间线（Timeline）由四个分散存储的底层数据流归并排序生成：
+系统的全局审计时间线（Timeline）由四类分散存储的底层记录归并排序生成：
 
 ```text
-┌───────────────────────────┐      ┌───────────────────────────┐
-│   catalog.json (changes)  │      │      approvals.json       │
-│  - 服务创建 (register)     │      │  - 公开发布批准 (approved) │
-│  - 服务更新 (update)       │      │  - 公开发布驳回 (rejected) │
-│  - 状态流转 (publish)      │      │  - 公开服务撤回 (withdrawn)│
-└─────────────┬─────────────┘      └─────────────┬─────────────┘
-              │                                  │
-              └────────────────┬─────────────────┘
-                               │
-                               ▼
-            ┌─────────────────────────────────────────┐
-            │       聚合审计时间线 (Audit Timeline)    │
-            │          - 按时间戳降序全局排序           │
-            │          - 抹平不同存储源字段差异         │
-            └──────────────────┬──────────────────────┘
-                               ▲
-              ┌────────────────┴─────────────────┐
-              │                                  │
-┌─────────────┴─────────────┐      ┌─────────────┴─────────────┐
-│      identities.json      │      │    gateway-audit.json     │
-│  - 身份授予 (grant)        │      │  - MCP Gateway 准入授权   │
-│  - 身份注销 (revoke)       │      │    (authorize) 流水       │
-│  - 凭证作废 (credential)   │      │                           │
-└───────────────────────────┘      └───────────────────────────┘
+┌─────────────────────────────────────┐      ┌──────────────────────────────┐
+│           catalog.json              │      │       identities.json         │
+│  - records：登记本身（可变状态）     │      │  - identities：名册（可变状态）│
+│  - changes：服务创建 / 更新 /        │      │  - grants：身份授予            │
+│    内部发布 / 公开候选（追加写）     │      │  - revokes：身份注销           │
+│  - approvals：公开批准 / 驳回 /      │      │  - credentialRevokes：凭证作废 │
+│    撤回（追加写）                    │      │                               │
+└──────────────┬──────────────────────┘      └───────────────┬──────────────┘
+               │                                             │
+               └──────────────────┬──────────────────────────┘
+                                  ▼
+               ┌────────────────────────────────────────────┐
+               │      聚合审计时间线 (Audit Timeline)        │
+               │   - 按 at 升序、再按 id 排序                │
+               │   - 抹平不同存储源字段差异                  │
+               └──────────────────┬─────────────────────────┘
+                                  ▲
+               ┌──────────────────┴─────────────────────────┐
+               │                                            │
+┌──────────────┴──────────────────────┐      ┌──────────────┴──────────────┐
+│         gateway-audit.json          │      │       conclusions.json      │
+│  - records：MCP Gateway 准入授权与   │      │  - conclusions：人类审计者   │
+│    拒绝的流水（追加写）              │      │    的判定（追加写，独立存储）│
+└─────────────────────────────────────┘      └─────────────────────────────┘
 ```
+
+四个支柱各占一个文件，各自带一条独立的封条链（见下文），因此不存在"把 A 文件的封条搬到 B 文件"这种伪造路径。
 
 ---
 
 ## 审计事件结构规范
 
-所有审计事件最终投影为统一的信封结构：
+聚合时间线上的每条事件都是同一个信封：
 
 ```typescript
 interface AuditEvent {
-  /** 全局唯一事件 ID */
+  /** 存储内唯一的事件 ID */
   id: string;
 
-  /** 事件类型：catalog_register | catalog_update | approval | revoke | gateway_authorize 等 */
-  type: string;
+  /** 事件种类：catalog | grant | revoke | credential | approval | gateway */
+  kind: AuditKind;
 
-  /** 事件发生的时间戳 (ISO 8601) */
-  timestamp: string;
+  /** 发生时间（ISO 8601），同时是排序主键 */
+  at: string;
 
-  /** 触发此事件的主体 ID，例如 "human:auditor-bob" */
-  actorId: string;
+  /** 触发者：人类或 Agent，带当时角色 */
+  actor: { id: string; kind: ActorKind; role?: ActorRole };
 
-  /** 关联的服务 ID 或主体 ID */
-  targetId: string;
+  /** 动作：register | update | publish_internal | approved | allowed | denied 等 */
+  action: AuditAction;
 
-  /** 详细审计载荷（含字段变更差分、版本号、裁决结果等） */
-  details: Record<string, unknown>;
+  /** 事件指向的主体（登记 id 或身份 id） */
+  subjectId: string;
+
+  /** 人类可读摘要 */
+  summary: string;
+
+  /** 可选入口坐标。只在明确需要时出现，过滤与搜索都不碰它 */
+  entry?: { kind: string; value: string };
 }
 ```
+
+`kind` 与 `action` 取值都是闭集（`src/audit/query.ts` 的 `AUDIT_KINDS` / `AUDIT_ACTIONS`）：过滤器出现闭集外的取值得到 `INVALID_INPUT`，而不是"什么都没匹配到"，这样拼错一个词不会静默返回空列表。
+
+---
+
+## 封条校验：追加写说了 API，封条说了字节
+
+每条记录写入时，写入者同时追加一条**封条环节（seal entry）**，它覆盖这条记录，并指向前一个环节的摘要：
+
+```typescript
+interface SealEntry {
+  seq: number;       // 1 起的链上位置
+  kind: string;      // 该文件内的记录种类（change / approval / grant / ...）
+  id: string;        // 该记录在文件内的 id
+  digest: string;    // SHA-256(prev + kind + id + 记录的规范形式)
+  prev: string;      // 前一个环节的 digest；seq=1 时是该支柱的 genesis 摘要
+}
+```
+
+校验时重新计算整条链，回答一个具体问题：**这条链上的字节，是否还是写入时的样子**。
+
+- 覆盖范围内某条记录被改写 → `reason: "digest"`，并指名是哪个 `id`、链上第几位。
+- 覆盖范围内某条记录被删掉 → `reason: "missing"`。
+- 链条被剪断、调序或插入 → `reason: "chain"`。
+- 存在链没有覆盖的记录（写入前就有的历史数据，或绕过写入者塞进来的记录）→ 列进 `unsealed`，**不当作"已验证"**。
+- 摘要按支柱绑定：`catalog` 链的环节无法在 `identity` 链里通过校验。
+
+键序不影响结论：摘要算在记录的规范形式（键名排序、无空白）上，所以重新序列化一条记录不会读成篡改。这一点是刻意的——否则每次写盘格式变化都会变成"篡改"告警。
+
+### 它证明什么，不证明什么
+
+**能证明**：文件被就地改动、被删、被剪接，会被指名报出来；一次校验就能分辨"记录被改过"与"记录本来如此"。
+
+**不能证明**：链条本身被整体重写。拿到写权限的人可以顺着改动重算后续所有环节——那时的链依然自洽，只是**链尾摘要（tip）与上一次不同**。因此校验结果总是返回 `tip`：把每期的 tip 记到外部（报告、运维日志）之后，"整体重写"就不再隐形，而会表现为 tip 变化。同理，**从尾部截断**后剩余链条仍然完整，只有与外部留存的 tip 比对才能发现。
+
+一句话：封条把"改一条记录不留痕"变成"必须重写整条链，并留下一个新的 tip"。要让它成为不可否认的证据，需要外部锚定，而那属于审计流程，不属于这个文件。
+
+### 校验入口
+
+只读、只给人类审计者（其他身份 `FORBIDDEN`，任何情况下都不写文件）：
+
+```bash
+deno task cli -- audit verify \
+  --catalog ./data/catalog.json \
+  --identities ./data/identities.json \
+  --sessions ./data/sessions.json \
+  --session $HUMAN_AUDITOR_SESSION \
+  --audit ./data/gateway-audit.json \
+  --conclusions ./data/conclusions.json
+```
+
+同一答案的三处入口：CLI `audit verify`、Portal `GET /api/audit-verify`、MCP `portico_audit_verify`，返回同一个 `{ok, unsealed, pillars:[...]}` 载荷。CLI 的退出码只表示命令是否执行成功，**结论看载荷里的 `ok` 与每个支柱的 `break`**；门禁脚本也是这么读它的。
 
 ---
 
@@ -74,13 +136,10 @@ deno task cli -- audit list \
   --catalog ./data/catalog.json \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
-  --session $HUMAN_AUDITOR_SESSION \
-  --limit 20
+  --session $HUMAN_AUDITOR_SESSION
 ```
 
-**不可篡改保证**：
-- 维护者（Maintainer）即使拥有写 Catalog 的权限，也无法调用任何“清空审计记录”或“修改审计时间戳”的命令。
-- 试图通过 CLI、API 或 MCP 篡改审计日志的请求将被直接判定为非法语义而拒绝。
+维护者（Maintainer）即使拥有写 Catalog 的权限，也没有任何"清空审计记录"或"修改审计时间戳"的命令可调；试图通过 CLI、API 或 MCP 篡改审计日志的请求不会被重新解释为一次合法写入。
 
 ---
 
@@ -109,5 +168,6 @@ interface AuditConclusion {
 - **只有人类审计者能写。** 维护者、只读者、匿名与 Agent 一律 `FORBIDDEN`；Agent 连 auditor 角色都拿不到，所以伪造 actor 是唯一入口，而它在这里同样被拒。
 - **维护权 ≠ 审计权。** 审计者若是该主体的维护者之一，得到 `SELF_AUDIT`（与公开边界的 `SELF_APPROVAL` 同源），判定不落盘。
 - **密钥只引用，不落明文。** note 走与目录同一套明文密钥扫描器，命中即 `INVALID_INPUT`。
+- **受封条覆盖。** 结论文件与另外三个支柱一样带链，改写一条判定同样会被 `audit verify` 指名。
 
 只读查询有三处同一答案：CLI `audit conclusions`、Portal `GET /api/conclusions`、MCP `portico_conclusions`。Portal 与 MCP 没有写权限，记录结论只能经 CLI `audit conclude`。

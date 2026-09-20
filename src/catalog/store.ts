@@ -1,4 +1,5 @@
 import { serialize, writeJsonFile } from "../fs.ts";
+import { cloneSeal, type SealEntry, sealRecord } from "../audit/seal.ts";
 import { CatalogError, ErrorCode } from "./errors.ts";
 import type { AgentSurface, ApprovalRecord, CatalogChangeRecord } from "./types.ts";
 
@@ -8,6 +9,8 @@ export interface CatalogStore {
   put(record: AgentSurface): Promise<void>;
   listApprovals(): Promise<ApprovalRecord[]>;
   listChanges(): Promise<CatalogChangeRecord[]>;
+  /** The seal chain covering `listChanges()` and `listApprovals()`. */
+  listSeal(): Promise<SealEntry[]>;
   commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void>;
   commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void>;
 }
@@ -28,6 +31,7 @@ export class MemoryCatalogStore implements CatalogStore {
   #records = new Map<string, AgentSurface>();
   #approvals: ApprovalRecord[] = [];
   #changes: CatalogChangeRecord[] = [];
+  #seal: SealEntry[] = [];
 
   list(): Promise<AgentSurface[]> {
     return Promise.resolve([...this.#records.values()].map(cloneRecord));
@@ -51,32 +55,32 @@ export class MemoryCatalogStore implements CatalogStore {
     return Promise.resolve(this.#changes.map(cloneChange));
   }
 
-  commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+  listSeal(): Promise<SealEntry[]> {
+    return Promise.resolve(cloneSeal(this.#seal));
+  }
+
+  async commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
     if (this.#changes.some((item) => item.id === change.id)) {
-      return Promise.reject(
-        new CatalogError(
-          ErrorCode.ALREADY_EXISTS,
-          `catalog change '${change.id}' already exists`,
-        ),
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `catalog change '${change.id}' already exists`,
       );
     }
     this.#records.set(record.id, cloneRecord(record));
     this.#changes.push(cloneChange(change));
-    return Promise.resolve();
+    this.#seal = await sealRecord(this.#seal, "catalog", "change", change.id, change);
   }
 
-  commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
+  async commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
     if (this.#approvals.some((item) => item.id === approval.id)) {
-      return Promise.reject(
-        new CatalogError(
-          ErrorCode.ALREADY_EXISTS,
-          `approval '${approval.id}' already exists`,
-        ),
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `approval '${approval.id}' already exists`,
       );
     }
     this.#records.set(record.id, cloneRecord(record));
     this.#approvals.push(cloneApproval(approval));
-    return Promise.resolve();
+    this.#seal = await sealRecord(this.#seal, "catalog", "approval", approval.id, approval);
   }
 }
 
@@ -84,6 +88,7 @@ interface CatalogFile {
   records: AgentSurface[];
   approvals: ApprovalRecord[];
   changes: CatalogChangeRecord[];
+  seal: SealEntry[];
 }
 
 export class FileCatalogStore implements CatalogStore {
@@ -122,6 +127,11 @@ export class FileCatalogStore implements CatalogStore {
     return file.changes.map(cloneChange);
   }
 
+  async listSeal(): Promise<SealEntry[]> {
+    const file = await this.#load();
+    return cloneSeal(file.seal);
+  }
+
   commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
     return serialize(this.path, () => this.#commitChangeImpl(record, change));
   }
@@ -138,6 +148,7 @@ export class FileCatalogStore implements CatalogStore {
     if (index >= 0) file.records[index] = cloneRecord(record);
     else file.records.push(cloneRecord(record));
     file.changes.push(cloneChange(change));
+    file.seal = await sealRecord(file.seal, "catalog", "change", change.id, change);
     await this.#save(file);
   }
 
@@ -157,6 +168,7 @@ export class FileCatalogStore implements CatalogStore {
     if (index >= 0) file.records[index] = cloneRecord(record);
     else file.records.push(cloneRecord(record));
     file.approvals.push(cloneApproval(approval));
+    file.seal = await sealRecord(file.seal, "catalog", "approval", approval.id, approval);
     await this.#save(file);
   }
 
@@ -173,10 +185,11 @@ export class FileCatalogStore implements CatalogStore {
         records: parsed.records.map(cloneRecord),
         approvals: approvals.map(cloneApproval),
         changes: changes.map(cloneChange),
+        seal: Array.isArray(parsed.seal) ? cloneSeal(parsed.seal) : [],
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { records: [], approvals: [], changes: [] };
+        return { records: [], approvals: [], changes: [], seal: [] };
       }
       throw error;
     }
@@ -187,6 +200,7 @@ export class FileCatalogStore implements CatalogStore {
       records: file.records,
       approvals: file.approvals,
       changes: file.changes,
+      seal: file.seal,
     });
   }
 }

@@ -15,6 +15,7 @@ import {
   FileConclusionStore,
   parseAuditQuery,
   parseConclusionQuery,
+  SealService,
 } from "../audit/mod.ts";
 import {
   type Actor,
@@ -72,6 +73,7 @@ Commands:
   cli describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
+  audit verify      --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>]
   audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
   audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope ${SCOPE_ARG} --verdict cleared|flagged [--note <text>]
   audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
@@ -361,7 +363,10 @@ async function runAudit(
   flags: Record<string, string>,
   env: Record<string, string | undefined>,
 ): Promise<CliResult> {
-  if (action !== "list" && action !== "conclude" && action !== "conclusions") {
+  if (
+    action !== "list" && action !== "verify" && action !== "conclude" &&
+    action !== "conclusions"
+  ) {
     throw new UsageError(action ? `unknown audit action '${action}'` : "missing audit action");
   }
   const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
@@ -407,6 +412,17 @@ async function runAudit(
   const gateway = auditPath
     ? new GatewayService(catalog, new FileGatewayAuditStore(auditPath))
     : undefined;
+
+  if (action === "verify") {
+    const conclusionsPath = flags.conclusions ?? env.PORTICO_CONCLUSIONS_PATH;
+    const conclusions = conclusionsPath
+      ? new ConclusionService(new FileConclusionStore(conclusionsPath), catalog)
+      : undefined;
+    // Role check first: the seal report names records, so only an auditor may
+    // ask for it — same gate as `audit list`.
+    return ok(await new SealService(catalog, access, gateway, conclusions).report(actor));
+  }
+
   const events = await new AuditService(catalog, access, gateway).list(actor);
   const query = parseAuditQuery({
     q: flags.q,

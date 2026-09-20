@@ -1,4 +1,5 @@
 import { serialize, writeJsonFile } from "../fs.ts";
+import { cloneSeal, type SealEntry, sealRecord } from "../audit/seal.ts";
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
 import type {
   CredentialRecord,
@@ -15,6 +16,8 @@ export interface IdentityStore {
   listGrants(): Promise<GrantRecord[]>;
   listRevokes(): Promise<RevokeRecord[]>;
   listCredentialRevokes(): Promise<CredentialRevokeRecord[]>;
+  /** The seal chain covering grants, revokes and credential revokes. */
+  listSeal(): Promise<SealEntry[]>;
   commitGrant(identity: Identity, grant: GrantRecord): Promise<void>;
   commitRevoke(revoke: RevokeRecord): Promise<void>;
   commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void>;
@@ -41,6 +44,7 @@ export class MemoryIdentityStore implements IdentityStore {
   #grants: GrantRecord[] = [];
   #revokes: RevokeRecord[] = [];
   #credentialRevokes: CredentialRevokeRecord[] = [];
+  #seal: SealEntry[] = [];
 
   list(): Promise<Identity[]> {
     return Promise.resolve([...this.#identities.values()].map(cloneIdentity));
@@ -63,55 +67,55 @@ export class MemoryIdentityStore implements IdentityStore {
     return Promise.resolve(this.#credentialRevokes.map(cloneCredentialRevoke));
   }
 
-  commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
+  listSeal(): Promise<SealEntry[]> {
+    return Promise.resolve(cloneSeal(this.#seal));
+  }
+
+  async commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
     if (this.#grants.some((item) => item.id === grant.id)) {
-      return Promise.reject(
-        new CatalogError(ErrorCode.ALREADY_EXISTS, `grant '${grant.id}' already exists`),
-      );
+      throw new CatalogError(ErrorCode.ALREADY_EXISTS, `grant '${grant.id}' already exists`);
     }
     this.#identities.set(identity.id, cloneIdentity(identity));
     this.#grants.push(cloneGrant(grant));
-    return Promise.resolve();
+    this.#seal = await sealRecord(this.#seal, "identity", "grant", grant.id, grant);
   }
 
-  commitRevoke(revoke: RevokeRecord): Promise<void> {
+  async commitRevoke(revoke: RevokeRecord): Promise<void> {
     if (this.#revokes.some((item) => item.id === revoke.id)) {
-      return Promise.reject(
-        new CatalogError(ErrorCode.ALREADY_EXISTS, `revoke '${revoke.id}' already exists`),
-      );
+      throw new CatalogError(ErrorCode.ALREADY_EXISTS, `revoke '${revoke.id}' already exists`);
     }
     if (!this.#identities.has(revoke.subjectId)) {
-      return Promise.reject(
-        new CatalogError(
-          ErrorCode.NOT_FOUND,
-          `identity '${revoke.subjectId}' is not in the roster`,
-        ),
+      throw new CatalogError(
+        ErrorCode.NOT_FOUND,
+        `identity '${revoke.subjectId}' is not in the roster`,
       );
     }
     this.#identities.delete(revoke.subjectId);
     this.#revokes.push(cloneRevoke(revoke));
-    return Promise.resolve();
+    this.#seal = await sealRecord(this.#seal, "identity", "revoke", revoke.id, revoke);
   }
 
-  commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void> {
+  async commitCredentialRevoke(record: CredentialRevokeRecord): Promise<void> {
     if (this.#credentialRevokes.some((item) => item.id === record.id)) {
-      return Promise.reject(
-        new CatalogError(
-          ErrorCode.ALREADY_EXISTS,
-          `credential revoke '${record.id}' already exists`,
-        ),
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `credential revoke '${record.id}' already exists`,
       );
     }
     if (!this.#identities.has(record.subjectId)) {
-      return Promise.reject(
-        new CatalogError(
-          ErrorCode.NOT_FOUND,
-          `identity '${record.subjectId}' is not in the roster`,
-        ),
+      throw new CatalogError(
+        ErrorCode.NOT_FOUND,
+        `identity '${record.subjectId}' is not in the roster`,
       );
     }
     this.#credentialRevokes.push(cloneCredentialRevoke(record));
-    return Promise.resolve();
+    this.#seal = await sealRecord(
+      this.#seal,
+      "identity",
+      "credentialRevoke",
+      record.id,
+      record,
+    );
   }
 }
 
@@ -120,6 +124,7 @@ interface IdentityFile {
   grants: GrantRecord[];
   revokes: RevokeRecord[];
   credentialRevokes: CredentialRevokeRecord[];
+  seal: SealEntry[];
 }
 
 export class FileIdentityStore implements IdentityStore {
@@ -151,6 +156,11 @@ export class FileIdentityStore implements IdentityStore {
     return file.credentialRevokes.map(cloneCredentialRevoke);
   }
 
+  async listSeal(): Promise<SealEntry[]> {
+    const file = await this.#load();
+    return cloneSeal(file.seal);
+  }
+
   commitGrant(identity: Identity, grant: GrantRecord): Promise<void> {
     return serialize(this.path, () => this.#commitGrantImpl(identity, grant));
   }
@@ -164,6 +174,7 @@ export class FileIdentityStore implements IdentityStore {
     if (index >= 0) file.identities[index] = cloneIdentity(identity);
     else file.identities.push(cloneIdentity(identity));
     file.grants.push(cloneGrant(grant));
+    file.seal = await sealRecord(file.seal, "identity", "grant", grant.id, grant);
     await this.#save(file);
   }
 
@@ -185,6 +196,7 @@ export class FileIdentityStore implements IdentityStore {
     }
     file.identities.splice(index, 1);
     file.revokes.push(cloneRevoke(revoke));
+    file.seal = await sealRecord(file.seal, "identity", "revoke", revoke.id, revoke);
     await this.#save(file);
   }
 
@@ -207,6 +219,13 @@ export class FileIdentityStore implements IdentityStore {
       );
     }
     file.credentialRevokes.push(cloneCredentialRevoke(record));
+    file.seal = await sealRecord(
+      file.seal,
+      "identity",
+      "credentialRevoke",
+      record.id,
+      record,
+    );
     await this.#save(file);
   }
 
@@ -227,10 +246,17 @@ export class FileIdentityStore implements IdentityStore {
         grants: grants.map(cloneGrant),
         revokes: revokes.map(cloneRevoke),
         credentialRevokes: credentialRevokes.map(cloneCredentialRevoke),
+        seal: Array.isArray(parsed.seal) ? cloneSeal(parsed.seal) : [],
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { identities: [], grants: [], revokes: [], credentialRevokes: [] };
+        return {
+          identities: [],
+          grants: [],
+          revokes: [],
+          credentialRevokes: [],
+          seal: [],
+        };
       }
       throw error;
     }
@@ -242,6 +268,7 @@ export class FileIdentityStore implements IdentityStore {
       grants: file.grants,
       revokes: file.revokes,
       credentialRevokes: file.credentialRevokes,
+      seal: file.seal,
     });
   }
 }

@@ -7,6 +7,7 @@ import {
   type ConclusionService,
   parseAuditQuery,
   parseConclusionQuery,
+  SealService,
 } from "../audit/mod.ts";
 import {
   type Actor,
@@ -115,6 +116,11 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/audit") {
       const events = await auditService(context).list(actor);
       return jsonOk(applyAuditQuery(events, auditQueryFrom(url)));
+    }
+    if (url.pathname === "/api/audit-verify") {
+      // Read-only, like the rest of the Portal: it re-derives the seal from the
+      // files and reports. A non-auditor gets FORBIDDEN from the service.
+      return jsonOk(await sealService(context).report(actor));
     }
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
@@ -311,6 +317,10 @@ async function resolveActor(request: Request, context: PortalContext): Promise<A
 
 function auditService(context: PortalContext): AuditService {
   return new AuditService(context.catalog, context.access, context.gateway);
+}
+
+function sealService(context: PortalContext): SealService {
+  return new SealService(context.catalog, context.access, context.gateway, context.conclusions);
 }
 
 function auditQueryFrom(url: URL) {
