@@ -23,7 +23,6 @@ export async function handleReviewRequest(
   context: ReviewContext,
 ): Promise<Response> {
   try {
-    const token = readSessionToken(request) ?? readSessionCookie(request);
     const url = new URL(request.url);
     if (url.pathname === "/review/login") return await handleLogin(request, context);
     if (
@@ -36,7 +35,7 @@ export async function handleReviewRequest(
       if (url.pathname !== "/review" && url.pathname !== "/review/") {
         return new Response("Not found", { status: 404 });
       }
-      if (actor.role === "anonymous") return jsonError(401, "authentication required");
+      if (actor.role === "anonymous") return forbidden(401, "authentication required");
       const records = (await context.catalog.list(actor)).filter((item) =>
         item.governanceState === "pending_public"
       );
@@ -45,10 +44,10 @@ export async function handleReviewRequest(
       });
     }
     if (request.method !== "POST") return jsonError(405, "method not allowed");
-    if (actor.role === "anonymous") return jsonError(401, "authentication required");
+    if (actor.role === "anonymous") return forbidden(401, "authentication required");
     if (url.pathname === "/review/api/submit") {
       if (actor.role !== "maintainer") {
-        return jsonError(403, "only an authenticated maintainer may submit");
+        return forbidden(403, "only an authenticated maintainer may submit");
       }
       const body = await request.json() as
         & { input?: RegisterInput; action?: unknown }
@@ -64,12 +63,15 @@ export async function handleReviewRequest(
       if (body.action === "public") {
         await context.catalog.publish(actor, { id: submitted.id, visibility: "public" });
       }
-      return new Response(JSON.stringify({ ok: true, data: await context.catalog.get(actor, submitted.id) }), {
-        headers: securityHeaders("application/json; charset=utf-8"),
-      });
+      return new Response(
+        JSON.stringify({ ok: true, data: await context.catalog.get(actor, submitted.id) }),
+        {
+          headers: securityHeaders("application/json; charset=utf-8"),
+        },
+      );
     }
     if (actor.kind !== "human" || actor.role !== "auditor") {
-      return jsonError(403, "only a human auditor may review");
+      return forbidden(403, "only a human auditor may review");
     }
     if (url.pathname !== "/review/approve" && url.pathname !== "/review/reject") {
       return jsonError(405, "POST only at /review/approve or /review/reject");
@@ -146,7 +148,7 @@ async function handleLogin(request: Request, context: ReviewContext): Promise<Re
   }
   const session = await context.access.login({ id: body.id, token: body.token });
   if (session.actor.kind !== "human") {
-    return jsonError(403, "browser review login is for humans only");
+    return forbidden(403, "browser review login is for humans only");
   }
   return new Response(null, {
     status: 303,
@@ -170,6 +172,19 @@ function jsonError(status: number, message: string, code = "HTTP_ERROR"): Respon
     status,
     headers: securityHeaders("application/json; charset=utf-8"),
   });
+}
+
+/**
+ * An authorization refusal.
+ *
+ * It carries `FORBIDDEN` instead of the generic `HTTP_ERROR` so this entrance
+ * reports machine-readably what the CLI, Portal and MCP entrances report for
+ * the same class of refusal; a client should not have to special-case which
+ * door it knocked on. The HTTP status still separates "prove yourself" (401)
+ * from "you proved yourself and it is not enough" (403).
+ */
+function forbidden(status: number, message: string): Response {
+  return jsonError(status, message, ErrorCode.FORBIDDEN);
 }
 function securityHeaders(contentType: string): HeadersInit {
   return {
@@ -200,7 +215,5 @@ function renderReview(
   ).join("");
   return `<!doctype html><meta charset="utf-8"><title>Portico review</title><main><h1>Human review</h1><p>Signed in as ${
     escape(actor.id)
-  }.</p><ul>${
-    cards || "<li>No pending public candidates.</li>"
-  }</ul></main>`;
+  }.</p><ul>${cards || "<li>No pending public candidates.</li>"}</ul></main>`;
 }

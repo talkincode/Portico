@@ -65,10 +65,13 @@ Deno.test("review maps a verified Access JWT to a roster human; session outranks
   const cfAccess = { verify: (_assertion: string) => Promise.resolve(verified) };
   const access = {
     resolveSession: (token: string) =>
-      Promise.resolve(token === "reader-session"
-        ? { id: "human:reader", kind: "human", role: "reader" }
-        : { ...auditor }),
-    lookupHumanByEmail: (email: string) => Promise.resolve(email === verified.email ? { ...auditor } : null),
+      Promise.resolve(
+        token === "reader-session"
+          ? { id: "human:reader", kind: "human", role: "reader" }
+          : { ...auditor },
+      ),
+    lookupHumanByEmail: (email: string) =>
+      Promise.resolve(email === verified.email ? { ...auditor } : null),
   };
   const contextWithAccess = { catalog, access, cfAccess } as never;
   // JWT-mapped auditor approves without any session header.

@@ -23,14 +23,19 @@ interface UpData {
   portal: { url: string };
   gateway: { url: string };
   mcp: { url: string };
+  review: { url: string };
 }
 
 async function startUp(dataDir: string) {
   return await bootEntrypoint<UpData>(UP, {
     PORTICO_DATA_DIR: dataDir,
+    // Every entrance gets port 0, review included: a fixed review port made
+    // this test fail wherever an operator already ran `up` on the host, which
+    // is exactly the machine the acceptance run happens on.
     PORTICO_PORT: "0",
     PORTICO_GATEWAY_PORT: "0",
     PORTICO_MCP_PORT: "0",
+    PORTICO_REVIEW_PORT: "0",
   }, UP_PERMS);
 }
 
@@ -104,15 +109,31 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
   let portalUrl = "";
   let gatewayUrl = "";
   let mcpUrl = "";
+  let reviewBase = "";
   try {
     assertEquals(first.body.data.dataDir, dataDir);
     portalUrl = first.body.data.portal.url;
     gatewayUrl = first.body.data.gateway.url;
     mcpUrl = first.body.data.mcp.url;
+    reviewBase = first.body.data.review.url;
     assertEquals(
-      new Set([portalUrl, gatewayUrl, mcpUrl]).size,
-      3,
+      new Set([portalUrl, gatewayUrl, mcpUrl, reviewBase]).size,
+      4,
       "each entrance must bind its own port",
+    );
+
+    // `up` supervises four processes; the review entrance is the one the
+    // public never reaches, so a supervisor that quietly dropped it would
+    // otherwise still look healthy here.
+    const anonReview = await fetch(`${reviewBase}/review`);
+    assertEquals(anonReview.status, 401, "the review queue is not anonymous");
+    const auditorReview = await fetch(`${reviewBase}/review`, {
+      headers: { "x-portico-session": sessionFor("human:security-auditor")! },
+    });
+    assertEquals(auditorReview.status, 200);
+    assert(
+      (await auditorReview.text()).includes("Human review"),
+      "the review entrance must serve the pending queue",
     );
 
     const publicPage = await fetch(`${portalUrl}/public`);
@@ -275,6 +296,10 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     // The gateway audit file lands beside the rest of the state.
     const audit = await fetch(`${second.body.data.gateway.url}/gateway/audit`);
     assertEquals(audit.status, 403);
+    // The review entrance comes back with the rest of the system, still closed
+    // to anonymous callers.
+    const restartedReview = await fetch(`${second.body.data.review.url}/review`);
+    assertEquals(restartedReview.status, 401, "the review queue survives a restart");
   } finally {
     await second.stop();
   }

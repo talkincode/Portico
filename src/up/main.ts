@@ -1,6 +1,11 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { parseCfAccessEnv } from "../access/mod.ts";
-import { gatewayPerms as gatewayPermsFor, cfAccessNetHost, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
+import {
+  cfAccessNetHost,
+  gatewayPerms as gatewayPermsFor,
+  readOnlyHttpPerms,
+  reviewPerms,
+} from "../perms.ts";
 import { parseBindHostname, parseBindPort } from "../runtime/bind.ts";
 
 /**
@@ -241,7 +246,11 @@ if (import.meta.main) {
   const portalPerms = readOnlyHttpPerms(setup.hostname);
   const gatewayPerms = gatewayPermsFor(setup.hostname);
   const mcpPerms = readOnlyHttpPerms(setup.hostname);
-  const reviewPermsFor = reviewPerms(setup.hostname, { catalog: setup.catalog, identities: setup.identities, sessions: setup.sessions }, reviewExtraNet(Deno.env.toObject()));
+  const reviewPermsFor = reviewPerms(setup.hostname, {
+    catalog: setup.catalog,
+    identities: setup.identities,
+    sessions: setup.sessions,
+  }, reviewExtraNet(Deno.env.toObject()));
 
   try {
     started.push(
