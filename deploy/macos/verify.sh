@@ -18,6 +18,26 @@ check() {
   fi
 }
 
+# Optional revision pin, mirroring deploy/verify.sh. The probes below only
+# prove behaviour, and behaviour is exactly what a daemon that was never
+# restarted still answers, so a run that has to name the shipped revision
+# sets PORTICO_EXPECT_SHA and gets a verdict on it. Unpinned runs stay silent
+# rather than claim a revision they were never told to check.
+#
+# This runs before the probes on purpose: a wrong revision is the cheapest
+# thing to detect and the most expensive to miss, so it reports first and
+# survives a probe that hangs or dies half way through.
+if [ -n "${PORTICO_EXPECT_SHA:-}" ]; then
+  tree="${PORTICO_DEPLOY_TREE:-$(cd "$(dirname "$0")/../.." && pwd)}"
+  head=$(git -C "$tree" rev-parse HEAD 2>/dev/null) || head=""
+  if [ "$head" = "$PORTICO_EXPECT_SHA" ]; then
+    echo "ok checkout-revision"
+  else
+    echo "FAIL checkout-revision got ${head:-unknown} want $PORTICO_EXPECT_SHA"
+    fail=1
+  fi
+fi
+
 check "portal-local" "http://127.0.0.1:8788/public" "200"
 check "review-local" "http://127.0.0.1:8791/review/login" "200"
 check "portal-public" "https://portico.talkincode.net/public" "200"
@@ -30,4 +50,5 @@ case "$body" in
   *) echo "FAIL catalog-envelope got $body"; fail=1 ;;
 esac
 check "internal-anon-404" "http://127.0.0.1:8788/internal" "404"
+
 exit "$fail"

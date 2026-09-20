@@ -234,3 +234,97 @@ Deno.test("deploy macos: daemons mirror the mira shape", async () => {
     assert(source.includes("<key>KeepAlive</key>"), `${file} must be kept alive`);
   }
 });
+
+/**
+ * The macOS gate probes behaviour, and behaviour alone cannot tell two
+ * revisions apart: a daemon that was never restarted keeps answering 200.
+ * The Linux gate pins `PORTICO_EXPECT_SHA` (deploy/verify.sh); the macOS
+ * gate has to honour the same pin or a green run says nothing about what
+ * shipped.
+ */
+Deno.test("deploy macos: verify honours a pinned revision", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-verify-" });
+  const decoder = new TextDecoder();
+  try {
+    const git = async (...args: string[]) => {
+      const { code, stderr } = await new Deno.Command("git", {
+        args,
+        cwd: dir,
+        stdout: "null",
+        stderr: "piped",
+      }).output();
+      assert(code === 0, `git ${args.join(" ")} failed: ${decoder.decode(stderr)}`);
+    };
+    await git("init", "--quiet");
+    await Deno.writeTextFile(`${dir}/file.txt`, "x\n");
+    await git("add", "file.txt");
+    await git(
+      "-c",
+      "user.email=example@example.invalid",
+      "-c",
+      "user.name=example",
+      "commit",
+      "--quiet",
+      "-m",
+      "x",
+    );
+    const head = await new Deno.Command("git", {
+      args: ["rev-parse", "HEAD"],
+      cwd: dir,
+      stdout: "piped",
+    }).output();
+    const sha = decoder.decode(head.stdout).trim();
+
+    // The probes hit 127.0.0.1 and the public site, so they fail in a bare
+    // environment; only the revision lines are asserted here.
+    //
+    // Executed through its own shebang, the way the runbook runs it: `sh`
+    // here would be dash on some hosts and the gate is a bash script.
+    const run = async (expected?: string) => {
+      const env: Record<string, string> = {
+        PATH: Deno.env.get("PATH") ?? "",
+        PORTICO_DEPLOY_TREE: dir,
+      };
+      if (expected !== undefined) env.PORTICO_EXPECT_SHA = expected;
+      const out = await new Deno.Command(`${ROOT}deploy/macos/verify.sh`, {
+        env,
+        stdout: "piped",
+        stderr: "piped",
+      }).output();
+      return {
+        out: decoder.decode(out.stdout),
+        err: decoder.decode(out.stderr),
+        code: out.code,
+      };
+    };
+
+    const pinned = await run(sha);
+    assert(
+      pinned.out.includes("ok checkout-revision"),
+      `a matching pin must confirm the revision it was given, got: ${pinned.out} ${pinned.err}`,
+    );
+
+    // The probes cannot pass in a bare environment, so the exit status here is
+    // only asserted to be non-zero: the revision line is the contract.
+    const mismatch = await run("0".repeat(40));
+    assert(
+      mismatch.out.startsWith("FAIL checkout-revision"),
+      `a mismatched pin must fail first and loudly, got: ${mismatch.out} ${mismatch.err}`,
+    );
+    assert(mismatch.code !== 0, "a mismatched pin must not exit clean");
+    assert(
+      !mismatch.out.includes("ok checkout-revision"),
+      "a mismatched pin must not also report ok",
+    );
+
+    // Unpinned runs keep probing behaviour; they must not invent a verdict
+    // about a revision they were never told to check.
+    const unpinned = await run();
+    assert(
+      !unpinned.out.includes("checkout-revision"),
+      "an unpinned run must not report a revision verdict",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
