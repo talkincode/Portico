@@ -22,6 +22,9 @@
 #   PORTICO_DEPLOY_TREE        checkout the entrances were started from
 #                              (default: this script's parent directory)
 #   PORTICO_EXPECT_SHA         pin the checkout revision; mismatch fails
+#   PORTICO_DEPLOY_REVIEW_ORIGIN  the Review entrance this deployment serves:
+#                              `off` (default) when it serves none, or the
+#                              absolute origin the Portal links to
 set -uo pipefail
 
 BIND="${PORTICO_DEPLOY_BIND:-127.0.0.1}"
@@ -72,6 +75,24 @@ if [ "$code" = "200" ] && contains "$payload" '<title>Portico' &&
   ok portal-product-page
 else
   bad portal-product-page "HTTP $code is not the discovery shell (title or channel rail missing)"
+fi
+
+# The Portal may only advertise a Review entrance this deployment serves. This
+# deployment ships three entrances and no Review behind them, so a `/review`
+# link here is a 404 dressed up as a governance path. When the operator
+# declares an origin instead, the page must link to that origin.
+review_origin="${PORTICO_DEPLOY_REVIEW_ORIGIN:-off}"
+review_origin="$(printf '%s' "${review_origin%/}" | tr '[:upper:]' '[:lower:]')"
+if [ "$review_origin" = "off" ]; then
+  if contains "$payload" 'href="/review'; then
+    bad portal-review-entry "the page links to /review but this deployment serves no Review entrance"
+  else
+    ok portal-review-entry
+  fi
+elif contains "$payload" "href=\"${review_origin}"; then
+  ok portal-review-entry
+else
+  bad portal-review-entry "the page does not link to the declared Review origin"
 fi
 
 expect_status portal-public-plane "$PORTAL/public" 200

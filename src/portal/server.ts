@@ -4,6 +4,7 @@ import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
 import { handlePortalRequest, type PortalCfAccess } from "./handler.ts";
+import type { ReviewEntry } from "./review-entry.ts";
 
 export interface PortalListenOptions {
   catalogPath: string;
@@ -27,6 +28,12 @@ export interface PortalListenOptions {
   signal?: AbortSignal;
   onListen?: (addr: { hostname: string; port: number }) => void;
   cfAccess?: PortalCfAccess;
+  /**
+   * The Review entrance this deployment serves, from `PORTICO_REVIEW_ORIGIN`.
+   * Absent means the same-origin default. The Portal never probes for a Review
+   * process: the deployment either declares one or the chrome stays silent.
+   */
+  reviewEntry?: ReviewEntry;
 }
 
 export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
@@ -61,6 +68,7 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
       pages,
       conclusions,
       cfAccess: options.cfAccess,
+      reviewEntry: options.reviewEntry,
     }));
 }
 

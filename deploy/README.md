@@ -21,6 +21,7 @@
 | `PORTICO_DEPLOY_PORT` | 8788 / 8789 / 8790 | 各入口端口 |
 | `PORTICO_DENO_IMAGE` | `denoland/deno:2.9.6` | 运行镜像（部分宿主 glibc 过旧，跑不了官方二进制） |
 | `PORTICO_DOCKER` | `/usr/bin/docker` | docker 可执行文件 |
+| `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 本部署对外提供的审核入口：`off` 表示不提供（页眉不出现审核链接），也可写成审核服务的绝对 origin，页眉会链到那里。未设置按「不提供」处理，不外推 |
 
 数据目录固定为检出目录下的 `data/`，只有 Gateway 以可写方式挂载它。
 
@@ -56,6 +57,7 @@ PORTICO_EXPECT_SHA=$(git rev-parse origin/main) ./deploy/verify.sh
 | `PORTICO_DEPLOY_PORTAL_PORT` / `PORTICO_DEPLOY_GATEWAY_PORT` / `PORTICO_DEPLOY_MCP_PORT` | 8788 / 8789 / 8790 | 三个入口的端口 |
 | `PORTICO_DEPLOY_TREE` | 脚本的上一级 | 入口所服务的检出；用来判断监听进程是否比代码旧 |
 | `PORTICO_EXPECT_SHA` | 不设 | 钉住检出修订；不设时该条报 `skip`，不冒充通过 |
+| `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 与 `run-portal.sh` 同一个声明；门禁据此判断产品页有没有挂出本部署不提供的审核入口 |
 
 它分开检查的三件事各自都像成功：端口有回答、页面有标题、进程还在跑。发现页与 404 壳共用同一个 `<title>`，所以门禁按发现壳的结构标记判断，而不是只看状态码。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。
 

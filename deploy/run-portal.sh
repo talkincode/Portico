@@ -31,6 +31,7 @@ exec "$DOCKER" run --rm --name portico-portal --network host \
   -e PORTICO_GATEWAY_AUDIT_PATH=/app/data/gateway-audit.json \
   -e PORTICO_PAGE_PATH=/app/data/page.json \
   -e PORTICO_CONCLUSIONS_PATH=/app/data/conclusions.json \
+  -e PORTICO_REVIEW_ORIGIN="${PORTICO_DEPLOY_REVIEW_ORIGIN:-off}" \
   "$IMAGE" \
   run --allow-read=/app --allow-env --allow-net=127.0.0.1,"$BIND" \
   src/portal/main.ts

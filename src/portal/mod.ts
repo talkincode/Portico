@@ -11,6 +11,8 @@ export {
   renderNotFoundPage,
 } from "./html.ts";
 export type { ChannelFilter, MagazinePageInput, ThemeMode } from "./html.ts";
+export { parseReviewEntry, reviewHref } from "./review-entry.ts";
+export type { ReviewEntry } from "./review-entry.ts";
 // The governance summary lives in the catalog layer: it is derived purely from
 // catalog records and the MCP entrance consumes it too, so it must not sit
 // inside one presentation layer.

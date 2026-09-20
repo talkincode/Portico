@@ -1,6 +1,7 @@
 import { CfAccessVerifier, parseCfAccessEnv } from "../access/mod.ts";
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
+import { parseReviewEntry } from "./review-entry.ts";
 import { listenPortal } from "./server.ts";
 
 class UsageError extends Error {
@@ -30,6 +31,7 @@ if (import.meta.main) {
       gatewayAuditPath: env.PORTICO_GATEWAY_AUDIT_PATH,
       cfAccess: cfAccess.enabled ? new CfAccessVerifier(cfAccess) : undefined,
       conclusionsPath: env.PORTICO_CONCLUSIONS_PATH,
+      reviewEntry: parseReviewEntry(env),
       hostname,
       port,
       onListen: (addr) => {

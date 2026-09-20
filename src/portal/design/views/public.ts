@@ -28,6 +28,7 @@ import {
 } from "../components.ts";
 import { renderShell, themeSwitch } from "../page.ts";
 import { CHANNEL_LABEL, CHANNEL_NOTE } from "../tokens.ts";
+import { type ReviewEntry, reviewHref } from "../../review-entry.ts";
 import type { PageTheme } from "./types.ts";
 
 export interface PublicContext {
@@ -36,6 +37,11 @@ export interface PublicContext {
   theme: PageTheme;
   /** Query string of the current page, preserved by the theme switch. */
   query?: string;
+  /**
+   * The Review entrance this deployment serves. Absent means the same-origin
+   * default; `{ kind: "none" }` removes the Review link from this plane too.
+   */
+  reviewEntry?: ReviewEntry;
 }
 
 interface PublicShellInput {
@@ -49,6 +55,8 @@ interface PublicShellInput {
 
 function renderPublicPage(input: PublicShellInput): string {
   const { ctx } = input;
+  const review = reviewHref(ctx.reviewEntry, ctx.actor.role !== "anonymous");
+  const reviewLabel = ctx.actor.role === "anonymous" ? "审核登录" : "去审核";
   const body = `    <header class="pub-masthead">
       <div class="tk-shell pub-masthead__inner">
         <a class="tk-brand" href="/public">
@@ -69,9 +77,7 @@ function renderPublicPage(input: PublicShellInput): string {
         </nav>
         <div class="pub-masthead__tools">
           ${
-    ctx.actor.role === "anonymous"
-      ? `<a class="pub-nav__link" href="/review/login">审核登录</a>`
-      : `<a class="pub-nav__link" href="/review">去审核</a>`
+    review === undefined ? "" : `<a class="pub-nav__link" href="${esc(review)}">${reviewLabel}</a>`
   }
           <span class="tk-search" aria-hidden="true">
             <span>⌕</span><span>搜索文章、专题或关键词</span>
