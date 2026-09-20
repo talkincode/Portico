@@ -4,6 +4,7 @@ import {
   AUDIT_ACTIONS,
   AUDIT_KINDS,
   type AuditService,
+  BOUNDARY_SUBJECTS,
   CONCLUSION_SCOPES,
   CONCLUSION_VERDICTS,
   type ConclusionService,
@@ -225,13 +226,15 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_conclusions",
     description:
-      "列出人类审计者记录的追加式安全审计结论（主体 / 审计范围 / 判定 / 审计者 / 时间 / 可选说明）。等价于 CLI `audit conclusions` 与 Portal `GET /api/conclusions`。审计范围是公开边界、入口指向、权限变化、密钥泄漏或网关越权之一。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写结论文件或目录。这不是记录入口：结论由 CLI `audit conclude` 写入，Portal 与 MCP 只读。",
+      `列出人类审计者记录的追加式安全审计结论（主体 / 审计范围 / 判定 / 审计者 / 时间 / 可选说明）。等价于 CLI \`audit conclusions\` 与 Portal \`GET /api/conclusions\`。审计范围是公开边界、入口指向、权限变化、密钥泄漏、运行时边界（L0）或网关越权之一。主体可以是目录记录 id，也可以是仓库级边界契约（${
+        BOUNDARY_SUBJECTS.map((item) => item.id).join(" / ")
+      }，这类结论带 \`gate\` 字段，指向回答它的门禁任务）。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写结论文件或目录。这不是记录入口：结论由 CLI \`audit conclude\` 写入，Portal 与 MCP 只读。`,
     inputSchema: {
       type: "object",
       properties: {
         subject: {
           type: "string",
-          description: "只返回该目录记录 id 的结论",
+          description: "只返回该主体的结论（目录记录 id 或边界契约 id）",
         },
         scope: {
           type: "string",

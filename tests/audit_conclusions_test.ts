@@ -8,6 +8,7 @@ import {
 } from "../src/catalog/mod.ts";
 import {
   applyConclusionQuery,
+  BOUNDARY_SUBJECTS,
   ConclusionService,
   FileConclusionStore,
   MemoryConclusionStore,
@@ -389,4 +390,157 @@ Deno.test("conclusion queries filter by subject, scope and verdict, and reject u
       "INVALID_INPUT",
     );
   }
+});
+
+// --- repository boundary contracts ------------------------------------------
+//
+// `AGENTS.md` asks the human auditor questions about the system itself, not
+// only about one registered surface. Two of those contracts are repository
+// wide — the Deno L0 runtime boundary and the public-surface redaction rule —
+// and each is already a row in the acceptance matrix with a machine gate of
+// its own. Neither has a catalog record to attach a verdict to, so the verdict
+// would have had nowhere to go: a maintainer cannot certify them and there is
+// no registered surface that stands for them. They are subjects in their own
+// namespace instead of pretend records, and a conclusion about one names the
+// gate that answers it.
+
+const RUNTIME_BOUNDARY = "boundary:runtime-l0";
+const REDACTION_BOUNDARY = "boundary:public-redaction";
+
+Deno.test("a boundary contract is a subject with no catalog record behind it", async () => {
+  const { service, catalog } = await bootstrapped();
+  // Nothing to register a verdict about: the boundary is not a surface.
+  await assertRejectsCode(() => catalog.get(auditor, RUNTIME_BOUNDARY), "NOT_FOUND");
+
+  const recorded = await service.record(auditor, {
+    id: RUNTIME_BOUNDARY,
+    scope: "runtime_l0",
+    verdict: "cleared",
+    note: "no node, no second lockfile, no --allow-all",
+  });
+
+  assertEquals(recorded.subjectId, RUNTIME_BOUNDARY);
+  assertEquals(recorded.scope, "runtime_l0");
+  assertEquals(recorded.verdict, "cleared");
+  assertEquals(recorded.auditorId, "human:security-auditor");
+  // The verdict names the machine gate that answers it, so the opinion stays
+  // tied to evidence that can be re-run rather than to prose.
+  assertEquals(recorded.gate, "check:runtime-boundary");
+  assert(recorded.id.startsWith(`ccl-${RUNTIME_BOUNDARY}-runtime_l0-`), recorded.id);
+
+  const redaction = await service.record(auditor, {
+    id: REDACTION_BOUNDARY,
+    scope: "secret_leakage",
+    verdict: "flagged",
+    note: "one tracked file still names the deployment host",
+  });
+  assertEquals(redaction.gate, "check:redaction");
+  assertEquals(redaction.scope, "secret_leakage");
+
+  // Still an auditor artifact: the maintenance trail gains nothing.
+  const changes = await catalog.listChanges(auditor);
+  assertEquals(changes.length, 1);
+  assertEquals(changes[0].action, "register");
+});
+
+Deno.test("every declared boundary gate is a real task that runs an existing test", async () => {
+  const tasks = JSON.parse(
+    await Deno.readTextFile(new URL("../deno.json", import.meta.url)),
+  ).tasks as Record<string, string>;
+
+  const gates = BOUNDARY_SUBJECTS.map((item) => item.gate);
+  assertEquals(new Set(gates).size, gates.length, "two contracts cannot share one gate");
+
+  for (const item of BOUNDARY_SUBJECTS) {
+    const script = tasks[item.gate];
+    assert(typeof script === "string" && script.length > 0, `gate '${item.gate}' is not a task`);
+    const file = script.split(/\s+/).find((part) => part.endsWith("_test.ts"));
+    assert(file, `gate '${item.gate}' runs no test file: ${script}`);
+    await Deno.stat(new URL(`../${file}`, import.meta.url));
+  }
+});
+
+Deno.test("the boundary namespace cannot collide with a registered surface", async () => {
+  const catalog = new CatalogService(new MemoryCatalogStore());
+  for (const item of BOUNDARY_SUBJECTS) {
+    // Catalog ids are lowercase kebab-case, so a boundary id is not a legal
+    // surface id: the two namespaces cannot shadow each other.
+    await assertRejectsCode(
+      () => catalog.register(maintainer, registerInput(surface({ id: item.id }))),
+      "INVALID_INPUT",
+    );
+  }
+});
+
+Deno.test("a boundary conclusion answers only the question its contract declares", async () => {
+  const mismatched = [
+    { id: RUNTIME_BOUNDARY, scope: "public_boundary" },
+    { id: RUNTIME_BOUNDARY, scope: "secret_leakage" },
+    { id: REDACTION_BOUNDARY, scope: "runtime_l0" },
+    { id: REDACTION_BOUNDARY, scope: "public_boundary" },
+    // A registered surface cannot answer a repository-wide question either.
+    { id: "docs-writer", scope: "runtime_l0" },
+  ];
+  for (const item of mismatched) {
+    const { service, store } = await bootstrapped();
+    await assertRejectsCode(
+      () => service.record(auditor, { ...item, verdict: "cleared" } as never),
+      "INVALID_INPUT",
+    );
+    assertEquals(await store.list(), []);
+  }
+
+  // An id that merely looks like a boundary is not one, and a surface that is
+  // not there stays NOT_FOUND rather than being read as a boundary.
+  const { service, store } = await bootstrapped();
+  for (const id of ["boundary:ghost", "boundary-runtime-l0", "runtime_l0"]) {
+    await assertRejectsCode(
+      () => service.record(auditor, { id, scope: "runtime_l0", verdict: "cleared" }),
+      "NOT_FOUND",
+    );
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("only a human auditor may conclude on a boundary contract", async () => {
+  for (
+    const actor of [maintainer, reader, anonymous, { ...maintainer, role: "auditor" as const }]
+  ) {
+    const { service, store } = await bootstrapped();
+    await assertRejectsCode(
+      () =>
+        service.record(actor as never, {
+          id: RUNTIME_BOUNDARY,
+          scope: "runtime_l0",
+          verdict: "cleared",
+        }),
+      "FORBIDDEN",
+    );
+    assertEquals(await store.list(), []);
+  }
+});
+
+Deno.test("boundary conclusions are append-only and filterable like any other", async () => {
+  const { service } = await bootstrapped();
+  await service.record(auditor, {
+    id: RUNTIME_BOUNDARY,
+    scope: "runtime_l0",
+    verdict: "flagged",
+    note: "package.json appeared in the tree",
+  });
+  await service.record(auditor, {
+    id: RUNTIME_BOUNDARY,
+    scope: "runtime_l0",
+    verdict: "cleared",
+    note: "removed again; gate green",
+  });
+  // A review never replaces the previous verdict.
+  const listed = await service.list(auditor, { subject: RUNTIME_BOUNDARY });
+  assertEquals(listed.length, 2);
+  assertEquals(listed[0].verdict, "flagged");
+  assertEquals(listed[1].verdict, "cleared");
+  assertEquals(listed[1].gate, "check:runtime-boundary");
+
+  assertEquals((await service.list(auditor, { scope: "runtime_l0" })).length, 2);
+  assertEquals((await service.list(auditor, { subject: REDACTION_BOUNDARY })).length, 0);
 });
