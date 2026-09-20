@@ -1,11 +1,7 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { handleReviewRequest } from "./handler.ts";
-import {
-  type ExchangeGithubCode,
-  exchangeGithubCode,
-  type GithubOauthConfig,
-} from "./github.ts";
+import { type ExchangeGithubCode, exchangeGithubCode, type GithubOauthConfig } from "./github.ts";
 
 export interface ReviewListenOptions {
   catalogPath: string;

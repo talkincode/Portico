@@ -44,7 +44,13 @@ export function parseGithubEnv(
   } catch {
     return { enabled: false };
   }
-  return { enabled: true, clientId, clientSecret, callbackUrl, allowlist: parseAllowlist(env.PORTICO_REVIEW_ALLOWLIST) };
+  return {
+    enabled: true,
+    clientId,
+    clientSecret,
+    callbackUrl,
+    allowlist: parseAllowlist(env.PORTICO_REVIEW_ALLOWLIST),
+  };
 }
 
 export function parseAllowlist(raw: string | undefined): string[] {
