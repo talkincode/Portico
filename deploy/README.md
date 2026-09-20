@@ -46,18 +46,21 @@ sudo systemctl enable --now portico-portal portico-gateway portico-mcp
 部署之后跑只读门禁，确认**在服务的是新修订、而且是产品页**：
 
 ```sh
-./deploy/verify.sh
 PORTICO_EXPECT_SHA=$(git rev-parse origin/main) ./deploy/verify.sh
+PORTICO_DEPLOY_ALLOW_UNPINNED=1 ./deploy/verify.sh   # 只有拿不到修订时才这么跑
 ```
 
 不打补丁、不重启、不需要 sudo、不写数据目录；唯一临时文件在 `$TMPDIR`。每条承诺按名字报 `ok` / `FAIL` / `skip`，任一 `FAIL` 即非零退出，所以「重启后没验证」不会被说成「已更新」。
+
+`PORTICO_EXPECT_SHA` 是**必填**，不是可选项：探测只证明行为，而行为恰恰是「从没重启过的守护进程」也照样给出的回答，所以一次没点名修订的运行等于没验证过任何部署。把它留在绿色探测后面静默通过，正是当初加这条钉住要消掉的那种沉默。只有显式接受才会降级成 `skip`：主机不是检出时仍可探测，但记录上写明它只证明了行为。
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `PORTICO_DEPLOY_BIND` | 不设 | 与 `run-*.sh` 同一个监听地址；内网实地用 drop-in / `EnvironmentFile` 注入，不要写进仓库。不设时门禁从监听表读地址；同一端口有两个监听地址就 FAIL，不猜 |
 | `PORTICO_DEPLOY_PORTAL_PORT` / `PORTICO_DEPLOY_GATEWAY_PORT` / `PORTICO_DEPLOY_MCP_PORT` | 8788 / 8789 / 8790 | 三个入口的端口 |
 | `PORTICO_DEPLOY_TREE` | 脚本的上一级 | 入口所服务的检出；用来判断监听进程是否比代码旧 |
-| `PORTICO_EXPECT_SHA` | 不设 | 钉住检出修订；不设时该条报 `skip`，不冒充通过 |
+| `PORTICO_EXPECT_SHA` | 不设即 FAIL | 钉住检出修订；不设且没有下面的显式接受时报 `FAIL checkout-revision`，不冒充通过 |
+| `PORTICO_DEPLOY_ALLOW_UNPINNED` | 不设即不接受 | 只认 `1`/`true`/`yes`/`on`（与运行时的开关判定同一套口径，大小写不敏感）；置真后没钉修订的那条报 `skip` 并点名本变量 |
 | `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 与 `run-portal.sh` 同一个声明；门禁据此判断产品页有没有挂出本部署不提供的审核入口 |
 
 它分开检查的四件事各自都像成功：端口有回答、地址是部署声明的那个、页面有标题、进程还在跑。发现页与 404 壳共用同一个 `<title>`，所以门禁按发现壳的结构标记判断，而不是只看状态码。
@@ -92,7 +95,7 @@ PORTICO_HOME=~/portico PORTICO_TUNNEL_ID=<uuid> \
 sudo cp ~/portico/net.portico.*.plist /Library/LaunchDaemons/
 sudo launchctl kickstart -k system/net.portico.macstudio
 sudo launchctl kickstart -k system/net.portico.cloudflared
-./deploy/macos/verify.sh
+PORTICO_EXPECT_SHA=$(git rev-parse HEAD) ./deploy/macos/verify.sh
 ```
 
 注意：`kickstart -k` 只重启进程，不重读 plist 文件；改了 plist 内容
@@ -121,11 +124,17 @@ sudo launchctl kickstart -k system/net.portico.cloudflared
 | `PORTICO_DEPLOY_PORTAL_PORT` / `..._GATEWAY_PORT` / `..._MCP_PORT` / `..._REVIEW_PORT` | 8788 / 8789 / 8790 / 8791 | 四个入口的端口 |
 | `PORTICO_DEPLOY_PUBLIC_ORIGIN` | `https://portico.talkincode.net` | 隧道对外服务的 origin |
 | `PORTICO_DEPLOY_TREE` | 脚本所在的检出 | 入口所服务的检出；用来判断进程是否比代码旧 |
-| `PORTICO_EXPECT_SHA` | 不设 | 钉住检出修订；不设时不输出该行，不冒充已验证 |
+| `PORTICO_EXPECT_SHA` | 不设即 FAIL | 钉住检出修订；不设且没有下面的显式接受时报 `FAIL checkout-revision`，不冒充已验证 |
+| `PORTICO_DEPLOY_ALLOW_UNPINNED` | 不设即不接受 | 只认 `1`/`true`/`yes`/`on`（与运行时的开关判定同一套口径）；置真后没钉修订的那条报 `skip` 并点名本变量 |
+
+与 Linux 门禁同一套语义：钉住的修订对不上就 FAIL，**根本没钉也是 FAIL**——
+行为探针只证明行为，而行为恰好是从没被替换过的旧进程照样给出的回答。
+只有显式接受才会把那一条降级成 `skip`，并且在这一行里写明它只证明了
+行为；主机不是检出时仍能探测，但记录上不会出现一条没点名修订的「全绿」。
 
 它回答三个问题，按「最便宜发现、最贵漏掉」排序：检出是不是你钉的修订
-（`checkout-revision`，只在给了 `PORTICO_EXPECT_SHA` 时报）、**四个入口分别是
-哪个进程在服务**（`running-code-not-stale`）、每个入口是否各自兑现契约。
+（`checkout-revision`，没钉就没通过）、**四个入口分别是哪个进程在服务**
+（`running-code-not-stale`）、每个入口是否各自兑现契约。
 
 第二条是本机的重点。`launchctl kickstart -k` 是真正把 pull 送上线的那一步，
 而「pull 了但没重启」会让上一版修订继续在同样的端口上用同样的产品页应答——

@@ -26,6 +26,8 @@
 #   PORTICO_DEPLOY_TREE        checkout the entrances were started from
 #                              (default: this script's parent directory)
 #   PORTICO_EXPECT_SHA         pin the checkout revision; mismatch fails
+#   PORTICO_DEPLOY_ALLOW_UNPINNED  accept a run that pins no revision, reported
+#                              as a `skip`; without it an unpinned run fails
 #   PORTICO_DEPLOY_REVIEW_ORIGIN  the Review entrance this deployment serves:
 #                              `off` (default) when it serves none, or the
 #                              absolute origin the Portal links to
@@ -342,6 +344,22 @@ check_running_code_is_current() {
 
 check_running_code_is_current
 
+# The revision pin is required, not optional. Behaviour is exactly what a
+# daemon that was never restarted still answers, so a run that never named a
+# revision has verified no deployment — letting it exit 0 behind a wall of green
+# probes is the same silence the pin was added to remove. Only an explicit
+# acceptance turns the omission into a `skip`: a host that is not a checkout can
+# still be probed, but it says so on the record.
+#
+# Truthiness matches the runtime's `isEnabledFlag` (src/access/cf-access.ts):
+# an explicit yes, never a stray non-empty string.
+accepts_unpinned() {
+  case "$(printf '%s' "${PORTICO_DEPLOY_ALLOW_UNPINNED:-}" | tr '[:upper:]' '[:lower:]')" in
+    1 | true | yes | on) return 0 ;;
+  esac
+  return 1
+}
+
 if [ -n "${PORTICO_EXPECT_SHA:-}" ]; then
   head=$(git -C "$TREE" rev-parse HEAD 2>/dev/null)
   if [ "$head" = "$PORTICO_EXPECT_SHA" ]; then
@@ -349,8 +367,12 @@ if [ -n "${PORTICO_EXPECT_SHA:-}" ]; then
   else
     bad checkout-revision "tree is at ${head:-unknown}, expected ${PORTICO_EXPECT_SHA}"
   fi
+elif accepts_unpinned; then
+  skip checkout-revision \
+    "PORTICO_EXPECT_SHA is not set, so this run proves behaviour only (accepted by PORTICO_DEPLOY_ALLOW_UNPINNED)"
 else
-  skip checkout-revision "set PORTICO_EXPECT_SHA to pin the revision being served"
+  bad checkout-revision \
+    "PORTICO_EXPECT_SHA is not set, so nothing here names the revision being served; pin it, or accept a behaviour-only run with PORTICO_DEPLOY_ALLOW_UNPINNED=1"
 fi
 
 if [ "$fail" = "0" ]; then

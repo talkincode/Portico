@@ -56,10 +56,13 @@ async function runGate(env: Record<string, string>): Promise<Run> {
   };
 }
 
-function outcome(report: Run, name: string): "ok" | "FAIL" | "absent" {
+function outcome(report: Run, name: string): "ok" | "FAIL" | "skip" | "absent" {
   const line = report.stdout.split("\n").find((candidate) => candidate.includes(name));
   if (!line) return "absent";
-  return line.trimStart().startsWith("FAIL ") ? "FAIL" : "ok";
+  for (const verdict of ["ok", "FAIL", "skip"] as const) {
+    if (line.trimStart().startsWith(`${verdict} `) && line.includes(name)) return verdict;
+  }
+  return "absent";
 }
 
 function assertPassed(report: Run, name: string): void {
@@ -214,6 +217,11 @@ async function startDeployment(
       PORTICO_DEPLOY_REVIEW_PORT: portOf(review.url),
       PORTICO_DEPLOY_PUBLIC_ORIGIN: edge.url,
       PORTICO_DEPLOY_TREE: tree,
+      // The tree here is a stand-in, not a checkout, so there is no revision to
+      // pin: the run accepts a behaviour-only verdict explicitly. The gate still
+      // reports `skip checkout-revision`, so it never passes silently as if the
+      // revision had been checked.
+      PORTICO_DEPLOY_ALLOW_UNPINNED: "1",
     },
     stopGateway: () => gateway.stop(),
     stop: () => {
@@ -299,6 +307,52 @@ Deno.test("E2E: the macOS gate pins the checkout revision when asked", async () 
     });
     assertFailed(wrong, "checkout-revision");
     assertEquals(wrong.code !== 0, true, "a tree that is not at the pinned revision must fail");
+  } finally {
+    await deployment.stop();
+  }
+});
+
+Deno.test("E2E: the macOS gate refuses a run that never named a revision", async () => {
+  const deployment = await startDeployment();
+  try {
+    // Every entrance answers and every behaviour probe is green, and that is
+    // exactly the trap: `launchctl kickstart -k` is what ships a pull, so a
+    // restart that never happened leaves the previous revision answering all of
+    // them. A run that never named a revision has verified no deployment and
+    // must not exit 0 as one — and a flag that is not an explicit yes is not an
+    // acceptance, so `0` is in that same set.
+    for (const flag of ["", "0"]) {
+      const report = await runGate({ ...deployment.env, PORTICO_DEPLOY_ALLOW_UNPINNED: flag });
+      assertFailed(report, "checkout-revision");
+      assertPassed(report, "portal-local");
+      assertEquals(
+        report.code !== 0,
+        true,
+        `an unpinned run (flag ${JSON.stringify(flag)}) must not exit clean`,
+      );
+    }
+  } finally {
+    await deployment.stop();
+  }
+});
+
+Deno.test("E2E: the macOS gate records an accepted unpinned run as a skip", async () => {
+  const deployment = await startDeployment();
+  try {
+    // `PORTICO_DEPLOY_ALLOW_UNPINNED` is in `deployment.env` here. Accepting the
+    // gap keeps a behaviour-only run possible; going quiet about it would not,
+    // so the verdict is a `skip` that names what was left unchecked.
+    const report = await runGate(deployment.env);
+    assertEquals(outcome(report, "checkout-revision"), "skip");
+    assert(
+      verdictOf(report, "checkout-revision").includes("PORTICO_EXPECT_SHA"),
+      `the skip must name the variable that was not set, gate said:\n${report.stdout}`,
+    );
+    assertEquals(
+      report.code,
+      0,
+      `an accepted unpinned run must still prove behaviour:\n${report.stdout}${report.stderr}`,
+    );
   } finally {
     await deployment.stop();
   }
