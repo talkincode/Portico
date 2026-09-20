@@ -58,12 +58,14 @@ PORTICO_DEPLOY_ALLOW_UNPINNED=1 ./deploy/verify.sh   # 只有拿不到修订时�
 | --- | --- | --- |
 | `PORTICO_DEPLOY_BIND` | 不设 | 与 `run-*.sh` 同一个监听地址；内网实地用 drop-in / `EnvironmentFile` 注入，不要写进仓库。不设时门禁从监听表读地址；同一端口有两个监听地址就 FAIL，不猜 |
 | `PORTICO_DEPLOY_PORTAL_PORT` / `PORTICO_DEPLOY_GATEWAY_PORT` / `PORTICO_DEPLOY_MCP_PORT` | 8788 / 8789 / 8790 | 三个入口的端口 |
-| `PORTICO_DEPLOY_TREE` | 脚本的上一级 | 入口所服务的检出；用来判断监听进程是否比代码旧 |
+| `PORTICO_DEPLOY_TREE` | 脚本的上一级 | 入口所服务的检出；用来判断监听进程是否比代码旧，以及入口是不是从这个检出启动的 |
 | `PORTICO_EXPECT_SHA` | 不设即 FAIL | 钉住检出修订；不设且没有下面的显式接受时报 `FAIL checkout-revision`，不冒充通过 |
 | `PORTICO_DEPLOY_ALLOW_UNPINNED` | 不设即不接受 | 只认 `1`/`true`/`yes`/`on`（与运行时的开关判定同一套口径，大小写不敏感）；置真后没钉修订的那条报 `skip` 并点名本变量 |
 | `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 与 `run-portal.sh` 同一个声明；门禁据此判断产品页有没有挂出本部署不提供的审核入口 |
 
 它分开检查的四件事各自都像成功：端口有回答、地址是部署声明的那个、页面有标题、进程还在跑。发现页与 404 壳共用同一个 `<title>`，所以门禁按发现壳的结构标记判断，而不是只看状态码。
+
+「在服务的是新修订」钉在只有启动器写得出的那个记录上：`run-*.sh` 把 `-e PORTICO_REVISION=<它自己检出的 HEAD>` 交给入口，门禁再从这个运行进程的启动环境里把它读回来，与 `PORTICO_DEPLOY_TREE` 的 HEAD 比（`running-revision`）。这个值在 `exec` 时就固定了，所以「pull 了但没重启」掩盖不了：没被替换的旧进程会如实报出旧修订，门禁点名两个修订并让你重启。只取出这一个变量是有意的——同一份 `ps` 输出里还带着部署导出的其它环境值，而环境文件里有凭证，把它打出来就把一条只读检查变成了部署日志里的泄漏；`tests/e2e/deploy_verify_e2e_test.ts` 用一个哨兵值把这条钉住。文件时间那一条（`running-code-not-stale`）是同一件事的第二个读法：时间是副产物，可以被恢复、`touch` 或时钟挪动，而记录改不了。
 
 `entrance-address` 与 `entrance-not-all-interfaces` 先把「验证的是哪个地址」说清楚。内网部署把入口绑到单播地址（既不是回环，也不是 `0.0.0.0`），门禁必须按同一个地址验证：地址来自 `PORTICO_DEPLOY_BIND`，没声明时来自监听表里唯一的那个地址，端口上有两个地址时 FAIL 并点名，绝不用回环默认值去替一份健康的内网部署宣布失败。同理，只按端口取进程会让同端口上的遗留入口冒充正在服务的那个，所以进程时间这条也按地址匹配。绑定到所有接口的入口只有在主机上才看得见，因此这条也只能在主机上判。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。
 
@@ -76,7 +78,8 @@ LaunchDaemon plist。macstudio 不跑 Docker，
 用本机 Deno（与发布镜像同版本）直接起 `src/up/main.ts`；权限仍以
 `src/perms.ts` 为准，监管者只持 `--allow-env --allow-run`。形状由
 `tests/deploy_macos_contract_test.ts` 锁定：模板不得含 `0.0.0.0`、
-RFC1918 地址、真实用户名、真实隧道 id 与 token 明文。
+RFC1918 地址、真实用户名、真实隧道 id 与 token 明文，并且 `run.sh` 必须把
+自己启动的修订（`$ROOT/app` 的 HEAD）导出成 `PORTICO_REVISION`。
 
 选本地管理而不用 token + 仪表盘（mira 模式）的原因：`wrangler tunnel`
 （已验证最新版 4.135.0）没有写 ingress 的子命令，而隧道配置接口拒绝
@@ -97,6 +100,11 @@ sudo launchctl kickstart -k system/net.portico.macstudio
 sudo launchctl kickstart -k system/net.portico.cloudflared
 PORTICO_EXPECT_SHA=$(git rev-parse HEAD) ./deploy/macos/verify.sh
 ```
+
+`kickstart -k` 那一步才是把新修订送上线的动作：`running-revision` 读回
+`run.sh` 为四个入口记录的启动修订，没重启就会在门禁里点名「服务的是哪个修订、
+检出是哪个修订」。改 plist 或环境文件（而不是只改代码）时 `kickstart` 不够，
+要先 `sudo launchctl bootout system/net.portico.macstudio` 再 `bootstrap`。
 
 注意：`kickstart -k` 只重启进程，不重读 plist 文件；改了 plist 内容
 （新增环境变量、路径）后必须 `bootout` + `bootstrap` 一次，否则旧定义
@@ -132,20 +140,24 @@ PORTICO_EXPECT_SHA=$(git rev-parse HEAD) ./deploy/macos/verify.sh
 只有显式接受才会把那一条降级成 `skip`，并且在这一行里写明它只证明了
 行为；主机不是检出时仍能探测，但记录上不会出现一条没点名修订的「全绿」。
 
-它回答三个问题，按「最便宜发现、最贵漏掉」排序：检出是不是你钉的修订
-（`checkout-revision`，没钉就没通过）、**四个入口分别是哪个进程在服务**
-（`running-code-not-stale`）、每个入口是否各自兑现契约。
+它回答四个问题，按「最便宜发现、最贵漏掉」排序：检出是不是你钉的修订
+（`checkout-revision`，没钉就没通过）、**四个入口是不是从这个检出启动的**
+（`running-revision`）、**四个入口分别是哪个进程在服务**（`running-code-not-stale`）、
+每个入口是否各自兑现契约。
 
-第二条是本机的重点。`launchctl kickstart -k` 是真正把 pull 送上线的那一步，
-而「pull 了但没重启」会让上一版修订继续在同样的端口上用同样的产品页应答——
-行为探针看不出区别，因为行为正是那个从未被替换的进程在回答。门禁因此把每个
-入口解析到一个 pid（先按 `PORTICO_DEPLOY_BIND` 上的地址匹配，取不到再退回该
-端口上的监听者），拿它的启动时刻与 `PORTICO_DEPLOY_TREE/src` 里最新的文件比：
-进程比它服务的代码还旧，就是「静默空转的重启」。与 Linux 门禁不同，「入口没有
-进程」在这里是 FAIL 而不是 `skip`：本部署固定是同一个监管者拉起的四个入口，
-少一个不是未知，是系统没起来。绑定到所有接口的检查不在这里重复——运行时的
-`src/runtime/bind.ts` 本身就拒绝 `0.0.0.0`、`::` 与公网地址，非回环绑定会先
-让入口起不来。
+中间两条是本机的重点，而且回答同一个问题的两半。`launchctl kickstart -k` 是真正
+把 pull 送上线的那一步，而「pull 了但没重启」会让上一版修订继续在同样的端口上用
+同样的产品页应答——行为探针看不出区别，因为行为正是那个从未被替换的进程在回答。
+最直接的证据是启动器留下的记录：`run.sh` 导出 `PORTICO_REVISION`（取自
+`$ROOT/app` 的 HEAD，写在环境文件之后，`portico.env` 覆盖不了它），四个入口因此
+记下自己是哪一版启动的；门禁把每个入口解析到一个 pid，从它的启动环境里读回这个
+值（`running-revision`），读到别的修订、或读到没有，都 FAIL 并点名。第二个读法是
+每个入口的启动时刻与 `PORTICO_DEPLOY_TREE/src` 里最新的文件比：进程比它服务的代码
+还旧，就是「静默空转的重启」。门禁只从 `ps` 输出里取出这一个变量，其余环境值
+（环境文件里有凭证）绝不回显。与 Linux 门禁不同，「入口没有进程」在这里是 FAIL
+而不是 `skip`：本部署固定是同一个监管者拉起的四个入口，少一个不是未知，是系统
+没起来。绑定到所有接口的检查不在这里重复——运行时的 `src/runtime/bind.ts` 本身
+就拒绝 `0.0.0.0`、`::` 与公网地址，非回环绑定会先让入口起不来。
 
 入口契约四条：Portal `/public` 200、Review `/review/login` 200、Gateway 的
 工具调用 POST 405（它鉴权与路由，不执行工具）、MCP 对 `initialize` 返回

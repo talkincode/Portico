@@ -226,14 +226,41 @@ Deno.test("deploy macos: verify gates local and public without writes", async ()
     assert(source.includes(probe), `verify.sh must probe ${probe}`);
   }
   // Ports answering is not the claim: the gate has to name the process serving
-  // each entrance, ask the Gateway whether it executes tools, and ask MCP who
-  // it is.
-  for (const check of ["running-code-not-stale", "gateway-does-not-execute-tools"]) {
+  // each entrance, name the revision that process was started from, ask the
+  // Gateway whether it executes tools, and ask MCP who it is.
+  for (
+    const check of ["running-revision", "running-code-not-stale", "gateway-does-not-execute-tools"]
+  ) {
     assert(source.includes(check), `verify.sh must report ${check}`);
   }
+  assert(
+    source.includes("PORTICO_REVISION"),
+    "verify.sh must ask the entrance for the variable the launcher records",
+  );
   assert(source.includes("mcp-jsonrpc-initialize"), "verify.sh must report mcp-jsonrpc-initialize");
   assert(source.includes('"name":"portico"'), "verify.sh must accept only a portico initialize");
   assert(source.includes('exit "$fail"'), "verify.sh must fail loudly");
+});
+
+Deno.test("deploy macos: the launcher records the revision it started from", async () => {
+  // `launchctl kickstart -k` is the step that ships a pull, and a restart that
+  // never happened leaves the previous revision answering every probe with the
+  // same product page. The gate therefore reads the revision the daemons were
+  // *started* from back out of their launch environment; this is the half only
+  // the launcher can supply, so it is pinned here.
+  const source = await text("deploy/macos/run.sh");
+  assert(
+    /PORTICO_REVISION="\$\(git -C "\$ROOT\/app" rev-parse HEAD/.test(source),
+    "run.sh must resolve the revision from the checkout it launches",
+  );
+  assert(
+    /^export PORTICO_REVISION=/m.test(source),
+    "run.sh must export the revision so all four entrances inherit it",
+  );
+  assert(
+    !/[0-9a-f]{40}/.test(source),
+    "run.sh must not bake a revision into the template",
+  );
 });
 
 Deno.test("deploy macos: daemons mirror the mira shape", async () => {
