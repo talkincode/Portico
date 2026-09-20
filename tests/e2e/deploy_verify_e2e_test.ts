@@ -30,6 +30,8 @@ const MCP = `${ROOT}src/mcp/main.ts`;
  * reading a failed deploy needs to know *which* promise broke.
  */
 const CHECKS = [
+  "entrance-address",
+  "entrance-not-all-interfaces",
   "portal-product-page",
   "portal-review-entry",
   "portal-public-plane",
@@ -414,6 +416,196 @@ Deno.test("E2E: the deploy gate pins the checkout revision when asked", async ()
     const unpinned = await runVerify(stubEnv(stubs));
     assertEquals(outcome(unpinned, "checkout-revision"), "skip");
   } finally {
+    await stubs.stop();
+  }
+});
+
+/**
+ * The address an entrance serves on is a property of the deployment, not
+ * something the gate may assume. The shipped runbook injects an interface
+ * address (systemd drop-in / `EnvironmentFile`), so a deployment can be
+ * perfectly healthy on an address the gate never guessed; probing the loopback
+ * default then reports ten broken promises about a deployment that is fine —
+ * the same false confidence this gate exists to remove, pointing the other way.
+ * A port number is also too coarse to say *which* process was measured: a
+ * leftover entrance next to the real one leaves the gate guessing.
+ */
+
+/** A listener table the gate reads instead of the host's own. */
+async function fakeListenerTable(
+  rows: string[],
+): Promise<{ env: Record<string, string>; stop: () => Promise<void> }> {
+  const dir = await Deno.makeTempDir({ prefix: "portico-verify-listeners-" });
+  // Linux is read through `ss`; the gate only falls back to `lsof` without it,
+  // so shadowing one is enough to hand the gate a table of our choosing.
+  await Deno.writeTextFile(`${dir}/ss`, `#!/bin/sh\ncat <<'TABLE'\n${rows.join("\n")}\nTABLE\n`);
+  await Deno.chmod(`${dir}/ss`, 0o755);
+  return {
+    env: { PATH: `${dir}:${Deno.env.get("PATH") ?? ""}` },
+    stop: () => Deno.remove(dir, { recursive: true }),
+  };
+}
+
+/** One `ss -ltn` row: state, queues, local address:port, peer address:port. */
+function listenRow(address: string, port: string): string {
+  return `LISTEN 0 128 ${address}:${port} 0.0.0.0:*`;
+}
+
+function verdictOf(report: Run, name: string): string {
+  return report.stdout.split("\n").find((line) => line.includes(name)) ?? "";
+}
+
+Deno.test("E2E: the deploy gate verifies the address the entrances actually serve", async () => {
+  const stubs = startStubs();
+  // A host whose listener table names its entrance instead of numbering it is
+  // still a host the gate must verify: with nothing declared, it takes the
+  // address from the table rather than from its own default. The name resolves
+  // to the loopback stub either way, so only probing the table's value keeps
+  // every promise green.
+  const table = await fakeListenerTable([
+    listenRow("localhost", portOf(stubs.portal)),
+    listenRow("localhost", portOf(stubs.gateway)),
+    listenRow("localhost", portOf(stubs.mcp)),
+  ]);
+  try {
+    const report = await runVerify({
+      ...stubEnv(stubs),
+      PORTICO_DEPLOY_BIND: "",
+      ...table.env,
+    });
+    assertPassed(report, "entrance-address");
+    for (const name of CHECKS) {
+      // The staleness check reads the same table, which describes no process of
+      // its own; it is asserted against real listeners in its own test.
+      if (name === "running-code-not-stale") continue;
+      assertPassed(report, name);
+    }
+    assert(
+      report.stdout.includes("localhost"),
+      `the gate must probe the address it discovered:\n${report.stdout}`,
+    );
+    assertEquals(
+      report.code,
+      0,
+      `a healthy deployment must exit 0 on a discovered address:\n${report.stdout}${report.stderr}`,
+    );
+  } finally {
+    await table.stop();
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate names the address that is actually serving", async () => {
+  const stubs = startStubs();
+  try {
+    // The trap this closes: the entrances answer on 127.0.0.1, the gate was
+    // pointed at an address nothing serves, and ten "got HTTP 000, want 200"
+    // lines read like ten broken promises instead of one wrong address.
+    const report = await runVerify(stubEnv(stubs, { PORTICO_DEPLOY_BIND: "127.0.0.9" }));
+    assertFailed(report, "entrance-address");
+    const verdict = verdictOf(report, "entrance-address");
+    assert(
+      verdict.includes("127.0.0.9"),
+      `the gate must name the address it was pointed at:\n${report.stdout}`,
+    );
+    assert(
+      verdict.includes("127.0.0.1"),
+      `the gate must name the address that answers:\n${report.stdout}`,
+    );
+    assertFailed(report, "portal-product-page");
+    assertEquals(report.code !== 0, true, "an address nothing serves must exit non-zero");
+  } finally {
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate says which port is empty when nothing answers", async () => {
+  const stubs = startStubs();
+  const ports = stubEnv(stubs);
+  const portalPort = portOf(stubs.portal);
+  await stubs.stop();
+  try {
+    // Every port is empty and nothing was declared: the gate must name the port
+    // it looked at instead of reporting a wrong status code ten times.
+    const report = await runVerify({ ...ports, PORTICO_DEPLOY_BIND: "" });
+    assertFailed(report, "entrance-address");
+    const verdict = verdictOf(report, "entrance-address");
+    assert(
+      verdict.includes(portalPort),
+      `the gate must name the port nobody answers on:\n${report.stdout}`,
+    );
+    assert(
+      verdict.includes("nothing is listening"),
+      `the gate must say the port is empty:\n${report.stdout}`,
+    );
+    assertFailed(report, "portal-product-page");
+    assertEquals(report.code !== 0, true, "empty ports must exit non-zero");
+  } finally {
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate refuses a port two listeners answer on", async () => {
+  const stubs = startStubs();
+  const table = await fakeListenerTable([
+    listenRow("127.0.0.1", portOf(stubs.portal)),
+    listenRow("127.0.0.2", portOf(stubs.portal)),
+    listenRow("127.0.0.1", portOf(stubs.gateway)),
+    listenRow("127.0.0.1", portOf(stubs.mcp)),
+  ]);
+  try {
+    // A leftover entrance next to the real one: the port alone cannot say which
+    // process the gate measured, so it must refuse to pick one.
+    const report = await runVerify({
+      ...stubEnv(stubs),
+      PORTICO_DEPLOY_BIND: "",
+      ...table.env,
+    });
+    assertFailed(report, "entrance-address");
+    assert(
+      verdictOf(report, "entrance-address").includes("127.0.0.2"),
+      `the gate must name both listeners:\n${report.stdout}`,
+    );
+    assertEquals(report.code !== 0, true, "an ambiguous port must exit non-zero");
+
+    // Declaring one of the two does not make the other one go away: a leftover
+    // entrance on the same port is still a process this deployment serves.
+    const declared = await runVerify({
+      ...stubEnv(stubs, { PORTICO_DEPLOY_BIND: "127.0.0.1" }),
+      ...table.env,
+    });
+    assertFailed(declared, "entrance-address");
+    assert(
+      verdictOf(declared, "entrance-address").includes("127.0.0.2"),
+      `the gate must still name the second listener:\n${declared.stdout}`,
+    );
+  } finally {
+    await table.stop();
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate refuses an entrance bound to all interfaces", async () => {
+  const stubs = startStubs();
+  const table = await fakeListenerTable([
+    listenRow("0.0.0.0", portOf(stubs.portal)),
+    listenRow("127.0.0.1", portOf(stubs.gateway)),
+    listenRow("127.0.0.1", portOf(stubs.mcp)),
+  ]);
+  try {
+    // The scripts may not say `0.0.0.0`, but the running entrance is the thing
+    // that answers on every interface, and only the host can show that.
+    const report = await runVerify({ ...stubEnv(stubs), PORTICO_DEPLOY_BIND: "", ...table.env });
+    assertFailed(report, "entrance-not-all-interfaces");
+    assert(
+      verdictOf(report, "entrance-not-all-interfaces").includes(portOf(stubs.portal)),
+      `the gate must name the exposed port:\n${report.stdout}`,
+    );
+    // The entrances still answer: one broken promise, not ten.
+    assertPassed(report, "portal-product-page");
+    assertEquals(report.code !== 0, true, "an all-interface entrance must exit non-zero");
+  } finally {
+    await table.stop();
     await stubs.stop();
   }
 });
