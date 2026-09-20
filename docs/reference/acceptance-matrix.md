@@ -58,3 +58,4 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **公开面脱敏（开源公开合同）** | 高 | `tests/public_surface_redaction_test.ts`；`tests/redaction.ts` |
 | **运行时边界（L0 公开合同）** | 高 | `tests/runtime_boundary_test.ts`；`tests/runtime_boundary.ts` |
 | **部署契约与入口健康门禁** | 中 | `tests/e2e/deploy_verify_e2e_test.ts`；`tests/deploy_contract_test.ts` |
+| **macOS 生产部署门禁与运行修订** | 中 | `tests/e2e/deploy_macos_verify_e2e_test.ts`；`tests/deploy_macos_contract_test.ts` |

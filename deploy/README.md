@@ -102,12 +102,46 @@ sudo launchctl kickstart -k system/net.portico.cloudflared
 `render.sh` 是无 sudo 的确定性渲染：模板里的 `/Users/example`、
 `TUNNEL_ID`、`EDGE_BIND_IP`、daemon 用户全部来自上述四个变量；
 `portico.env` 只在首次不存在时从示例创建，之后永不覆盖；渲染后自动
-`bash -n`、`plutil -lint` 与 `ingress validate`。`verify.sh` 只读探四
-个本地端口与两个公网地址，任一失败即非零退出。首次建隧道仍是三条 CLI：
+`bash -n`、`plutil -lint` 与 `ingress validate`。首次建隧道仍是三条 CLI：
 `cloudflared tunnel create` → `route dns` → 填 `PORTICO_TUNNEL_ID` 重跑
 `render.sh`。首次 bootstrap（空库只给匿名视图）见下节“首次凭证引导”：
 建首位人类审计者，再由其 `grant agent:<name> --kind agent --role maintainer`
 给 Agent 建维护身份；mira 的凭证在联调时再签发，避免提前签发的密钥闲置。
+
+## macOS 门禁：`deploy/macos/verify.sh`
+
+只读、不需 sudo，任一失败即非零退出。默认值就是本机部署的形状（四个入口在
+回环、一个公网 origin），可用环境变量指向别的部署；四个入口的端口与 origin
+都可覆盖，因为一份只能在宿主机上验证的门禁等于一份没法验证的门禁：
+
+| 变量 | 默认 | 用途 |
+| --- | --- | --- |
+| `PORTICO_DEPLOY_BIND` | `127.0.0.1` | 四个入口服务的地址 |
+| `PORTICO_DEPLOY_PORTAL_PORT` / `..._GATEWAY_PORT` / `..._MCP_PORT` / `..._REVIEW_PORT` | 8788 / 8789 / 8790 / 8791 | 四个入口的端口 |
+| `PORTICO_DEPLOY_PUBLIC_ORIGIN` | `https://portico.talkincode.net` | 隧道对外服务的 origin |
+| `PORTICO_DEPLOY_TREE` | 脚本所在的检出 | 入口所服务的检出；用来判断进程是否比代码旧 |
+| `PORTICO_EXPECT_SHA` | 不设 | 钉住检出修订；不设时不输出该行，不冒充已验证 |
+
+它回答三个问题，按「最便宜发现、最贵漏掉」排序：检出是不是你钉的修订
+（`checkout-revision`，只在给了 `PORTICO_EXPECT_SHA` 时报）、**四个入口分别是
+哪个进程在服务**（`running-code-not-stale`）、每个入口是否各自兑现契约。
+
+第二条是本机的重点。`launchctl kickstart -k` 是真正把 pull 送上线的那一步，
+而「pull 了但没重启」会让上一版修订继续在同样的端口上用同样的产品页应答——
+行为探针看不出区别，因为行为正是那个从未被替换的进程在回答。门禁因此把每个
+入口解析到一个 pid（先按 `PORTICO_DEPLOY_BIND` 上的地址匹配，取不到再退回该
+端口上的监听者），拿它的启动时刻与 `PORTICO_DEPLOY_TREE/src` 里最新的文件比：
+进程比它服务的代码还旧，就是「静默空转的重启」。与 Linux 门禁不同，「入口没有
+进程」在这里是 FAIL 而不是 `skip`：本部署固定是同一个监管者拉起的四个入口，
+少一个不是未知，是系统没起来。绑定到所有接口的检查不在这里重复——运行时的
+`src/runtime/bind.ts` 本身就拒绝 `0.0.0.0`、`::` 与公网地址，非回环绑定会先
+让入口起不来。
+
+入口契约四条：Portal `/public` 200、Review `/review/login` 200、Gateway 的
+工具调用 POST 405（它鉴权与路由，不执行工具）、MCP 对 `initialize` 返回
+`portico`；加上公网 origin 上的两条对应探测、匿名目录信封与匿名 `/internal`
+404。端口开着不等于契约成立，所以 Gateway 与 MCP 是被直接问过的那两个。
+
 
 ## 首次凭证引导
 
