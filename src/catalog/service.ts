@@ -274,7 +274,7 @@ export class CatalogService {
     }
 
     const parsed = parsePublishInput(input);
-    const existing = await this.store.get(parsed.id);
+    const existing = await this.#governed(parsed.id);
     if (!existing) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
     }
@@ -357,7 +357,7 @@ export class CatalogService {
     }
 
     const parsed = parseUpdateInput(input);
-    const existing = await this.store.get(parsed.id);
+    const existing = await this.#governed(parsed.id);
     if (!existing) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
     }
@@ -573,18 +573,52 @@ export class CatalogService {
       throw new CatalogError(ErrorCode.INVALID_INPUT, "id is required");
     }
     const record = await this.store.get(id);
-    if (!record || !canSee(actor, record)) {
+    if (!record) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
     }
-    return structuredClone(record);
+    const governed = await this.#underPublicGrant(record);
+    if (!canSee(actor, governed)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+    return structuredClone(governed);
   }
 
   async list(actor: Actor): Promise<AgentSurface[]> {
     assertActor(actor);
-    const records = await this.store.list();
-    return records.filter((record) => canSee(actor, record)).map((record) =>
-      structuredClone(record)
-    );
+    const [records, approvals] = await Promise.all([
+      this.store.list(),
+      this.store.listApprovals(),
+    ]);
+    const granted = publicGrant(approvals);
+    return records
+      .map((record) => underPublicGrant(record, granted))
+      .filter((record) => canSee(actor, record))
+      .map((record) => structuredClone(record));
+  }
+
+  /**
+   * One record, read through the public grant. The trail is only fetched when
+   * the record actually claims to be public, so an ordinary internal read still
+   * costs a single load.
+   */
+  async #underPublicGrant(record: AgentSurface): Promise<AgentSurface> {
+    if (record.governanceState !== "approved_public") return record;
+    const granted = publicGrant(await this.store.listApprovals());
+    return underPublicGrant(record, granted);
+  }
+
+  /**
+   * The record as the governance model sees it, used by the governed writes.
+   *
+   * A write must judge the same state a read reports, or a record whose public
+   * claim is unsupported would be readable as internal and simultaneously
+   * frozen as though it were already public — unrecoverable without editing
+   * the store by hand, which is the very channel that produced the problem.
+   */
+  async #governed(id: string): Promise<AgentSurface | undefined> {
+    const record = await this.store.get(id);
+    if (!record) return undefined;
+    return await this.#underPublicGrant(record);
   }
 
   async listMcp(actor: Actor): Promise<McpConnectionInfo[]> {
@@ -625,6 +659,72 @@ export class CatalogService {
     }
     return toCliPackage(record);
   }
+}
+
+/**
+ * Which surfaces the approval trail currently grants public reachability to.
+ *
+ * The catalog file is a plain JSON document: an operator can edit it, a restore
+ * can resurrect an older copy of it, and a bug can write into it. The roadmap
+ * makes it an iron rule (不绕过公开发布审批) that no entrance — API, CLI, MCP,
+ * or a direct write to the store — may turn an unapproved object into something
+ * publicly reachable, so the record's own `visibility`/`governanceState` fields
+ * cannot be the authority for public reachability. The approval trail is:
+ *
+ * - only an independent human auditor can append to it (`approve`/`reject`/
+ *   `withdraw`), never the maintainer who submitted;
+ * - it is stored and ordered independently of the record's own fields, so a
+ *   public claim written straight into a record has nothing to point at;
+ * - the newest decision for a surface wins, which is what keeps a withdrawal
+ *   effective even if the record's bytes still say `approved_public`.
+ *
+ * Both halves must hold for a surface to be public: the trail grants it *and*
+ * the record itself still carries the public state. The trail alone never
+ * publishes a record that a later governed write put back to internal.
+ */
+function publicGrant(approvals: ApprovalRecord[]): Set<string> {
+  const latest = new Map<string, ApprovalRecord>();
+  for (const approval of approvals) {
+    const current = latest.get(approval.surfaceId);
+    if (!current || supersedes(current, approval)) {
+      latest.set(approval.surfaceId, approval);
+    }
+  }
+  const granted = new Set<string>();
+  for (const [surfaceId, approval] of latest) {
+    if (approval.decision === "approved") granted.add(surfaceId);
+  }
+  return granted;
+}
+
+/**
+ * Whether the trail entry `candidate` supersedes `current`.
+ *
+ * The trail is append-only and read in append order, so on a tie the entry that
+ * comes later in the trail is the newer decision. Ties are the common case, not
+ * an edge case: `withdraw` followed by a re-approval runs inside one
+ * millisecond, and `reviewedAt` only has millisecond resolution. `reviewedAt`
+ * therefore guards the opposite direction alone — a later entry carrying an
+ * older timestamp cannot override a decision reviewed after it.
+ */
+function supersedes(current: ApprovalRecord, candidate: ApprovalRecord): boolean {
+  return candidate.reviewedAt >= current.reviewedAt;
+}
+
+/**
+ * The record as the trail says it is.
+ *
+ * An `approved_public` record the trail does not grant reads as `internal`, the
+ * exact shape a sanctioned withdrawal leaves behind (submission dropped), so
+ * every entrance reports the same governance state and downstream renderers
+ * cannot be told a surface is public that nothing approved. This is the shrink
+ * direction only: it can never add reachability.
+ */
+function underPublicGrant(record: AgentSurface, granted: Set<string>): AgentSurface {
+  if (record.governanceState !== "approved_public") return record;
+  if (granted.has(record.id)) return record;
+  const { publicSubmission: _unsupportedSubmission, ...base } = record;
+  return { ...base, visibility: "internal", governanceState: "internal" };
 }
 
 function canSee(actor: Actor, record: AgentSurface): boolean {
