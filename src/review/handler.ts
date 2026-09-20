@@ -236,7 +236,9 @@ function oauthSessionHeaders(sessionToken: string): Headers {
   const headers = new Headers({ "location": "/review" });
   headers.append(
     "set-cookie",
-    `portico_session=${encodeURIComponent(sessionToken)}; Path=/review; Secure; HttpOnly; SameSite=Lax`,
+    `portico_session=${
+      encodeURIComponent(sessionToken)
+    }; Path=/review; Secure; HttpOnly; SameSite=Lax`,
   );
   headers.append("set-cookie", "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0");
   return headers;
