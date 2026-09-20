@@ -60,6 +60,8 @@ export interface ApprovalRecord {
   entry: EntryRef;
   version: string;
   name: string;
+  /** Optional auditor note. Omitted when the decision carried none. */
+  note?: string;
 }
 
 export type CatalogChangeAction =
@@ -143,4 +145,6 @@ export interface UpdateInput {
 
 export interface ApprovalDecisionInput {
   id: string;
+  /** Optional human-readable reason. Not a secret field; control chars rejected. */
+  note?: string;
 }

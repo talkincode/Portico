@@ -51,8 +51,9 @@ const UPDATE_MUTABLE_KEYS = new Set([
   "version",
   "entry",
 ]);
-const ALLOWED_APPROVAL_KEYS = new Set(["id"]);
-const SECRET_KEYS = new Set([
+const ALLOWED_APPROVAL_KEYS = new Set(["id", "note"]);
+const APPROVAL_NOTE_MAX = 500;
+export const SECRET_KEYS = new Set([
   "token",
   "password",
   "secret",
@@ -63,6 +64,125 @@ const SECRET_KEYS = new Set([
   "credential",
   "credentials",
 ]);
+// URL query keys accept arbitrary caller spelling (unlike object field names, which are
+// already constrained by an allow-list). Real credential-parameter spellings across OAuth,
+// AWS SigV4, webhooks, GitLab, and friends are compound words that end in one of a small
+// number of secret-shaped suffixes (`client_assertion`, `xamzsecuritytoken`, ...). Matching
+// by suffix after stripping case and separators catches spellings nobody has enumerated yet
+// instead of only the literal strings a deny list happens to already contain.
+const SECRET_QUERY_KEY_SUFFIXES = [
+  "token",
+  "password",
+  "secret",
+  "apikey",
+  "privatekey",
+  "credential",
+  "credentials",
+  "bearer",
+  "authorization",
+  "signature",
+  "sig",
+  "assertion",
+];
+
+function normalizeSecretQueryKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isSecretShapedQueryKey(key: string): boolean {
+  const normalized = normalizeSecretQueryKey(key);
+  return SECRET_QUERY_KEY_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+}
+
+// Single source of truth for every recognized issuer-prefix family, shared by
+// both `looksLikePlaintextSecretValue` (anchored, whole-value) and
+// `containsPlaintextSecretValue` (unanchored, embedded-substring) below. A
+// prefix added or removed here changes both checks at once, so the two can
+// no longer drift apart the way they could when each kept its own copy.
+const SECRET_PREFIX_PATTERNS = [
+  "sk[-_]",
+  "ghp_",
+  "gho_",
+  "ghu_",
+  "ghs_",
+  "ghr_",
+  "github_pat_",
+  "glpat-",
+  "xox[baprs]-",
+];
+// AWS Access Key IDs are 20-character uppercase identifiers: AKIA (long-lived)
+// or ASIA (temporary) plus 16 A-Z/0-9 chars. They are case-sensitive so a
+// description of an "asia-pacific" surface does not trip the scanner. The
+// existing issuer-prefix list above is case-insensitive and hyphen-tolerant;
+// folding AKIA/ASIA into it would either miss real keys or reject ordinary
+// region names.
+const AWS_ACCESS_KEY_ID = /(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])/;
+// Google API keys are a fixed-shape family, not a prefix-plus-arbitrary-tail
+// family: `AIza` followed by exactly 35 base64url-alphabet characters (39
+// total). Anchoring the length keeps a short, unrelated "AIza..." mention in
+// prose from tripping the scanner the way a bare "AKIA" mention does not.
+const GOOGLE_API_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])/;
+// A PEM header is a private key regardless of the key type that follows it
+// (RSA, EC, DSA, OpenSSH, or the generic PKCS#8 "PRIVATE KEY") or of where in
+// the field it appears — "-----BEGIN" text is never legitimate catalog prose.
+const PEM_PRIVATE_KEY_HEADER = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+// npm access/automation tokens are `npm_` followed by exactly 36
+// alphanumeric characters (40 total) — a fixed shape like AWS/Google above,
+// not an arbitrary-length issuer prefix, so it belongs in this list rather
+// than SECRET_PREFIX_PATTERNS.
+const NPM_ACCESS_TOKEN = /(?<![A-Za-z0-9_])npm_[A-Za-z0-9]{36}(?![A-Za-z0-9])/;
+// Every fixed-shape (non-prefix-family) secret pattern, checked in both the
+// anchored whole-value scanner and the unanchored substring scanner below.
+const FIXED_SHAPE_SECRET_PATTERNS = [
+  AWS_ACCESS_KEY_ID,
+  GOOGLE_API_KEY,
+  PEM_PRIVATE_KEY_HEADER,
+  NPM_ACCESS_TOKEN,
+];
+
+function matchesFixedShapeSecret(value: string): boolean {
+  return FIXED_SHAPE_SECRET_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+/**
+ * Query *values* can leak live credentials even when the key is ordinary
+ * (`ref`, `q`, `state`). Match well-known issuer prefixes only — a path
+ * segment named `token` or a docs slug is not a secret.
+ */
+const PLAINTEXT_SECRET_PREFIX_AT_START = new RegExp(
+  `^(?:${SECRET_PREFIX_PATTERNS.join("|")})`,
+  "i",
+);
+
+function looksLikePlaintextSecretValue(value: string): boolean {
+  const text = value.trim();
+  if (text.length < 12) return false;
+  return PLAINTEXT_SECRET_PREFIX_AT_START.test(text) || matchesFixedShapeSecret(text);
+}
+
+// Same issuer-prefix families as `looksLikePlaintextSecretValue`, but unanchored:
+// free text (name/description/version), a full href, or a package coordinate
+// can carry a live credential anywhere inside them, not only as the entire
+// field value. A negative lookbehind keeps a prefix from matching mid-word
+// (so a package named `desklight-tools` does not trip the `sk` family), and
+// each prefix requires 8+ trailing token characters so a bare mention of the
+// prefix in prose does not by itself trip the scanner.
+const SECRET_SHAPED_SUBSTRING = new RegExp(
+  `(?<![A-Za-z0-9_])(?:${
+    SECRET_PREFIX_PATTERNS.map((prefix) => `${prefix}[A-Za-z0-9_-]{8,}`).join("|")
+  })`,
+  "i",
+);
+
+/**
+ * Free text (name/description/version) and identifiers (href, package
+ * coordinate) are stored and, once approved, rendered on public pages. A live
+ * credential pasted anywhere inside them is a public leak just like one in a
+ * URL query, even though it is not the entire field value.
+ */
+export function containsPlaintextSecretValue(value: string): boolean {
+  return SECRET_SHAPED_SUBSTRING.test(value) || matchesFixedShapeSecret(value);
+}
 const CHANNELS = new Set<Channel>(["cli", "mcp", "web"]);
 const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
@@ -154,7 +274,7 @@ export class CatalogService {
     }
 
     const parsed = parsePublishInput(input);
-    const existing = await this.store.get(parsed.id);
+    const existing = await this.#governed(parsed.id);
     if (!existing) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
     }
@@ -237,7 +357,7 @@ export class CatalogService {
     }
 
     const parsed = parseUpdateInput(input);
-    const existing = await this.store.get(parsed.id);
+    const existing = await this.#governed(parsed.id);
     if (!existing) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${parsed.id}' was not found`);
     }
@@ -257,6 +377,7 @@ export class CatalogService {
     const channels = parsed.fields.channels ?? existing.channels;
     const entry = parsed.fields.entry ?? existing.entry;
     assertChannelEntry(channels, entry);
+    assertWebEntryNotSelfPage(parsed.id, entry);
 
     const record: AgentSurface = {
       ...existing,
@@ -330,6 +451,7 @@ export class CatalogService {
       entry: { ...record.entry },
       version: record.version,
       name: record.name,
+      ...optionalNote(parsed.note),
     };
     await this.store.commitApproval(record, approval);
     return structuredClone(record);
@@ -378,6 +500,9 @@ export class CatalogService {
         "the identity that submitted public cannot decide the same request",
       );
     }
+    if (decision === "approved") {
+      assertEntryIsPubliclyReachable(existing);
+    }
 
     const now = new Date().toISOString();
     const record: AgentSurface = {
@@ -396,6 +521,7 @@ export class CatalogService {
       entry: { ...record.entry },
       version: record.version,
       name: record.name,
+      ...optionalNote(parsed.note),
     };
     await this.store.commitApproval(record, approval);
     return structuredClone(record);
@@ -447,18 +573,52 @@ export class CatalogService {
       throw new CatalogError(ErrorCode.INVALID_INPUT, "id is required");
     }
     const record = await this.store.get(id);
-    if (!record || !canSee(actor, record)) {
+    if (!record) {
       throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
     }
-    return structuredClone(record);
+    const governed = await this.#underPublicGrant(record);
+    if (!canSee(actor, governed)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${id}' was not found`);
+    }
+    return structuredClone(governed);
   }
 
   async list(actor: Actor): Promise<AgentSurface[]> {
     assertActor(actor);
-    const records = await this.store.list();
-    return records.filter((record) => canSee(actor, record)).map((record) =>
-      structuredClone(record)
-    );
+    const [records, approvals] = await Promise.all([
+      this.store.list(),
+      this.store.listApprovals(),
+    ]);
+    const granted = publicGrant(approvals);
+    return records
+      .map((record) => underPublicGrant(record, granted))
+      .filter((record) => canSee(actor, record))
+      .map((record) => structuredClone(record));
+  }
+
+  /**
+   * One record, read through the public grant. The trail is only fetched when
+   * the record actually claims to be public, so an ordinary internal read still
+   * costs a single load.
+   */
+  async #underPublicGrant(record: AgentSurface): Promise<AgentSurface> {
+    if (record.governanceState !== "approved_public") return record;
+    const granted = publicGrant(await this.store.listApprovals());
+    return underPublicGrant(record, granted);
+  }
+
+  /**
+   * The record as the governance model sees it, used by the governed writes.
+   *
+   * A write must judge the same state a read reports, or a record whose public
+   * claim is unsupported would be readable as internal and simultaneously
+   * frozen as though it were already public — unrecoverable without editing
+   * the store by hand, which is the very channel that produced the problem.
+   */
+  async #governed(id: string): Promise<AgentSurface | undefined> {
+    const record = await this.store.get(id);
+    if (!record) return undefined;
+    return await this.#underPublicGrant(record);
   }
 
   async listMcp(actor: Actor): Promise<McpConnectionInfo[]> {
@@ -501,6 +661,72 @@ export class CatalogService {
   }
 }
 
+/**
+ * Which surfaces the approval trail currently grants public reachability to.
+ *
+ * The catalog file is a plain JSON document: an operator can edit it, a restore
+ * can resurrect an older copy of it, and a bug can write into it. The roadmap
+ * makes it an iron rule (不绕过公开发布审批) that no entrance — API, CLI, MCP,
+ * or a direct write to the store — may turn an unapproved object into something
+ * publicly reachable, so the record's own `visibility`/`governanceState` fields
+ * cannot be the authority for public reachability. The approval trail is:
+ *
+ * - only an independent human auditor can append to it (`approve`/`reject`/
+ *   `withdraw`), never the maintainer who submitted;
+ * - it is stored and ordered independently of the record's own fields, so a
+ *   public claim written straight into a record has nothing to point at;
+ * - the newest decision for a surface wins, which is what keeps a withdrawal
+ *   effective even if the record's bytes still say `approved_public`.
+ *
+ * Both halves must hold for a surface to be public: the trail grants it *and*
+ * the record itself still carries the public state. The trail alone never
+ * publishes a record that a later governed write put back to internal.
+ */
+function publicGrant(approvals: ApprovalRecord[]): Set<string> {
+  const latest = new Map<string, ApprovalRecord>();
+  for (const approval of approvals) {
+    const current = latest.get(approval.surfaceId);
+    if (!current || supersedes(current, approval)) {
+      latest.set(approval.surfaceId, approval);
+    }
+  }
+  const granted = new Set<string>();
+  for (const [surfaceId, approval] of latest) {
+    if (approval.decision === "approved") granted.add(surfaceId);
+  }
+  return granted;
+}
+
+/**
+ * Whether the trail entry `candidate` supersedes `current`.
+ *
+ * The trail is append-only and read in append order, so on a tie the entry that
+ * comes later in the trail is the newer decision. Ties are the common case, not
+ * an edge case: `withdraw` followed by a re-approval runs inside one
+ * millisecond, and `reviewedAt` only has millisecond resolution. `reviewedAt`
+ * therefore guards the opposite direction alone — a later entry carrying an
+ * older timestamp cannot override a decision reviewed after it.
+ */
+function supersedes(current: ApprovalRecord, candidate: ApprovalRecord): boolean {
+  return candidate.reviewedAt >= current.reviewedAt;
+}
+
+/**
+ * The record as the trail says it is.
+ *
+ * An `approved_public` record the trail does not grant reads as `internal`, the
+ * exact shape a sanctioned withdrawal leaves behind (submission dropped), so
+ * every entrance reports the same governance state and downstream renderers
+ * cannot be told a surface is public that nothing approved. This is the shrink
+ * direction only: it can never add reachability.
+ */
+function underPublicGrant(record: AgentSurface, granted: Set<string>): AgentSurface {
+  if (record.governanceState !== "approved_public") return record;
+  if (granted.has(record.id)) return record;
+  const { publicSubmission: _unsupportedSubmission, ...base } = record;
+  return { ...base, visibility: "internal", governanceState: "internal" };
+}
+
 function canSee(actor: Actor, record: AgentSurface): boolean {
   if (record.governanceState === "draft") {
     return actor.role === "maintainer";
@@ -516,7 +742,7 @@ function canSee(actor: Actor, record: AgentSurface): boolean {
     actor.role === "auditor";
 }
 
-function assertActor(actor: Actor): void {
+export function assertActor(actor: Actor): void {
   if (!actor || typeof actor !== "object") {
     throw new CatalogError(ErrorCode.INVALID_INPUT, "actor is required");
   }
@@ -559,7 +785,36 @@ function parseApprovalInput(input: ApprovalDecisionInput): ApprovalDecisionInput
     );
   }
 
-  return { id: input.id };
+  const note = parseApprovalNote(input.note);
+  return note ? { id: input.id, note } : { id: input.id };
+}
+
+function parseApprovalNote(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "note must be a string");
+  }
+  const text = value.trim();
+  if (!text) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "note is required");
+  }
+  if (text.length > APPROVAL_NOTE_MAX) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "note is too long");
+  }
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "note must not contain control characters",
+      );
+    }
+  }
+  return text;
+}
+
+function optionalNote(note: string | undefined): { note: string } | Record<never, never> {
+  return note ? { note } : {};
 }
 
 function approvalId(
@@ -722,6 +977,7 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
   const channels = parseChannels(input.channels);
   const entry = parseEntry(input.entry);
   assertChannelEntry(channels, entry);
+  assertWebEntryNotSelfPage(input.id, entry);
   const maintainers = parseMaintainers(input.maintainers);
 
   return {
@@ -875,6 +1131,29 @@ function parsePackageCoordinate(value: string): void {
   }
 }
 
+/**
+ * A web entry is the surface's own URL, not Portico's reading page for that
+ * surface. `/s/:id` and `/public/s/:id` are Portal chrome; pointing a catalog
+ * card at them is a self-loop and is never a real documentation/site entry.
+ * Host is ignored: the path is reserved regardless of where Portal is bound.
+ */
+function assertWebEntryNotSelfPage(id: string, entry: EntryRef): void {
+  if (entry.kind !== "url") return;
+  let url: URL;
+  try {
+    url = new URL(entry.value);
+  } catch {
+    return;
+  }
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (path === `/s/${id}` || path === `/public/s/${id}`) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "web entry must not point at Portico's own reading page for this surface",
+    );
+  }
+}
+
 function parseHttpHref(value: string, field: "mcp_endpoint" | "url"): void {
   let url: URL;
   try {
@@ -897,14 +1176,85 @@ function parseHttpHref(value: string, field: "mcp_endpoint" | "url"): void {
       `${field} must not include userinfo; store a secret reference instead`,
     );
   }
-  for (const key of url.searchParams.keys()) {
-    if (SECRET_KEYS.has(key) || SECRET_KEYS.has(key.toLowerCase())) {
+  rejectPlaintextSecretsInParams(url.searchParams);
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  if (fragment.includes("=")) {
+    rejectPlaintextSecretsInParams(new URLSearchParams(fragment));
+  }
+}
+
+function rejectPlaintextSecretsInParams(params: URLSearchParams): void {
+  for (const [key, paramValue] of params.entries()) {
+    if (isSecretShapedQueryKey(key) || looksLikePlaintextSecretValue(paramValue)) {
       throw new CatalogError(
         ErrorCode.INVALID_INPUT,
         "plaintext secret fields are not allowed; store a reference instead",
       );
     }
   }
+}
+
+/**
+ * Approving a surface publishes its entry coordinate to anonymous callers, so
+ * an internal-only host would turn private topology into public information.
+ * The check lives on the public boundary rather than on register/update on
+ * purpose: the Registry's job is to describe internal surfaces, and an
+ * internal endpoint is a legitimate internal record. Only crossing the trust
+ * boundary — which `approve` alone does — makes the coordinate public.
+ */
+function assertEntryIsPubliclyReachable(record: AgentSurface): void {
+  if (record.entry.kind === "package") return;
+  let host: string;
+  try {
+    host = new URL(record.entry.value).hostname;
+  } catch {
+    return;
+  }
+  if (!isInternalOnlyHost(host)) return;
+  throw new CatalogError(
+    ErrorCode.INVALID_STATE,
+    "a public approval cannot expose an internal-only entry coordinate; " +
+      "update the entry to a publicly reachable host first",
+  );
+}
+
+/**
+ * Hosts that the public internet cannot reach. Single-label names are included
+ * because public DNS requires a dot, which also makes this rule generic: naming
+ * the internal hosts explicitly would put those names in a public repository.
+ */
+function isInternalOnlyHost(hostname: string): boolean {
+  const bare = hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+  const host = bare.endsWith(".") ? bare.slice(0, -1) : bare;
+  const lower = host.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost")) return true;
+  if (lower.includes(":")) return isInternalOnlyIpv6(lower);
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(lower)) return isInternalOnlyIpv4(lower);
+  return !lower.includes(".");
+}
+
+function isInternalOnlyIpv4(host: string): boolean {
+  const octets = host.split(".").map(Number);
+  const [a, b] = octets;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+function isInternalOnlyIpv6(host: string): boolean {
+  const [leading] = host.split(":");
+  // A leading empty group means zero-compression, so the address is nowhere
+  // near global unicast; anything unparseable fails closed.
+  if (leading === "") return true;
+  const hextet = parseInt(leading, 16);
+  if (Number.isNaN(hextet)) return true;
+  // Only 2000::/3 is global unicast. ULA, link-local, IPv4-mapped and the
+  // deprecated site-local range cannot be reached from the public internet.
+  return (hextet & 0xe000) !== 0x2000;
 }
 
 function parseEntry(value: unknown): EntryRef {
@@ -960,6 +1310,15 @@ function requireText(value: unknown, field: string, max: number): string {
   }
   if (text.length > max) {
     throw new CatalogError(ErrorCode.INVALID_INPUT, `${field} is too long`);
+  }
+  // Every call site (name, description, version, entry.value) is stored and,
+  // once approved, rendered on public pages — so a live credential pasted
+  // anywhere inside any of them must fail closed here, once, for all of them.
+  if (containsPlaintextSecretValue(text)) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "plaintext secret fields are not allowed; store a reference instead",
+    );
   }
   return text;
 }

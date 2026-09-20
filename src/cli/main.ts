@@ -4,7 +4,16 @@ import {
   FileSessionStore,
   type GrantInput,
 } from "../access/mod.ts";
-import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
+import {
+  applyAuditQuery,
+  applyConclusionQuery,
+  AuditService,
+  type ConclusionInput,
+  ConclusionService,
+  FileConclusionStore,
+  parseAuditQuery,
+  parseConclusionQuery,
+} from "../audit/mod.ts";
 import {
   type Actor,
   type ActorKind,
@@ -31,8 +40,12 @@ Commands:
   identity revoke   --identities <path> --id <id> --session <token> --sessions <path>
   identity list     --identities <path> [--session <token> --sessions <path>]
   identity grants   --identities <path> --session <token> --sessions <path>
+  identity revokes  --identities <path> --session <token> --sessions <path>
+  identity sessions --identities <path> --session <token> --sessions <path>
+  identity credentials --identities <path> --session <token> --sessions <path>
   identity credential issue --identities <path> --sessions <path> --id <subject> [--session <token>]
   identity credential revoke --identities <path> --sessions <path> --id <subject> --session <token>
+  identity credential revokes --identities <path> --session <token> --sessions <path>
   identity login    --identities <path> --sessions <path> --id <id> --token <issued>
   identity logout   --identities <path> --sessions <path> --session <token>
   identity whoami   --identities <path> --sessions <path> --session <token>
@@ -40,9 +53,9 @@ Commands:
   catalog draft     --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   catalog publish   --id <id> --visibility <internal|public> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog update    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
-  catalog approve   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
-  catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
-  catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog approve   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
+  catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
+  catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
   catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog dashboard --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected]
@@ -56,6 +69,8 @@ Commands:
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
   audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
+  audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope public_boundary|entry_target|permission_change|secret_leakage|gateway_scope --verdict cleared|flagged [--note <text>]
+  audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope public_boundary|entry_target|permission_change|secret_leakage|gateway_scope] [--verdict cleared|flagged]
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   page get          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
 
@@ -63,6 +78,7 @@ Catalog path may also be set with PORTICO_CATALOG_PATH.
 Identity path may also be set with PORTICO_IDENTITIES_PATH.
 Session path may also be set with PORTICO_SESSIONS_PATH.
 Gateway audit path may also be set with PORTICO_GATEWAY_AUDIT_PATH.
+Conclusion path may also be set with PORTICO_CONCLUSIONS_PATH.
 Page path may also be set with PORTICO_PAGE_PATH.
 A non-anonymous command proves its identity with --session; --actor-* alone is
 refused (USAGE). With no identity flags at all a command runs as anonymous.
@@ -73,6 +89,9 @@ The first credential issue is the one-time bootstrap and needs no session.
 An identity cannot revoke itself; the last human auditor cannot be revoked.
 Revoking credentials invalidates login tokens and sessions without removing the roster identity.
 The identity that submitted public cannot approve or reject the same request.
+Approve, reject and withdraw accept an optional --note (at most 500 characters,
+no control characters); it is stored on the approval record and returned by
+catalog approvals / GET /api/approvals / portico_approvals.
 Withdrawing an approved public surface is reserved for a human auditor.
 A pending public candidate or an approved public surface cannot be updated
 directly; reject or withdraw it first, then update, then resubmit for approval.
@@ -180,6 +199,7 @@ export async function runCli(
     if (action === "approve" || action === "reject") {
       if (!flags.id) throw new UsageError("missing --id");
       const payload: ApprovalDecisionInput = { id: flags.id };
+      if (flags.note !== undefined) payload.note = flags.note;
       return ok(
         action === "approve"
           ? await service.approve(actor, payload)
@@ -190,6 +210,7 @@ export async function runCli(
     if (action === "withdraw") {
       if (!flags.id) throw new UsageError("missing --id");
       const payload: ApprovalDecisionInput = { id: flags.id };
+      if (flags.note !== undefined) payload.note = flags.note;
       return ok(await service.withdraw(actor, payload));
     }
 
@@ -328,7 +349,7 @@ async function runAudit(
   flags: Record<string, string>,
   env: Record<string, string | undefined>,
 ): Promise<CliResult> {
-  if (action !== "list") {
+  if (action !== "list" && action !== "conclude" && action !== "conclusions") {
     throw new UsageError(action ? `unknown audit action '${action}'` : "missing audit action");
   }
   const catalogPath = flags.catalog ?? env.PORTICO_CATALOG_PATH;
@@ -337,6 +358,38 @@ async function runAudit(
   }
   const actor = await resolveFlagsActor(flags, env);
   const catalog = new CatalogService(new FileCatalogStore(catalogPath));
+
+  if (action === "conclude" || action === "conclusions") {
+    const conclusionsPath = flags.conclusions ?? env.PORTICO_CONCLUSIONS_PATH;
+    if (!conclusionsPath) {
+      throw new UsageError("missing --conclusions or PORTICO_CONCLUSIONS_PATH");
+    }
+    const conclusions = new ConclusionService(
+      new FileConclusionStore(conclusionsPath),
+      catalog,
+    );
+    if (action === "conclusions") {
+      // Role check first, filter second — same order as `audit list`.
+      const records = await conclusions.list(actor);
+      const query = parseConclusionQuery({
+        subject: flags.subject,
+        scope: flags.scope,
+        verdict: flags.verdict,
+      });
+      return ok(applyConclusionQuery(records, query));
+    }
+    if (!flags.id) throw new UsageError("missing --id");
+    if (!flags.scope) throw new UsageError("missing --scope");
+    if (!flags.verdict) throw new UsageError("missing --verdict");
+    const payload: ConclusionInput = {
+      id: flags.id,
+      scope: flags.scope as ConclusionInput["scope"],
+      verdict: flags.verdict as ConclusionInput["verdict"],
+    };
+    if (flags.note !== undefined) payload.note = flags.note;
+    return ok(await conclusions.record(actor, payload));
+  }
+
   const access = new AccessService(new FileIdentityStore(readIdentitiesPath(flags, env)));
   const auditPath = flags.audit ?? env.PORTICO_GATEWAY_AUDIT_PATH;
   const gateway = auditPath
@@ -424,6 +477,10 @@ async function runIdentity(
   }
 
   if (action === "credential") {
+    if (subaction === "revokes") {
+      const actor = await resolveFlagsActor(flags, env);
+      return ok(await service.listCredentialRevokes(actor));
+    }
     if (subaction !== "issue" && subaction !== "revoke") {
       throw new UsageError(
         subaction ? `unknown credential action '${subaction}'` : "missing credential action",
@@ -464,6 +521,15 @@ async function runIdentity(
   if (action === "grants") {
     return ok(await service.listGrants(actor));
   }
+  if (action === "revokes") {
+    return ok(await service.listRevokes(actor));
+  }
+  if (action === "sessions") {
+    return ok(await service.listSessions(actor));
+  }
+  if (action === "credentials") {
+    return ok(await service.listCredentials(actor));
+  }
 
   throw new UsageError(action ? `unknown identity action '${action}'` : "missing identity action");
 }
@@ -472,6 +538,8 @@ function needsSessionStore(action: string | undefined, subaction?: string): bool
   return action === "login" ||
     action === "logout" ||
     action === "whoami" ||
+    action === "sessions" ||
+    action === "credentials" ||
     (action === "credential" && (subaction === "issue" || subaction === "revoke"));
 }
 

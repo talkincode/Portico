@@ -42,6 +42,7 @@ interface Setup {
   sessions: string;
   gatewayAudit: string;
   page: string;
+  conclusions: string;
   portalPort: number;
   gatewayPort: number;
   mcpPort: number;
@@ -69,6 +70,7 @@ function readSetup(env: Record<string, string | undefined>): Setup {
     sessions: env.PORTICO_SESSIONS_PATH ?? `${dataDir}/sessions.json`,
     gatewayAudit: env.PORTICO_GATEWAY_AUDIT_PATH ?? `${dataDir}/gateway-audit.json`,
     page: env.PORTICO_PAGE_PATH ?? `${dataDir}/page.json`,
+    conclusions: env.PORTICO_CONCLUSIONS_PATH ?? `${dataDir}/conclusions.json`,
     portalPort: parseBindPort(env.PORTICO_PORT, 8788),
     gatewayPort: parseBindPort(env.PORTICO_GATEWAY_PORT, 8789),
     mcpPort: parseBindPort(env.PORTICO_MCP_PORT, 8790),
@@ -241,6 +243,9 @@ if (import.meta.main) {
         PORTICO_IDENTITIES_PATH: setup.identities,
         PORTICO_SESSIONS_PATH: setup.sessions,
         PORTICO_PAGE_PATH: setup.page,
+        // Portal and MCP read the same conclusion file the auditor writes with
+        // `audit conclude`, so all three entrances agree on the verdicts.
+        PORTICO_CONCLUSIONS_PATH: setup.conclusions,
         // All three entrances read the same Gateway audit file, so the auditor
         // timeline is identical whichever one is asked.
         PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
@@ -267,6 +272,7 @@ if (import.meta.main) {
         PORTICO_SESSIONS_PATH: setup.sessions,
         PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
         PORTICO_PAGE_PATH: setup.page,
+        PORTICO_CONCLUSIONS_PATH: setup.conclusions,
         PORTICO_BIND: setup.hostname,
         PORTICO_PORT: String(setup.mcpPort),
       }),

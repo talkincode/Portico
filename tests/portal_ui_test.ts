@@ -107,7 +107,16 @@ Deno.test("anonymous callers get 404 on every internal route, never a 403", asyn
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
 
-  for (const path of ["/internal", "/internal/c", "/internal/audit", "/internal/s/docs-writer"]) {
+  for (
+    const path of [
+      "/internal",
+      "/internal/c",
+      "/internal/audit",
+      "/internal/approvals",
+      "/internal/pending",
+      "/internal/s/docs-writer",
+    ]
+  ) {
     const { status, html } = await get(context, path);
     assertEquals(status, 404, `${path} must be 404 for anonymous`);
     assert(!html.includes("Docs Writer"), `${path} must not leak an internal record`);
@@ -122,7 +131,16 @@ Deno.test("anonymous internal pages 404 as HTML, not a JSON envelope", async () 
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
 
-  for (const path of ["/internal", "/internal/c", "/internal/audit", "/internal/s/docs-writer"]) {
+  for (
+    const path of [
+      "/internal",
+      "/internal/c",
+      "/internal/audit",
+      "/internal/approvals",
+      "/internal/pending",
+      "/internal/s/docs-writer",
+    ]
+  ) {
     const response = await handlePortalRequest(
       new Request(`http://portico.local${path}`),
       context,
@@ -170,9 +188,25 @@ Deno.test("a reader sees the console but no audit trail entry or reset of it", a
     !asReader.html.includes("/internal/audit"),
     "a reader must not be offered the audit trail",
   );
+  assert(
+    asReader.html.includes("/internal/approvals"),
+    "a reader is offered the public-decision trail",
+  );
+  assert(
+    asReader.html.includes("/internal/pending"),
+    "a reader is offered the pending-public queue",
+  );
 
   const asAuditor = await get(context, "/internal", auditor);
   assert(asAuditor.html.includes("/internal/audit"), "an auditor gets the audit trail");
+  assert(
+    asAuditor.html.includes("/internal/approvals"),
+    "an auditor is offered the public-decision trail",
+  );
+  assert(
+    asAuditor.html.includes("/internal/pending"),
+    "an auditor is offered the pending-public queue",
+  );
 });
 
 Deno.test("the audit route is 404 for anyone but a human auditor", async () => {
@@ -190,6 +224,486 @@ Deno.test("the audit route is 404 for anyone but a human auditor", async () => {
     assert(!page.html.includes("审计时间线"), `${actor.role} must not get the audit screen`);
     assert(!page.html.includes("register"), `${actor.role} must not receive audit events`);
   }
+});
+
+Deno.test("the approvals page shows signed-in identities the same decision records including notes", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await context.catalog.approve(auditor, {
+    id: "docs-writer",
+    note: "Package coordinate reviewed.",
+  });
+
+  const expected = await context.catalog.listApprovals(reader);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].note, "Package coordinate reviewed.");
+
+  for (const signedIn of [reader, maintainer, auditor]) {
+    const page = await get(context, "/internal/approvals", signedIn);
+    assertEquals(page.status, 200, `${signedIn.role} must read the approvals page`);
+    assert(page.html.includes("审批记录"), `${signedIn.role} must get the approvals screen`);
+    assert(page.html.includes("Docs Writer"), `${signedIn.role} must see the approved name`);
+    assert(
+      page.html.includes("Package coordinate reviewed."),
+      `${signedIn.role} must see the auditor note`,
+    );
+    assert(
+      !/<script/i.test(page.html),
+      `${signedIn.role} must not receive a scripted approvals page`,
+    );
+  }
+
+  const after = await context.catalog.listApprovals(reader);
+  assertEquals(after, expected, "reading the page must not rewrite approval records");
+});
+
+Deno.test("the approvals page does not present pending candidates as decisions", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "pending-one", name: "Pending One" }));
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "public" });
+
+  const page = await get(context, "/internal/approvals", auditor);
+  assertEquals(page.status, 200);
+  assert(!page.html.includes("Pending One"), "a pending candidate is not an approval record");
+});
+
+Deno.test("the pending queue shows a pending_public candidate to a signed-in reader", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "pending-one", name: "Pending One" }));
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "public" });
+
+  const page = await get(context, "/internal/pending", reader);
+  assertEquals(page.status, 200);
+  assert(page.html.includes("待审队列"), "reader must get the pending queue screen");
+  assert(page.html.includes("Pending One"), "reader must see the pending candidate");
+});
+
+Deno.test("the pending queue hides drafts, internal records, and approved_public names", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "draft-one", name: "Draft One" }));
+  await context.catalog.register(
+    maintainer,
+    surface({ id: "internal-one", name: "Internal One" }),
+  );
+  await context.catalog.publish(maintainer, { id: "internal-one", visibility: "internal" });
+  await context.catalog.register(maintainer, surface({ id: "pending-one", name: "Pending One" }));
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "public" });
+  await publishPublic(context, surface({ id: "public-one", name: "Public One" }));
+
+  const asReader = await get(context, "/internal/pending", reader);
+  const asAuditor = await get(context, "/internal/pending", auditor);
+  for (const page of [asReader, asAuditor]) {
+    assertEquals(page.status, 200);
+    assert(page.html.includes("Pending One"), "the queue must list the public candidate");
+    assert(!page.html.includes("Draft One"), "drafts are not pending public");
+    assert(!page.html.includes("Internal One"), "internal-only records are not pending public");
+    assert(!page.html.includes("Public One"), "approved_public is a decision, not a candidate");
+    assert(!/<script/i.test(page.html), "the queue must not ship script");
+    assert(!/<form/i.test(page.html), "the queue must not ship a form");
+    assert(!/<button/i.test(page.html), "the queue must not ship a button");
+  }
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  await get(context, "/internal/pending", auditor);
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "reading the queue must not dirty the catalog",
+  );
+});
+
+Deno.test("the catalog board links the pending_public count to the pending queue", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "pending-one", name: "Pending One" }));
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-one", visibility: "public" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const page = await get(context, "/internal/c", reader);
+  assertEquals(page.status, 200);
+  assert(
+    page.html.includes('<a class="tk-stat" href="/internal/pending">'),
+    "the pending count must be a link to the queue",
+  );
+  assert(page.html.includes("待审公开"), "the catalog board still labels the pending count");
+  assert(
+    !/<form/i.test(page.html),
+    "linking the count must not turn the catalog board into a write form",
+  );
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "reading the catalog board must not dirty the catalog",
+  );
+});
+
+Deno.test("the pending queue shows an escaped entry as text and never links it", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "escape-pending",
+      name: "<script>alert(1)</script>",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending.example.test/secret?q=<script>" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "escape-pending", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "escape-pending", visibility: "public" });
+
+  const page = await get(context, "/internal/pending", reader);
+  assertEquals(page.status, 200);
+  assert(!page.html.includes("<script>alert(1)</script>"), "raw name markup must not appear");
+  assert(page.html.includes("&lt;script&gt;"), "the pending name must be escaped");
+  assert(
+    page.html.includes("https://pending.example.test/secret?q="),
+    "the queue must show where the pending entry points",
+  );
+  assert(
+    page.html.includes("secret?q=&lt;script&gt;"),
+    "the pending entry must be escaped as text",
+  );
+  assert(
+    !page.html.includes('href="https://pending.example.test/secret'),
+    "a pending entry must not be a clickable target",
+  );
+
+  const asAnon = await get(context, "/internal/pending");
+  assertEquals(asAnon.status, 404);
+  assert(
+    !asAnon.html.includes("pending.example.test"),
+    "anonymous 404 must not leak the pending entry",
+  );
+});
+
+Deno.test("the pending queue labels entry kinds as text and never links them", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-cli",
+      name: "Pending CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/pending-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-web",
+      name: "Pending Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending-web.example.test/app" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-mcp",
+      name: "Pending MCP",
+      channels: ["mcp"],
+      entry: { kind: "mcp_endpoint", value: "https://pending-mcp.example.test/mcp" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "public" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const page = await get(context, "/internal/pending", reader);
+  assertEquals(page.status, 200);
+  assert(page.html.includes("<th>种类</th>"), "queue must name the entry-kind column");
+  assert(page.html.includes('data-entry-kind="url"'), "url pending entry must show its kind");
+  assert(
+    page.html.includes('data-entry-kind="package"'),
+    "package pending entry must show its kind",
+  );
+  assert(
+    page.html.includes('data-entry-kind="mcp_endpoint"'),
+    "mcp pending entry must show its kind",
+  );
+  assert(page.html.includes("Pending Web"), "reader must still see the url candidate");
+  assert(page.html.includes("Pending CLI"), "reader must still see the package candidate");
+  assert(page.html.includes("Pending MCP"), "reader must still see the mcp candidate");
+  assert(
+    !page.html.includes('href="https://pending-web.example.test/app"'),
+    "a url pending entry must not be a clickable target",
+  );
+  assert(
+    !page.html.includes('href="https://pending-mcp.example.test/mcp"'),
+    "an mcp pending entry must not be a clickable target",
+  );
+  assert(
+    !page.html.includes('href="jsr:@example/pending-cli"'),
+    "a package pending entry must not be a clickable target",
+  );
+  assert(!/<form/i.test(page.html), "labeling kinds must not add a write form");
+  assert(!/<button/i.test(page.html), "labeling kinds must not add an approve button");
+
+  const asAnon = await get(context, "/internal/pending");
+  assertEquals(asAnon.status, 404);
+  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak pending names");
+  assert(
+    !asAnon.html.includes("pending-web.example.test"),
+    "anonymous 404 must not leak the url entry",
+  );
+  assert(
+    !asAnon.html.includes("pending-mcp.example.test"),
+    "anonymous 404 must not leak the mcp entry",
+  );
+  assert(
+    !asAnon.html.includes("jsr:@example/pending-cli"),
+    "anonymous 404 must not leak the package coordinate",
+  );
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "labeling pending entry kinds must not dirty the catalog",
+  );
+});
+
+Deno.test("the pending queue filters pending_public candidates by channel as read-only links", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-cli",
+      name: "Pending CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/pending-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-web",
+      name: "Pending Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending-web.example.test/app" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-mcp",
+      name: "Pending MCP",
+      channels: ["mcp"],
+      entry: { kind: "mcp_endpoint", value: "https://pending-mcp.example.test/mcp" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "public" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const all = await get(context, "/internal/pending", reader);
+  assertEquals(all.status, 200);
+  assert(all.html.includes("Pending CLI"), "unfiltered queue must list the cli candidate");
+  assert(all.html.includes("Pending Web"), "unfiltered queue must list the web candidate");
+  assert(all.html.includes("Pending MCP"), "unfiltered queue must list the mcp candidate");
+  assert(
+    all.html.includes('href="/internal/pending?channel=cli"'),
+    "queue must offer a cli channel filter",
+  );
+  assert(
+    all.html.includes('href="/internal/pending?channel=web"'),
+    "queue must offer a web channel filter",
+  );
+  assert(
+    all.html.includes('href="/internal/pending?channel=mcp"'),
+    "queue must offer an mcp channel filter",
+  );
+  assert(
+    all.html.includes('aria-label="筛选"'),
+    "queue must name the channel filter as a read-only group",
+  );
+  assert(!/<form/i.test(all.html), "channel filter must not add a write form");
+  assert(!/<button/i.test(all.html), "channel filter must not add an approve button");
+  assert(!/<script/i.test(all.html), "channel filter must not ship script");
+
+  const asCli = await get(context, "/internal/pending?channel=cli", reader);
+  assertEquals(asCli.status, 200);
+  assert(asCli.html.includes("Pending CLI"), "cli filter must keep the cli candidate");
+  assert(!asCli.html.includes("Pending Web"), "cli filter must hide the web candidate");
+  assert(!asCli.html.includes("Pending MCP"), "cli filter must hide the mcp candidate");
+  assert(
+    asCli.html.includes('href="/internal/pending?channel=cli"'),
+    "filtered queue must keep channel filter links",
+  );
+  assert(
+    asCli.html.includes('aria-current="true"'),
+    "the selected channel filter must be marked current",
+  );
+  assert(
+    !asCli.html.includes('href="jsr:@example/pending-cli"'),
+    "a filtered pending entry must still not be a clickable target",
+  );
+
+  const asWeb = await get(context, "/internal/pending?channel=web", auditor);
+  assertEquals(asWeb.status, 200);
+  assert(asWeb.html.includes("Pending Web"), "auditor web filter must keep the web candidate");
+  assert(!asWeb.html.includes("Pending CLI"), "auditor web filter must hide the cli candidate");
+  assert(!asWeb.html.includes("Pending MCP"), "auditor web filter must hide the mcp candidate");
+  assert(!/<button/i.test(asWeb.html), "auditor must not get an approve button after filtering");
+
+  const unknown = await get(context, "/internal/pending?channel=ftp", reader);
+  assertEquals(unknown.status, 200, "an unknown channel must not 500 the HTML queue");
+  assert(unknown.html.includes("Pending CLI"), "unknown channel must fall back to the full queue");
+  assert(unknown.html.includes("Pending Web"), "unknown channel must still list web candidates");
+  assert(unknown.html.includes("Pending MCP"), "unknown channel must still list mcp candidates");
+
+  const asAnon = await get(context, "/internal/pending?channel=cli");
+  assertEquals(asAnon.status, 404);
+  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak filtered names");
+  assert(
+    !asAnon.html.includes("jsr:@example/pending-cli"),
+    "anonymous 404 must not leak a filtered package coordinate",
+  );
+  assert(!asAnon.html.includes("待审队列"), "anonymous 404 must not advertise the queue");
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "filtering the pending queue must not dirty the catalog",
+  );
+});
+
+Deno.test("the pending queue channel tabs show pending counts and ignore internal records", async () => {
+  const context = await seeded();
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-cli",
+      name: "Pending CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/pending-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-cli", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-web",
+      name: "Pending Web",
+      channels: ["web"],
+      entry: { kind: "url", value: "https://pending-web.example.test/app" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-web", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "pending-mcp",
+      name: "Pending MCP",
+      channels: ["mcp"],
+      entry: { kind: "mcp_endpoint", value: "https://pending-mcp.example.test/mcp" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "pending-mcp", visibility: "public" });
+  await context.catalog.register(
+    maintainer,
+    surface({
+      id: "internal-cli",
+      name: "Internal CLI",
+      channels: ["cli"],
+      entry: { kind: "package", value: "jsr:@example/internal-cli" },
+    }),
+  );
+  await context.catalog.publish(maintainer, { id: "internal-cli", visibility: "internal" });
+
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+  const all = await get(context, "/internal/pending", reader);
+  assertEquals(all.status, 200);
+  assert(!all.html.includes("Internal CLI"), "an internal record must not enter the pending queue");
+  assert(
+    all.html.includes(
+      'href="/internal/pending" aria-current="true">全部<span class="tk-tab__count">3</span>',
+    ),
+    "all-tab must count three pending candidates",
+  );
+  assert(
+    all.html.includes(
+      'href="/internal/pending?channel=cli">CLI<span class="tk-tab__count">1</span>',
+    ),
+    "cli tab must count one pending candidate, not the internal cli record",
+  );
+  assert(
+    all.html.includes(
+      'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+    ),
+    "web tab must count one pending candidate",
+  );
+  assert(
+    all.html.includes(
+      'href="/internal/pending?channel=mcp">MCP<span class="tk-tab__count">1</span>',
+    ),
+    "mcp tab must count one pending candidate",
+  );
+  assert(!/<form/i.test(all.html), "pending counts must not add a write form");
+  assert(!/<button/i.test(all.html), "pending counts must not add an approve button");
+
+  const asCli = await get(context, "/internal/pending?channel=cli", auditor);
+  assertEquals(asCli.status, 200);
+  assert(asCli.html.includes("Pending CLI"), "cli filter must keep the cli candidate");
+  assert(!asCli.html.includes("Pending Web"), "cli filter must hide the web candidate");
+  assert(
+    asCli.html.includes(
+      'href="/internal/pending">全部<span class="tk-tab__count">3</span>',
+    ),
+    "filtered all-tab must still count every pending candidate",
+  );
+  assert(
+    asCli.html.includes(
+      'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+    ),
+    "filtered web tab must still show its pending count",
+  );
+  assert(!/<button/i.test(asCli.html), "auditor must not get an approve button after counting");
+
+  const asAnon = await get(context, "/internal/pending?channel=cli");
+  assertEquals(asAnon.status, 404);
+  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak pending names");
+  assert(
+    !asAnon.html.includes('href="/internal/pending?channel=cli"'),
+    "anonymous 404 must not advertise channel counts",
+  );
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "counting pending channels must not dirty the catalog",
+  );
+});
+
+Deno.test("the approvals page escapes auditor notes", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await context.catalog.approve(auditor, {
+    id: "docs-writer",
+    note: "<script>alert(1)</script>",
+  });
+
+  const page = await get(context, "/internal/approvals", reader);
+  assertEquals(page.status, 200);
+  assert(!page.html.includes("<script>alert(1)</script>"), "raw note markup must not appear");
+  assert(page.html.includes("&lt;script&gt;"), "the note must be escaped");
 });
 
 Deno.test("the public page publishes only approved surfaces", async () => {
@@ -255,6 +769,8 @@ Deno.test("published pages and consoles ship no script", async () => {
       ["/internal", maintainer],
       ["/internal/c", maintainer],
       ["/internal/audit", auditor],
+      ["/internal/approvals", reader],
+      ["/internal/pending", reader],
       ["/internal/s/draft-one", maintainer],
     ] as const
   ) {

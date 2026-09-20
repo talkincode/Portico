@@ -56,6 +56,18 @@ portico identity whoami --identities <path> --sessions <path> --session <pst1_..
 
 # 列出追加式授权轨迹（仅人类审计者）
 portico identity grants --identities <path> --sessions <path> --session <token>
+
+# 列出追加式身份撤回轨迹（仅人类审计者）
+portico identity revokes --identities <path> --sessions <path> --session <token>
+
+# 列出登录会话轨迹（仅人类审计者；不含令牌或哈希）
+portico identity sessions --identities <path> --sessions <path> --session <token>
+
+# 列出登录凭证轨迹（仅人类审计者；不含令牌或哈希）
+portico identity credentials --identities <path> --sessions <path> --session <token>
+
+# 列出追加式登录凭证作废轨迹（仅人类审计者；不含令牌或哈希）
+portico identity credential revokes --identities <path> --sessions <path> --session <token>
 ```
 
 ---
@@ -74,16 +86,16 @@ portico catalog publish --catalog <path> --identities <path> --sessions <path> -
 # 更新受治理表面字段 (仅限 draft/internal/rejected)
 portico catalog update --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> --input <record.json>
 
-# 审批公开申请 (仅限独立人类审计者)
-portico catalog approve --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+# 审批公开申请 (仅限独立人类审计者；--note 可选)
+portico catalog approve --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
-# 驳回公开申请 (仅限独立人类审计者)
-portico catalog reject --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+# 驳回公开申请 (仅限独立人类审计者；--note 可选)
+portico catalog reject --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
-# 撤回已公开服务至内部 (仅限人类审计者)
-portico catalog withdraw --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+# 撤回已公开服务至内部 (仅限人类审计者；--note 可选)
+portico catalog withdraw --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
-# 列出公开边界审批记录（通过 / 拒绝 / 撤回）；匿名为空列表
+# 列出公开边界审批记录（通过 / 拒绝 / 撤回，含可选备注）；匿名为空列表
 portico catalog approvals --catalog <path> --identities <path> --sessions <path> --session <token>
 
 # 列表查询可见服务
@@ -122,6 +134,13 @@ portico gateway audit --identities <path> --sessions <path> --audit <audit.json>
 ```bash
 # 查询系统全局聚合审计时间线
 portico audit list --catalog <path> --identities <path> --sessions <path> --session <token> [--limit <n>]
+
+# 写下一条安全审计结论（仅人类审计者；审计者不能审自己维护的主体）
+portico audit conclude --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
+  --id <subject> --scope public_boundary --verdict flagged --note "…"
+
+# 查询追加式安全结论（全部，或按主体 / 作用域 / 判定过滤）
+portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
 
 # 设置自定义门户卡片配置
 portico page set --page <path> --catalog <path> --identities <path> --sessions <path> --session <token> --input <page.json>

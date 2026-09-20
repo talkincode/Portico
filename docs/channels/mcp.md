@@ -29,7 +29,7 @@ Model Context Protocol (MCP) 是当前连接 AI 智能体与外部工具、知�
 
 ## 查询与连接信息发现
 
-用户或调用 Agent 可以通过 CLI 或 REST API 查询已授权的 MCP 连接信息：
+用户或调用 Agent 可以通过 CLI、Portal 或 MCP 查询已授权的 MCP 连接信息。三入口共用 `listMcp`：同一身份看到同一批 `endpoint` 与 `connect.mode=direct`，CLI 包坐标不会出现，匿名只看到已审批公开记录。
 
 ### CLI 查询
 ```bash

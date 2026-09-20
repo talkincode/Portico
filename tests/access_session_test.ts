@@ -125,6 +125,36 @@ Deno.test("plaintext secret fields are rejected on credential issue", async () =
   assertEquals((await sessions.listCredentials()).length, 0);
 });
 
+Deno.test("bootstrap credential (no actor) can only ever be issued once; a second attempt is forbidden and writes nothing", async () => {
+  const { service, sessions } = await bootstrapped();
+  await service.issueCredential(null, { id: auditor.id });
+  assertEquals((await sessions.listCredentials()).length, 1);
+
+  await assertRejectsCode(
+    () => service.issueCredential(null, { id: auditor.id }),
+    "FORBIDDEN",
+  );
+  assertEquals((await sessions.listCredentials()).length, 1);
+});
+
+Deno.test("bootstrap credential (no actor) is forbidden for an agent maintainer subject; writes nothing", async () => {
+  const { service, sessions } = await bootstrapped();
+  await assertRejectsCode(
+    () => service.issueCredential(null, { id: maintainer.id }),
+    "FORBIDDEN",
+  );
+  assertEquals((await sessions.listCredentials()).length, 0);
+});
+
+Deno.test("bootstrap credential (no actor) is forbidden for a human reader subject; writes nothing", async () => {
+  const { service, sessions } = await bootstrapped();
+  await assertRejectsCode(
+    () => service.issueCredential(null, { id: reader.id }),
+    "FORBIDDEN",
+  );
+  assertEquals((await sessions.listCredentials()).length, 0);
+});
+
 Deno.test("logout revokes the session; a failed logout does not revoke others", async () => {
   const { service, sessions } = await bootstrapped();
   const issued = await service.issueCredential(auditor, { id: reader.id });
@@ -182,4 +212,155 @@ Deno.test("file session store never persists issued or session tokens as plainte
   assertEquals(parsed.credentials.length, 1);
   assertEquals(parsed.sessions.length, 1);
   assertEquals(parsed.credentials[0].credentialRef.startsWith("issued:"), true);
+});
+
+Deno.test("auditor lists sessions without hashes or tokens; others are forbidden", async () => {
+  const { service, sessions } = await bootstrapped();
+  const readerIssued = await service.issueCredential(auditor, { id: reader.id });
+  const readerSession = await service.login({ id: reader.id, token: readerIssued.token });
+  await service.logout(readerSession.token);
+
+  const auditorIssued = await service.issueCredential(auditor, { id: auditor.id });
+  const auditorSession = await service.login({ id: auditor.id, token: auditorIssued.token });
+
+  const listed = await service.listSessions(auditor);
+  assertEquals(listed.length, 2);
+  assertEquals(listed[0].id.length > 0, true);
+  assertEquals(listed[0].subjectId, reader.id);
+  assertEquals(typeof listed[0].createdAt, "string");
+  assertEquals(typeof listed[0].expiresAt, "string");
+  assertEquals(typeof listed[0].revokedAt, "string");
+  assertEquals(listed[1].subjectId, auditor.id);
+  assertEquals("revokedAt" in listed[1], false);
+  for (const row of listed) {
+    assertEquals(
+      Object.keys(row).sort(),
+      row.revokedAt
+        ? ["createdAt", "expiresAt", "id", "revokedAt", "subjectId"]
+        : ["createdAt", "expiresAt", "id", "subjectId"],
+    );
+    assertEquals("tokenHash" in row, false);
+    assertEquals("token" in row, false);
+  }
+  const payload = JSON.stringify(listed);
+  assertEquals(payload.includes(readerSession.token), false);
+  assertEquals(payload.includes(auditorSession.token), false);
+  assertEquals(payload.includes(readerIssued.token), false);
+  assertEquals(payload.includes("tokenHash"), false);
+  assertEquals(payload.includes("secretHash"), false);
+
+  const stored = await sessions.listSessions();
+  assertEquals(stored.length, 2);
+  assertEquals(stored[0].tokenHash.length, 64);
+
+  await assertRejectsCode(() => service.listSessions(maintainer), "FORBIDDEN");
+  await assertRejectsCode(() => service.listSessions(reader), "FORBIDDEN");
+  await assertRejectsCode(
+    () => service.listSessions({ id: "anonymous", kind: "human", role: "anonymous" }),
+    "FORBIDDEN",
+  );
+});
+
+Deno.test("listing sessions does not rewrite the session file", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-session-list-" });
+  const identities = `${dir}/identities.json`;
+  const sessionsPath = `${dir}/sessions.json`;
+  const service = new AccessService(
+    new FileIdentityStore(identities),
+    new FileSessionStore(sessionsPath),
+  );
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  const issued = await service.issueCredential(auditor, { id: auditor.id });
+  await service.login({ id: auditor.id, token: issued.token });
+  const beforeSessions = await Deno.readFile(sessionsPath);
+  const beforeIdentities = await Deno.readFile(identities);
+
+  const listed = await service.listSessions(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].subjectId, auditor.id);
+  assertEquals(await Deno.readFile(sessionsPath), beforeSessions);
+  assertEquals(await Deno.readFile(identities), beforeIdentities);
+});
+
+Deno.test("listSessions without a session store is INVALID_STATE for an auditor", async () => {
+  const service = new AccessService(new MemoryIdentityStore());
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await assertRejectsCode(() => service.listSessions(auditor), "INVALID_STATE");
+});
+
+Deno.test("auditor lists credentials without hashes or tokens; others are forbidden", async () => {
+  const { service, sessions } = await bootstrapped();
+  const readerIssued = await service.issueCredential(auditor, { id: reader.id });
+  await service.login({ id: reader.id, token: readerIssued.token });
+  await service.revokeCredentials(auditor, { id: reader.id });
+
+  const auditorIssued = await service.issueCredential(auditor, { id: auditor.id });
+
+  const listed = await service.listCredentials(auditor);
+  assertEquals(listed.length, 2);
+  assertEquals(listed[0].id, readerIssued.id);
+  assertEquals(listed[0].subjectId, reader.id);
+  assertEquals(listed[0].credentialRef, readerIssued.credentialRef);
+  assertEquals(listed[0].issuedBy, { id: auditor.id, kind: "human" });
+  assertEquals(listed[0].issuedAt, readerIssued.issuedAt);
+  assertEquals(typeof listed[0].revokedAt, "string");
+  assertEquals(listed[1].id, auditorIssued.id);
+  assertEquals(listed[1].subjectId, auditor.id);
+  assertEquals("revokedAt" in listed[1], false);
+  for (const row of listed) {
+    assertEquals(
+      Object.keys(row).sort(),
+      row.revokedAt
+        ? ["credentialRef", "id", "issuedAt", "issuedBy", "revokedAt", "subjectId"]
+        : ["credentialRef", "id", "issuedAt", "issuedBy", "subjectId"],
+    );
+    assertEquals("secretHash" in row, false);
+    assertEquals("token" in row, false);
+    assertEquals(typeof row.issuedBy.id, "string");
+    assertEquals(typeof row.issuedBy.kind, "string");
+  }
+  const payload = JSON.stringify(listed);
+  assertEquals(payload.includes(readerIssued.token), false);
+  assertEquals(payload.includes(auditorIssued.token), false);
+  assertEquals(payload.includes("secretHash"), false);
+  assertEquals(payload.includes("tokenHash"), false);
+  assertEquals(payload.includes("pct1_"), false);
+
+  const stored = await sessions.listCredentials();
+  assertEquals(stored.length, 2);
+  assertEquals(stored[0].secretHash.length, 64);
+
+  await assertRejectsCode(() => service.listCredentials(maintainer), "FORBIDDEN");
+  await assertRejectsCode(() => service.listCredentials(reader), "FORBIDDEN");
+  await assertRejectsCode(
+    () => service.listCredentials({ id: "anonymous", kind: "human", role: "anonymous" }),
+    "FORBIDDEN",
+  );
+});
+
+Deno.test("listing credentials does not rewrite the session file", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-credential-list-" });
+  const identities = `${dir}/identities.json`;
+  const sessionsPath = `${dir}/sessions.json`;
+  const service = new AccessService(
+    new FileIdentityStore(identities),
+    new FileSessionStore(sessionsPath),
+  );
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  const issued = await service.issueCredential(auditor, { id: auditor.id });
+  const beforeSessions = await Deno.readFile(sessionsPath);
+  const beforeIdentities = await Deno.readFile(identities);
+
+  const listed = await service.listCredentials(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].subjectId, auditor.id);
+  assertEquals(listed[0].credentialRef, issued.credentialRef);
+  assertEquals(await Deno.readFile(sessionsPath), beforeSessions);
+  assertEquals(await Deno.readFile(identities), beforeIdentities);
+});
+
+Deno.test("listCredentials without a session store is INVALID_STATE for an auditor", async () => {
+  const service = new AccessService(new MemoryIdentityStore());
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await assertRejectsCode(() => service.listCredentials(auditor), "INVALID_STATE");
 });

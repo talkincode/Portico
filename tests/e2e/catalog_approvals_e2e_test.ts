@@ -6,8 +6,9 @@ import { bootEntrypoint } from "./process.ts";
 /**
  * Public-boundary approval records are one contract: CLI `catalog approvals`,
  * Portal `GET /api/approvals` and MCP `portico_approvals` must return the same
- * rows in the same order for the same session. Anonymous sees an empty list.
- * Reading must not rewrite the catalog. This is not an approval write path.
+ * rows in the same order for the same session, including an optional auditor
+ * note. Anonymous sees an empty list. Reading must not rewrite the catalog.
+ * This is not an approval write path.
  */
 
 const PORTAL = `${ROOT}src/portal/main.ts`;
@@ -29,6 +30,7 @@ interface ApprovalRow {
   entry: { kind: string; value: string };
   version: string;
   name: string;
+  note?: string;
 }
 
 interface JsonRpcBody {
@@ -148,6 +150,8 @@ Deno.test("E2E: CLI, Portal and MCP approvals match for auditor and reader; anon
       ...actor("auditor", "human:security-auditor", "human"),
       "--id",
       "docs-writer",
+      "--note",
+      "Package coordinate reviewed.",
     ])).code,
     0,
   );
@@ -188,6 +192,7 @@ Deno.test("E2E: CLI, Portal and MCP approvals match for auditor and reader; anon
     assertEquals(cliAuditor.body.data?.[0].reviewedBy.id, "human:security-auditor");
     assertEquals(cliAuditor.body.data?.[0].reviewedBy.kind, "human");
     assertEquals(cliAuditor.body.data?.[0].entry.value, "jsr:@example/docs-writer");
+    assertEquals(cliAuditor.body.data?.[0].note, "Package coordinate reviewed.");
     assertEquals(portalAuditor.body.data, cliAuditor.body.data);
     assertEquals(mcpAuditor.data, cliAuditor.body.data);
     assertEquals(

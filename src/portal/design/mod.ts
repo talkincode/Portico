@@ -72,13 +72,17 @@ export {
 } from "./components.ts";
 
 export {
+  type ApprovalsViewInput,
   type AuditViewInput,
   type CatalogViewInput,
   type ContentViewInput,
   type CountSummary,
+  type PendingViewInput,
+  renderApprovalsView,
   renderAuditView,
   renderCatalogView,
   renderContentView,
+  renderPendingView,
   renderSurfaceView,
   summarize,
   type SurfaceViewInput,

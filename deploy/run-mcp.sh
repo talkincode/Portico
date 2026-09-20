@@ -21,6 +21,7 @@ exec "$DOCKER" run --rm --name portico-mcp --network host \
   -e PORTICO_SESSIONS_PATH=/app/data/sessions.json \
   -e PORTICO_GATEWAY_AUDIT_PATH=/app/data/gateway-audit.json \
   -e PORTICO_PAGE_PATH=/app/data/page.json \
+  -e PORTICO_CONCLUSIONS_PATH=/app/data/conclusions.json \
   "$IMAGE" \
   run --allow-read=/app --allow-env --allow-net=127.0.0.1,"$BIND" \
   src/mcp/main.ts

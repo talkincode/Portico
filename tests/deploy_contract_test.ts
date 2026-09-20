@@ -157,6 +157,25 @@ Deno.test("deploy contract: every entrance is told where the Gateway audit lives
   }
 });
 
+Deno.test("deploy contract: portal and mcp are told where the security conclusions live", async () => {
+  // Otherwise Portal `GET /api/conclusions` and MCP `portico_conclusions`
+  // silently return an empty trail while `audit conclusions` shows verdicts —
+  // the three entrances disagreeing about the same question. The Gateway does
+  // not answer it and must not be handed the path.
+  for (const name of ["portal", "mcp"] as const) {
+    const source = await script(CONTRACTS[name].file);
+    assert(
+      source.includes("PORTICO_CONCLUSIONS_PATH="),
+      `${CONTRACTS[name].file} must pass PORTICO_CONCLUSIONS_PATH`,
+    );
+  }
+  const gateway = await script(CONTRACTS.gateway.file);
+  assert(
+    !gateway.includes("PORTICO_CONCLUSIONS_PATH="),
+    `${CONTRACTS.gateway.file} must not be handed a file it never reads`,
+  );
+});
+
 /**
  * systemd units are part of the same contract as the run scripts. The live
  * host used to start Portal/Gateway from an unversioned extra checkout and

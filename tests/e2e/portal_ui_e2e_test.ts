@@ -11,7 +11,9 @@ import {
   actor,
   bootstrapRoster,
   runCli,
+  sampleMcpRecord,
   sampleRecord,
+  sampleWebRecord,
   sessionFor,
   sessionsPathFor,
 } from "./harness.ts";
@@ -310,4 +312,386 @@ Deno.test("E2E: page 404s are HTML; reader vs auditor vs anonymous disagree; wit
     assertHtml404(article, "withdrawn public article");
     assert(!article.body.includes("Docs Writer"));
   });
+});
+
+Deno.test("E2E: /internal/approvals shows the same notes to a reader; anonymous 404s; catalog is unchanged", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-ui-approvals-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "internal",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-writer",
+      "--note",
+      "Package coordinate reviewed.",
+    ], env)).code,
+    0,
+  );
+
+  const catalogBefore = await Deno.readFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const asReader = await fetchPage(`${base}/internal/approvals`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(asReader.status, 200);
+    assert(asReader.body.includes("审批记录"), "reader must get the approvals screen");
+    assert(asReader.body.includes("Docs Writer"), "reader must see the approved name");
+    assert(
+      asReader.body.includes("Package coordinate reviewed."),
+      "reader must see the auditor note",
+    );
+    assert(!/<script/i.test(asReader.body), "approvals page must not ship script");
+
+    const asAuditor = await fetchPage(`${base}/internal/approvals`, {
+      headers: headersFor("human:security-auditor"),
+    });
+    assertEquals(asAuditor.status, 200);
+    assert(asAuditor.body.includes("Package coordinate reviewed."));
+
+    const asAnon = await fetchPage(`${base}/internal/approvals`);
+    assertHtml404(asAnon, "anonymous /internal/approvals");
+    assert(!asAnon.body.includes("Docs Writer"));
+    assert(!asAnon.body.includes("Package coordinate reviewed."));
+    assert(!asAnon.body.includes("审批记录"));
+  });
+
+  const catalogAfter = await Deno.readFile(catalog);
+  assertEquals(
+    catalogAfter,
+    catalogBefore,
+    "reading the approvals page must not dirty the catalog",
+  );
+});
+
+Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anonymous 404s; catalog is unchanged", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-ui-pending-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "internal",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      "docs-writer",
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+
+  const catalogBefore = await Deno.readFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const asReader = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(asReader.status, 200);
+    assert(asReader.body.includes("待审队列"), "reader must get the pending queue");
+    assert(asReader.body.includes("Docs Writer"), "reader must see the pending candidate");
+    assert(
+      asReader.body.includes("jsr:@example/docs-writer"),
+      "queue must show the pending entry as text",
+    );
+    assert(asReader.body.includes("<th>种类</th>"), "queue must name the entry-kind column");
+    assert(
+      asReader.body.includes('data-entry-kind="package"'),
+      "queue must label a package pending entry as package",
+    );
+    assert(
+      !asReader.body.includes('href="jsr:@example/docs-writer"'),
+      "a pending entry must not be a clickable target",
+    );
+    assert(asReader.body.includes("/internal/approvals"), "queue must link to decisions");
+
+    const catalogBoard = await fetchPage(`${base}/internal/c`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(catalogBoard.status, 200);
+    assert(
+      catalogBoard.body.includes('<a class="tk-stat" href="/internal/pending">'),
+      "catalog board pending count must link to the queue",
+    );
+    assert(!/<script/i.test(asReader.body), "pending page must not ship script");
+    assert(!/<form/i.test(asReader.body), "pending page must not ship a form");
+
+    const asAuditor = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:security-auditor"),
+    });
+    assertEquals(asAuditor.status, 200);
+    assert(asAuditor.body.includes("Docs Writer"), "auditor must see the same candidate");
+    assert(
+      asAuditor.body.includes("jsr:@example/docs-writer"),
+      "auditor must see where the pending entry points",
+    );
+    assert(!/<button/i.test(asAuditor.body), "auditor must not get an approve button");
+
+    const asAnon = await fetchPage(`${base}/internal/pending`);
+    assertHtml404(asAnon, "anonymous /internal/pending");
+    assert(!asAnon.body.includes("Docs Writer"));
+    assert(!asAnon.body.includes("待审队列"));
+    assert(!asAnon.body.includes("jsr:@example/docs-writer"));
+  });
+
+  const catalogAfter = await Deno.readFile(catalog);
+  assertEquals(
+    catalogAfter,
+    catalogBefore,
+    "reading the pending queue must not dirty the catalog",
+  );
+
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "approve",
+      "--catalog",
+      catalog,
+      ...actor("auditor", "human:security-auditor", "human"),
+      "--id",
+      "docs-writer",
+    ], env)).code,
+    0,
+  );
+
+  await withPortal(catalog, identities, async (base) => {
+    const afterApprove = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(afterApprove.status, 200);
+    assert(
+      !afterApprove.body.includes("Docs Writer"),
+      "an approved surface must leave the pending queue",
+    );
+  });
+});
+
+async function submitPublicCandidate(
+  catalog: string,
+  input: string,
+  env: Record<string, string>,
+  record: ReturnType<typeof sampleRecord>,
+): Promise<void> {
+  await Deno.writeTextFile(input, `${JSON.stringify(record, null, 2)}\n`);
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "register",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--input",
+      input,
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      record.id,
+      "--visibility",
+      "internal",
+    ], env)).code,
+    0,
+  );
+  assertEquals(
+    (await runCli([
+      "catalog",
+      "publish",
+      "--catalog",
+      catalog,
+      ...actor("maintainer"),
+      "--id",
+      record.id,
+      "--visibility",
+      "public",
+    ], env)).code,
+    0,
+  );
+}
+
+Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404s; catalog is unchanged", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-ui-pending-channel-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const identities = `${dir}/identities.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(identities);
+
+  await submitPublicCandidate(catalog, input, env, sampleRecord());
+  await submitPublicCandidate(catalog, input, env, sampleWebRecord());
+  await submitPublicCandidate(catalog, input, env, sampleMcpRecord());
+
+  const catalogBefore = await Deno.readFile(catalog);
+
+  await withPortal(catalog, identities, async (base) => {
+    const asReader = await fetchPage(`${base}/internal/pending`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(asReader.status, 200);
+    assert(asReader.body.includes("Docs Writer"), "unfiltered queue must list the cli candidate");
+    assert(asReader.body.includes("Docs Web"), "unfiltered queue must list the web candidate");
+    assert(asReader.body.includes("Docs MCP"), "unfiltered queue must list the mcp candidate");
+    assert(
+      asReader.body.includes('href="/internal/pending?channel=cli"'),
+      "queue must offer a cli channel filter",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending" aria-current="true">全部<span class="tk-tab__count">3</span>',
+      ),
+      "all-tab must count three pending candidates",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending?channel=cli">CLI<span class="tk-tab__count">1</span>',
+      ),
+      "cli tab must count one pending candidate",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+      ),
+      "web tab must count one pending candidate",
+    );
+    assert(
+      asReader.body.includes(
+        'href="/internal/pending?channel=mcp">MCP<span class="tk-tab__count">1</span>',
+      ),
+      "mcp tab must count one pending candidate",
+    );
+    assert(!/<form/i.test(asReader.body), "channel filter must not ship a form");
+    assert(!/<script/i.test(asReader.body), "channel filter must not ship script");
+
+    const asCli = await fetchPage(`${base}/internal/pending?channel=cli`, {
+      headers: headersFor("human:reader"),
+    });
+    assertEquals(asCli.status, 200);
+    assert(asCli.body.includes("Docs Writer"), "cli filter must keep the cli candidate");
+    assert(!asCli.body.includes("Docs Web"), "cli filter must hide the web candidate");
+    assert(!asCli.body.includes("Docs MCP"), "cli filter must hide the mcp candidate");
+    assert(
+      asCli.body.includes(
+        'href="/internal/pending">全部<span class="tk-tab__count">3</span>',
+      ),
+      "filtered all-tab must still count every pending candidate",
+    );
+    assert(
+      asCli.body.includes(
+        'href="/internal/pending?channel=web">Web<span class="tk-tab__count">1</span>',
+      ),
+      "filtered web tab must still show its pending count",
+    );
+    assert(
+      !asCli.body.includes('href="jsr:@example/docs-writer"'),
+      "a filtered pending entry must not be a clickable target",
+    );
+
+    const asWeb = await fetchPage(`${base}/internal/pending?channel=web`, {
+      headers: headersFor("human:security-auditor"),
+    });
+    assertEquals(asWeb.status, 200);
+    assert(asWeb.body.includes("Docs Web"), "auditor web filter must keep the web candidate");
+    assert(!asWeb.body.includes("Docs Writer"), "auditor web filter must hide the cli candidate");
+    assert(!asWeb.body.includes("Docs MCP"), "auditor web filter must hide the mcp candidate");
+    assert(!/<button/i.test(asWeb.body), "auditor must not get an approve button after filtering");
+
+    const asAnon = await fetchPage(`${base}/internal/pending?channel=cli`);
+    assertHtml404(asAnon, "anonymous /internal/pending?channel=cli");
+    assert(!asAnon.body.includes("Docs Writer"));
+    assert(!asAnon.body.includes("待审队列"));
+    assert(!asAnon.body.includes("jsr:@example/docs-writer"));
+  });
+
+  const catalogAfter = await Deno.readFile(catalog);
+  assertEquals(
+    catalogAfter,
+    catalogBefore,
+    "filtering the pending queue must not dirty the catalog",
+  );
 });

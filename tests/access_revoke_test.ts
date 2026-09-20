@@ -235,3 +235,79 @@ Deno.test("failed revoke does not revoke sessions or credentials", async () => {
   assertEquals((await sessions.listSessions())[0].revokedAt, undefined);
   assertEquals((await sessions.listCredentials())[0].revokedAt, undefined);
 });
+
+Deno.test("auditor lists revoke trail; maintainer, reader and anonymous are forbidden", async () => {
+  const { service } = await bootstrapped();
+  const revoked = await service.revoke(auditor, { id: maintainer.id });
+
+  const listed = await service.listRevokes(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].id, revoked.id);
+  assertEquals(listed[0].subjectId, maintainer.id);
+  assertEquals(listed[0].kind, "agent");
+  assertEquals(listed[0].role, "maintainer");
+  assertEquals(listed[0].revokedBy, { id: auditor.id, kind: "human" });
+  assertEquals(listed[0].revokedAt, revoked.revokedAt);
+  assertEquals(
+    Object.keys(listed[0]).sort(),
+    ["id", "kind", "revokedAt", "revokedBy", "role", "subjectId"],
+  );
+  assertEquals(Object.keys(listed[0].revokedBy).sort(), ["id", "kind"]);
+
+  await assertRejectsCode(() => service.listRevokes(maintainer), "FORBIDDEN");
+  await assertRejectsCode(() => service.listRevokes(reader), "FORBIDDEN");
+  await assertRejectsCode(
+    () => service.listRevokes({ id: "anonymous", kind: "human", role: "anonymous" }),
+    "FORBIDDEN",
+  );
+});
+
+Deno.test("listing revokes does not rewrite the identity file", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-revoke-list-" });
+  const path = `${dir}/identities.json`;
+  const service = new AccessService(new FileIdentityStore(path));
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await service.grant(auditor, {
+    id: maintainer.id,
+    kind: "agent",
+    role: "maintainer",
+  });
+  await service.revoke(auditor, { id: maintainer.id });
+  const before = await Deno.readFile(path);
+
+  const listed = await service.listRevokes(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].subjectId, maintainer.id);
+  assertEquals(await Deno.readFile(path), before);
+});
+
+Deno.test("revoke trail projection drops unknown fields from disk", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-revoke-projection-" });
+  const path = `${dir}/identities.json`;
+  const service = new AccessService(new FileIdentityStore(path));
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await service.grant(auditor, {
+    id: maintainer.id,
+    kind: "agent",
+    role: "maintainer",
+  });
+  await service.revoke(auditor, { id: maintainer.id });
+
+  const file = JSON.parse(await Deno.readTextFile(path)) as {
+    revokes: Array<Record<string, unknown>>;
+  };
+  file.revokes[0].note = "do-not-leak";
+  file.revokes[0].token = "literal-secret";
+  await Deno.writeTextFile(path, JSON.stringify(file));
+
+  const listed = await service.listRevokes(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(
+    Object.keys(listed[0]).sort(),
+    ["id", "kind", "revokedAt", "revokedBy", "role", "subjectId"],
+  );
+  const payload = JSON.stringify(listed);
+  assertEquals(payload.includes("do-not-leak"), false);
+  assertEquals(payload.includes("literal-secret"), false);
+  assertEquals(payload.includes("note"), false);
+});

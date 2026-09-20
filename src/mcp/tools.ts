@@ -1,9 +1,14 @@
 import {
   applyAuditQuery,
+  applyConclusionQuery,
   AUDIT_ACTIONS,
   AUDIT_KINDS,
   type AuditService,
+  CONCLUSION_SCOPES,
+  CONCLUSION_VERDICTS,
+  type ConclusionService,
   parseAuditQuery,
+  parseConclusionQuery,
 } from "../audit/mod.ts";
 import type { AccessService } from "../access/mod.ts";
 import {
@@ -17,6 +22,7 @@ import {
   ErrorCode,
   parseCatalogQuery,
 } from "../catalog/mod.ts";
+import { type GatewayService, listGatewayAudit } from "../gateway/mod.ts";
 import type { PageService } from "../ui/mod.ts";
 import { isRecord } from "./types.ts";
 
@@ -34,7 +40,14 @@ import { isRecord } from "./types.ts";
  * cannot fork: an MCP caller sees exactly what the same identity sees on the
  * CLI and the Portal. Nothing here executes, proxies or orchestrates anything
  * — Portico still does not run other people's tools. `portico_whoami` is the
- * current session identity, not a login.
+ * current session identity, not a login. `portico_sessions` is the auditor
+ * session trail, not a way to mint or revoke tokens. `portico_credentials`
+ * is the auditor credential inventory, not a way to issue tokens.
+ * `portico_credential_revokes` is the auditor credential-revoke trail, not a
+ * way to invalidate tokens. `portico_revokes` is the auditor identity-revoke
+ * trail, not a way to remove a roster identity. `portico_web` is authorized
+ * Web hrefs, not a page proxy. `portico_cli` is authorized CLI package
+ * coordinates, not an installer.
  */
 
 export interface McpTool {
@@ -48,6 +61,9 @@ export interface McpToolDeps {
   audit: AuditService;
   access: AccessService;
   pages?: PageService;
+  gateway?: GatewayService;
+  /** Read-only: the MCP entrance never records a conclusion. */
+  conclusions?: ConclusionService;
 }
 
 export const TOOLS: readonly McpTool[] = [
@@ -99,6 +115,24 @@ export const TOOLS: readonly McpTool[] = [
     },
   },
   {
+    name: "portico_mcp",
+    description:
+      "列出当前身份可见的 MCP 连接信息（endpoint 与 connect.mode=`direct`）。等价于 CLI `mcp list` 与 Portal `GET /api/mcp`。CLI 包坐标不会出现。匿名只看到已审批公开记录。Portico 不代理流量、不执行工具。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_web",
+    description:
+      "列出当前身份可见的 Web 直连入口（href 与 connect.mode=`direct`）。等价于 CLI `web list` 与 Portal `GET /api/web`。MCP 端点与 CLI 包坐标不会出现。匿名只看到已审批公开记录。Portico 不代理页面、不抓取远程 HTML。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_cli",
+    description:
+      "列出当前身份可见的 CLI 包坐标（package 与 connect.mode=`coordinate`）。等价于 CLI `cli list` 与 Portal `GET /api/cli`。MCP 端点与 Web href 不会出现。匿名只看到已审批公开记录。Portico 不安装、不执行、不下载该包。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_dashboard",
     description:
       "治理概览：当前身份可见的记录数与各治理状态计数。等价于 CLI `catalog dashboard` 与 Portal `GET /api/dashboard`。这不是运行指标大盘。",
@@ -137,7 +171,7 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_approvals",
     description:
-      "列出公开边界上的审批记录（通过 / 拒绝 / 撤回）。等价于 CLI `catalog approvals` 与 Portal `GET /api/approvals`。已登录身份看到同一批记录与同一顺序；匿名得到空列表，不泄漏待审或已拒绝入口。读操作不写目录。",
+      "列出公开边界上的审批记录（通过 / 拒绝 / 撤回，含可选 note）。等价于 CLI `catalog approvals` 与 Portal `GET /api/approvals`。已登录身份看到同一批记录与同一顺序；匿名得到空列表，不泄漏待审、已拒绝入口或备注。读操作不写目录。这不是批准入口。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -153,10 +187,65 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_revokes",
+    description:
+      "列出追加式身份撤回轨迹（谁在何时撤回了哪个角色）。等价于 CLI `identity revokes` 与 Portal `GET /api/revokes`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。读操作不写名册。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_whoami",
     description:
       "返回当前已证明身份的 id / kind / role。等价于 CLI `identity whoami` 与 Portal `GET /api/whoami`。已登录会话看到自己；匿名得到 FORBIDDEN。不返回邮箱、凭证或会话。读操作不写名册。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_sessions",
+    description:
+      "列出登录会话轨迹（id / 主体 / 创建与过期时间，作废则含 revokedAt）。等价于 CLI `identity sessions` 与 Portal `GET /api/sessions`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回令牌或哈希。读操作不写会话文件。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_credentials",
+    description:
+      "列出登录凭证轨迹（id / 主体 / credentialRef / 签发者 / 时间，作废则含 revokedAt）。等价于 CLI `identity credentials` 与 Portal `GET /api/credentials`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回令牌或哈希。读操作不写会话文件。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_credential_revokes",
+    description:
+      "列出追加式登录凭证作废轨迹（谁在何时作废了哪个主体的凭证与会话）。等价于 CLI `identity credential revokes` 与 Portal `GET /api/credential-revokes`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。不返回令牌或哈希。读操作不写名册或会话文件。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_gateway_audit",
+    description:
+      "列出 Gateway 访问审计（允许与拒绝的直连授权）。等价于 CLI `gateway audit` 与 Portal `GET /api/gateway-audit`。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写目录或审计文件。这不是授权入口，也不执行工具。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_conclusions",
+    description:
+      "列出人类审计者记录的追加式安全审计结论（主体 / 审计范围 / 判定 / 审计者 / 时间 / 可选说明）。等价于 CLI `audit conclusions` 与 Portal `GET /api/conclusions`。审计范围是公开边界、入口指向、权限变化、密钥泄漏或网关越权之一。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写结论文件或目录。这不是记录入口：结论由 CLI `audit conclude` 写入，Portal 与 MCP 只读。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subject: {
+          type: "string",
+          description: "只返回该目录记录 id 的结论",
+        },
+        scope: {
+          type: "string",
+          enum: [...CONCLUSION_SCOPES],
+          description: "只返回该审计范围的结论",
+        },
+        verdict: {
+          type: "string",
+          enum: [...CONCLUSION_VERDICTS],
+          description: "只返回该判定的结论",
+        },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: "portico_page",
@@ -202,6 +291,12 @@ export async function callTool(
         `surface '${id}' has no single authorized entry`,
       );
     }
+    case "portico_mcp":
+      return await deps.catalog.listMcp(actor);
+    case "portico_web":
+      return await deps.catalog.listWeb(actor);
+    case "portico_cli":
+      return await deps.catalog.listCli(actor);
     case "portico_dashboard":
       return dashboardFrom(await deps.catalog.list(actor));
     case "portico_audit": {
@@ -214,8 +309,25 @@ export async function callTool(
       return await deps.access.list(actor);
     case "portico_grants":
       return await deps.access.listGrants(actor);
+    case "portico_revokes":
+      return await deps.access.listRevokes(actor);
     case "portico_whoami":
       return await deps.access.whoami(actor);
+    case "portico_sessions":
+      return await deps.access.listSessions(actor);
+    case "portico_credentials":
+      return await deps.access.listCredentials(actor);
+    case "portico_credential_revokes":
+      return await deps.access.listCredentialRevokes(actor);
+    case "portico_gateway_audit":
+      return await listGatewayAudit(deps.gateway, actor);
+    case "portico_conclusions": {
+      if (!deps.conclusions) return [];
+      // Role check first, filter second — same order as `portico_audit`, so a
+      // non-auditor cannot probe the filter grammar.
+      const records = await deps.conclusions.list(actor);
+      return applyConclusionQuery(records, parseConclusionQuery(input));
+    }
     case "portico_page":
       if (!deps.pages) return { components: [] };
       return await deps.pages.get(actor);

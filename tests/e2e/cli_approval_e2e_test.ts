@@ -1,5 +1,5 @@
 import { assertEquals } from "../assert.ts";
-import { actor, bootstrapRoster, runCli, sampleRecord } from "./harness.ts";
+import { actor, bootstrapRoster, runCli, sampleRecord, sampleWebRecord } from "./harness.ts";
 
 async function registerAndSubmitPublic(
   catalog: string,
@@ -47,6 +47,8 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
     ...actor("auditor", "human:security-auditor", "human"),
     "--id",
     "docs-writer",
+    "--note",
+    "Package coordinate reviewed.",
   ], env);
   assertEquals(approved.code, 0, approved.raw || approved.stderr);
   const approvedBody = approved.stdout as {
@@ -89,6 +91,7 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
       decision: string;
       submittedBy: { id: string };
       reviewedBy: { id: string; kind: string };
+      note?: string;
     }>;
   };
   assertEquals(approvalBody.ok, true);
@@ -98,6 +101,7 @@ Deno.test("CLI happy path: independent auditor approves; anonymous then lists th
   assertEquals(approvalBody.data[0].submittedBy.id, "agent:docs-bot");
   assertEquals(approvalBody.data[0].reviewedBy.id, "human:security-auditor");
   assertEquals(approvalBody.data[0].reviewedBy.kind, "human");
+  assertEquals(approvalBody.data[0].note, "Package coordinate reviewed.");
 });
 
 Deno.test("CLI self-approval fails; anonymous still sees nothing and catalog stays pending", async () => {
@@ -334,4 +338,166 @@ Deno.test("CLI: a rejected surface can be fixed and resubmitted; the id is not p
   const listed = visible.stdout as { data: Array<{ id: string; description: string }> };
   assertEquals(listed.data.length, 1);
   assertEquals(listed.data[0].description, "Corrected description.");
+});
+
+Deno.test("CLI invalid approval note does not write; pending public stays pending", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-approval-note-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
+  await Deno.writeTextFile(input, `${JSON.stringify(sampleRecord(), null, 2)}\n`);
+  await registerAndSubmitPublic(catalog, input, env);
+  const before = await Deno.readFile(catalog);
+
+  const tooLong = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+    "--note",
+    "x".repeat(501),
+  ], env);
+  assertEquals(tooLong.code, 1);
+  const tooLongBody = tooLong.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(tooLongBody.ok, false);
+  assertEquals(tooLongBody.error.code, "INVALID_INPUT");
+
+  const control = await runCli([
+    "catalog",
+    "reject",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+    "--note",
+    "line\nbreak",
+  ], env);
+  assertEquals(control.code, 1);
+  const controlBody = control.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(controlBody.ok, false);
+  assertEquals(controlBody.error.code, "INVALID_INPUT");
+
+  assertEquals(await Deno.readFile(catalog), before);
+
+  const listed = await runCli([
+    "catalog",
+    "list",
+    "--catalog",
+    catalog,
+    ...actor("anonymous", "anonymous", "human"),
+  ]);
+  assertEquals((listed.stdout as { data: unknown[] }).data, []);
+});
+
+Deno.test("CLI: approving an internal-only entry fails, then a public entry is approved", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-approval-internal-e2e-" });
+  const catalog = `${dir}/catalog.json`;
+  const input = `${dir}/record.json`;
+  const env = await bootstrapRoster(`${dir}/identities.json`);
+  const internal = sampleWebRecord();
+  internal.id = "docs-writer";
+  internal.entry = { kind: "url", value: "http://10.0.0.5:8788/portals/docs-writer" };
+  await Deno.writeTextFile(input, `${JSON.stringify(internal, null, 2)}\n`);
+  await registerAndSubmitPublic(catalog, input, env);
+
+  const before = await Deno.readFile(catalog);
+  const refused = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+  ], env);
+  assertEquals(refused.code, 1);
+  const refusedBody = refused.stdout as { ok: boolean; error: { code: string } };
+  assertEquals(refusedBody.ok, false);
+  assertEquals(refusedBody.error.code, "INVALID_STATE");
+  assertEquals(await Deno.readFile(catalog), before);
+
+  const hidden = await runCli([
+    "catalog",
+    "list",
+    "--catalog",
+    catalog,
+    ...actor("anonymous", "anonymous", "human"),
+  ]);
+  assertEquals((hidden.stdout as { data: unknown[] }).data, []);
+
+  const repaired = `${dir}/repaired.json`;
+  await Deno.writeTextFile(
+    repaired,
+    `${
+      JSON.stringify({ entry: { kind: "url", value: "https://docs.example.test/docs-writer" } })
+    }\n`,
+  );
+  // The id is not poisoned by the refusal: reject, fix the coordinate, and the
+  // same surface can cross the boundary on a second, independent review.
+  const rejected = await runCli([
+    "catalog",
+    "reject",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+    "--note",
+    "Entry pointed at an internal-only host.",
+  ], env);
+  assertEquals(rejected.code, 0, rejected.raw || rejected.stderr);
+
+  const updated = await runCli([
+    "catalog",
+    "update",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--id",
+    "docs-writer",
+    "--input",
+    repaired,
+  ], env);
+  assertEquals(updated.code, 0, updated.raw || updated.stderr);
+
+  const resubmitted = await runCli([
+    "catalog",
+    "publish",
+    "--catalog",
+    catalog,
+    ...actor("maintainer"),
+    "--id",
+    "docs-writer",
+    "--visibility",
+    "public",
+  ], env);
+  assertEquals(resubmitted.code, 0, resubmitted.raw || resubmitted.stderr);
+
+  const approved = await runCli([
+    "catalog",
+    "approve",
+    "--catalog",
+    catalog,
+    ...actor("auditor", "human:security-auditor", "human"),
+    "--id",
+    "docs-writer",
+  ], env);
+  assertEquals(approved.code, 0, approved.raw || approved.stderr);
+
+  const visible = await runCli([
+    "catalog",
+    "list",
+    "--catalog",
+    catalog,
+    ...actor("anonymous", "anonymous", "human"),
+  ]);
+  const visibleBody = visible.stdout as {
+    data: Array<{ id: string; governanceState: string }>;
+  };
+  assertEquals(visibleBody.data.length, 1);
+  assertEquals(visibleBody.data[0].governanceState, "approved_public");
 });

@@ -369,6 +369,8 @@ a.tk-card:hover { transform: translateY(-1px); }
 
 /* ── stat ──────────────────────────────────────────────────────────────── */
 .tk-stat { display: flex; flex-direction: column; gap: 2px; }
+a.tk-stat:hover { background: var(--tk-raised); }
+a.tk-stat:hover .tk-stat__label { color: var(--tk-accent); }
 .tk-stat__value {
   font-family: var(--tk-font-num);
   font-variant-numeric: tabular-nums;

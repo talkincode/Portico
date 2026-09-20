@@ -152,6 +152,184 @@ Deno.test("plaintext secret in an MCP endpoint query is rejected with no write",
   assertEquals(await store.list(), []);
 });
 
+Deno.test("common secret query param spellings in an MCP endpoint are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "apikey",
+    "access_token",
+    "auth_token",
+    "client_secret",
+    "refresh_token",
+    "Authorization",
+    "bearer",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("session/ID token and cloud presigned-URL signature spellings in an MCP endpoint are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "session_token",
+    "id_token",
+    "security_token",
+    "sas_token",
+    "signature",
+    "sig",
+    "X-Amz-Security-Token",
+    "X-Amz-Signature",
+    "X-Amz-Credential",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("OAuth client-assertion and webhook signing-secret spellings in an MCP endpoint are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const aliases = [
+    "client_assertion",
+    "consumer_secret",
+    "oauth_token_secret",
+    "webhook_secret",
+    "signing_secret",
+    "private_token",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("any query key ending in a secret-shaped suffix is rejected in an MCP endpoint, not just the literal spellings on the deny list", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  // None of these exact compound names are on the historical literal deny list,
+  // but each ends in a word (token / secret / credential / apikey) that is.
+  const aliases = [
+    "shared_secret",
+    "renewal_token",
+    "personal_access_token",
+    "device_secret",
+    "vault_credential",
+    "partner_apikey",
+  ];
+
+  for (const alias of aliases) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?${alias}=not-a-real-secret`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("plaintext secret values in an MCP endpoint query are rejected even when the key name is innocuous", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const values = [
+    "sk-live-not-a-real-secret",
+    "ghp_notARealGitHubToken1",
+    "github_pat_notARealGitHubToken1",
+    "glpat-not-a-real-gitlab",
+    "xoxb-not-a-real-slack",
+    "sk_test_notARealStripeKey",
+    "AKIANOTAREALAWSKEY01",
+    "ASIANOTAREALSTSKEY01",
+    "AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc",
+    "npm_NOTAREALTOKEN0123456789abcdefghijklm",
+  ];
+
+  for (const value of values) {
+    const input = internalMcp();
+    input.entry = {
+      kind: "mcp_endpoint",
+      value: `https://mcp.example.test/servers/docs?ref=${value}`,
+    };
+
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("plaintext secrets in an MCP endpoint fragment are rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const hrefs = [
+    "https://mcp.example.test/servers/docs#access_token=not-a-real-secret",
+    "https://mcp.example.test/servers/docs#ref=sk-live-not-a-real-secret",
+    "https://mcp.example.test/servers/docs#state=ok&id_token=not-a-real-secret",
+  ];
+
+  for (const href of hrefs) {
+    const input = internalMcp();
+    input.entry = { kind: "mcp_endpoint", value: href };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
+Deno.test("MCP endpoint documentation fragment and a path named token still register", async () => {
+  const service = new CatalogService(new MemoryCatalogStore());
+  const input = internalMcp();
+  input.entry = {
+    kind: "mcp_endpoint",
+    value: "https://mcp.example.test/auth/token#installation",
+  };
+
+  const created = await service.register(maintainer, input);
+  assertEquals(created.entry.value, "https://mcp.example.test/auth/token#installation");
+});
+
+Deno.test("plaintext secret value in an MCP endpoint path is rejected with no write", async () => {
+  const store = new MemoryCatalogStore();
+  const service = new CatalogService(store);
+  const hrefs = [
+    "https://mcp.example.test/servers/sk-live-not-a-real-secret-0123456789",
+    "https://mcp.example.test/connect/ghp_notARealGitHubToken1234567890",
+    "https://mcp.example.test/keys/AKIANOTAREALAWSKEY01",
+    "https://mcp.example.test/keys/AIzaSyNOTAREALGOOGLEAPIKEY0123456789abc",
+    "https://mcp.example.test/keys/npm_NOTAREALTOKEN0123456789abcdefghijklm",
+  ];
+
+  for (const href of hrefs) {
+    const input = internalMcp();
+    input.entry = { kind: "mcp_endpoint", value: href };
+    await assertRejectsCode(() => service.register(maintainer, input), "INVALID_INPUT");
+  }
+  assertEquals(await store.list(), []);
+});
+
 Deno.test("MCP endpoint userinfo is rejected with no write", async () => {
   const store = new MemoryCatalogStore();
   const service = new CatalogService(store);

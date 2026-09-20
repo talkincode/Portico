@@ -153,9 +153,9 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     // The Gateway just recorded an access event. `up` hands the same audit path
     // to every entrance, so the auditor timeline must carry it on both the
     // Portal and MCP — not just on `audit list --audit`.
-    const auditor = sessionFor("human:security-auditor")!;
+    const auditorSession = sessionFor("human:security-auditor")!;
     const portalAudit = await fetch(`${portalUrl}/api/audit`, {
-      headers: { authorization: `Bearer ${auditor}` },
+      headers: { authorization: `Bearer ${auditorSession}` },
     });
     const portalEvents = (await portalAudit.json() as JsonBody<Array<{ kind: string }>>).data ?? [];
     assert(
@@ -169,7 +169,7 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${auditor}`,
+        authorization: `Bearer ${auditorSession}`,
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
@@ -194,6 +194,66 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
       (mcpEnvelope.data ?? []).length,
       portalEvents.length,
       "Portal and MCP must show the same timeline",
+    );
+
+    // `up` also hands the conclusion file to Portal and MCP. Recording one
+    // through the CLI must therefore change what both read-only entrances
+    // answer — otherwise "三个入口呈现同一治理状态" has a hole that only shows
+    // up in production, after a deploy.
+    const concluded = await runCli([
+      "audit",
+      "conclude",
+      "--conclusions",
+      `${dataDir}/conclusions.json`,
+      "--catalog",
+      catalog,
+      "--identities",
+      identities,
+      ...auditor,
+      "--id",
+      "docs-mcp",
+      "--scope",
+      "public_boundary",
+      "--verdict",
+      "cleared",
+    ]);
+    assertEquals(concluded.code, 0, concluded.raw);
+
+    const portalConclusions = await fetch(`${portalUrl}/api/conclusions`, {
+      headers: { authorization: `Bearer ${auditorSession}` },
+    });
+    const portalRows = (await portalConclusions.json() as JsonBody<
+      Array<{ subjectId: string; verdict: string }>
+    >).data ?? [];
+    assertEquals(
+      portalRows.map((row) => [row.subjectId, row.verdict]),
+      [["docs-mcp", "cleared"]],
+      "the Portal must read the conclusion the CLI recorded through `up`",
+    );
+
+    const mcpConclusions = await fetch(mcpUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${auditorSession}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "portico_conclusions", arguments: {} },
+      }),
+    });
+    const mcpConclusionsBody = await mcpConclusions.json() as {
+      result?: { content?: Array<{ text: string }> };
+    };
+    const mcpConclusionsEnvelope = JSON.parse(
+      mcpConclusionsBody.result?.content?.[0]?.text ?? "null",
+    ) as { ok: boolean; data?: Array<{ subjectId: string; verdict: string }> };
+    assertEquals(
+      mcpConclusionsEnvelope.data?.map((row) => [row.subjectId, row.verdict]),
+      portalRows.map((row) => [row.subjectId, row.verdict]),
+      "Portal and MCP must answer the same conclusions",
     );
   } finally {
     await first.stop();

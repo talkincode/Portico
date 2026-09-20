@@ -1,6 +1,13 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
-import { applyAuditQuery, AuditService, parseAuditQuery } from "../audit/mod.ts";
+import {
+  applyAuditQuery,
+  applyConclusionQuery,
+  AuditService,
+  type ConclusionService,
+  parseAuditQuery,
+  parseConclusionQuery,
+} from "../audit/mod.ts";
 import {
   type Actor,
   type AgentSurface,
@@ -11,14 +18,16 @@ import {
   ErrorCode,
   parseCatalogQuery,
 } from "../catalog/mod.ts";
-import type { GatewayService } from "../gateway/mod.ts";
+import { type GatewayService, listGatewayAudit } from "../gateway/mod.ts";
 import { type PageService } from "../ui/mod.ts";
 import {
   prefersDark,
   type PublicContext,
+  renderApprovalsView,
   renderAuditView,
   renderCatalogView,
   renderContentView,
+  renderPendingView,
   renderPublicArticle,
   renderPublicIndex,
   renderPublicTopic,
@@ -39,6 +48,11 @@ export interface PortalContext {
   access: AccessService;
   gateway?: GatewayService;
   pages?: PageService;
+  /**
+   * Optional auditor security conclusions. The Portal reads them; it never
+   * writes one — the process runs without `--allow-write`.
+   */
+  conclusions?: ConclusionService;
   /**
    * Optional Portal-only Cloudflare Access mapping. Absent means the feature
    * is off: `Cf-Access-Jwt-Assertion` is ignored. CLI / Gateway / MCP must
@@ -104,6 +118,34 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/grants") {
       return jsonOk(await context.access.listGrants(actor));
     }
+    if (url.pathname === "/api/revokes") {
+      return jsonOk(await context.access.listRevokes(actor));
+    }
+    if (url.pathname === "/api/sessions") {
+      return jsonOk(await context.access.listSessions(actor));
+    }
+    if (url.pathname === "/api/credentials") {
+      return jsonOk(await context.access.listCredentials(actor));
+    }
+    if (url.pathname === "/api/credential-revokes") {
+      return jsonOk(await context.access.listCredentialRevokes(actor));
+    }
+    if (url.pathname === "/api/gateway-audit") {
+      return jsonOk(await listGatewayAudit(context.gateway, actor));
+    }
+    if (url.pathname === "/api/conclusions") {
+      if (!context.conclusions) return jsonOk([]);
+      // List first: the role check lives in `ConclusionService.list`, and a
+      // caller who may not read conclusions must not be told that its filter
+      // was malformed. `/api/audit` reads the same way.
+      const records = await context.conclusions.list(actor);
+      const query = parseConclusionQuery({
+        subject: url.searchParams.get("subject") ?? undefined,
+        scope: url.searchParams.get("scope") ?? undefined,
+        verdict: url.searchParams.get("verdict") ?? undefined,
+      });
+      return jsonOk(applyConclusionQuery(records, query));
+    }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));
     }
@@ -137,8 +179,12 @@ export async function handlePortalRequest(
     if (url.pathname === "/" || surfacePage) {
       const query = parseCatalogQuery({ q: url.searchParams.get("q") });
       if (channel) query.channel = channel;
-      const surfaces = applyCatalogQuery(await context.catalog.list(actor), query);
+      const visible = await context.catalog.list(actor);
+      const surfaces = applyCatalogQuery(visible, query);
       const dash = dashboardFrom(surfaces);
+      const pendingPublic = actor.role === "anonymous"
+        ? undefined
+        : visible.filter((surface) => surface.governanceState === "pending_public").length;
       const page = context.pages ? await context.pages.get(actor) : undefined;
       const picks = (page?.components ?? []).flatMap((item) => {
         if (item.kind !== "catalog_card") return [];
@@ -170,6 +216,7 @@ export async function handlePortalRequest(
             picks,
             path: url.pathname,
             showInternal: actor.role !== "anonymous",
+            pendingPublic,
           }));
         } catch (error) {
           if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
@@ -186,6 +233,7 @@ export async function handlePortalRequest(
         picks,
         path: "/",
         showInternal: actor.role !== "anonymous",
+        pendingPublic,
       }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
@@ -306,6 +354,19 @@ async function internalPage(
         filter: { state: state ?? undefined, channel: channel ?? undefined },
       }),
     );
+  }
+
+  if (url.pathname === "/internal/approvals") {
+    const records = await context.catalog.listApprovals(actor);
+    return html(renderApprovalsView({ ctx: base, records }));
+  }
+
+  if (url.pathname === "/internal/pending") {
+    const channel = parseChannel(url.searchParams.get("channel"));
+    const pending = applyCatalogQuery(surfaces, {
+      governanceState: "pending_public",
+    });
+    return html(renderPendingView({ ctx: base, surfaces: pending, channel }));
   }
 
   if (url.pathname === "/internal/audit") {

@@ -34,7 +34,7 @@
 
 ### 0. 列出审批记录 (`catalog approvals`)
 
-公开边界上的通过、拒绝与撤回记录是同一份只读列表。CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 对同一身份返回同一批记录、同一顺序。已登录身份（只读 / 维护者 / 人类审计者）可以看到记录；匿名得到空列表，不泄漏待审或已拒绝入口。这不是写路径：Portal POST 返回 405，读操作不改目录。
+公开边界上的通过、拒绝与撤回记录是同一份只读列表。CLI `catalog approvals`、Portal `GET /api/approvals` 与 MCP `portico_approvals` 对同一身份返回同一批记录、同一顺序。Portal `/internal/approvals` 用同一份列表渲染无脚本 HTML。已登录身份（只读 / 维护者 / 人类审计者）可以看到记录；匿名 API 得到空列表，匿名 HTML 得到 404，都不泄漏待审或已拒绝入口。待审候选在 `/internal/pending`，不出现在审批记录里。待审队列可按渠道（cli / mcp / web）只读筛选，筛选 tab 显示该渠道待审计数，并标明入口种类（url / package / mcp_endpoint），把引用渲染为转义文本，不可点击；批准与驳回仍只走 CLI。这不是写路径：Portal POST 返回 405，读操作不改目录。
 
 ```bash
 deno task cli -- catalog approvals \
@@ -51,12 +51,15 @@ deno task cli -- catalog approve \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
   --session $HUMAN_AUDITOR_SESSION \
-  --id sql-optimizer
+  --id sql-optimizer \
+  --note "Package coordinate reviewed."
 ```
+
+`--note` 可选：最多 500 个字符，不能含控制字符；空白或过长会被 `INVALID_INPUT` 拒绝且不写目录。备注会追加到审批记录上，已登录身份经 CLI `catalog approvals`、Portal `GET /api/approvals`、MCP `portico_approvals` 与 `/internal/approvals` 看到同一条；匿名仍是空列表或 HTML 404。Portal 与 MCP 不能批准，这不是写入口。
 
 **生效结果**：
 - `catalog.json` 中的 `governanceState` 更新为 `approved_public`，`visibility` 更新为 `public`。
-- `approvals.json` 中永久追加一条由该审计者签名的审计记录，包含当时的记录哈希与审批时间戳。
+- `approvals.json` 中永久追加一条由该审计者签名的审计记录，包含当时的记录哈希与审批时间戳，以及可选备注。
 - 外部匿名访客通过浏览器打开 `/public` 即可立即查看到该服务卡片。
 
 ---
@@ -70,12 +73,15 @@ deno task cli -- catalog reject \
   --identities ./data/identities.json \
   --sessions ./data/sessions.json \
   --session $HUMAN_AUDITOR_SESSION \
-  --id sql-optimizer
+  --id sql-optimizer \
+  --note "Entry is not a public documentation site."
 ```
+
+`--note` 规则与批准相同。非法备注或自批不会写入审批记录，公开面仍不可达。
 
 **生效结果**：
 - 状态退回到 `rejected`。
-- `approvals.json` 中记录驳回事件。
+- `approvals.json` 中记录驳回事件（含可选备注）。
 - 公开面保持绝对不可见。维护者可以在修改不合规项后重新提交申请。
 
 ---

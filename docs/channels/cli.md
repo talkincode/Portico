@@ -29,7 +29,9 @@
 
 ## 发现与使用
 
-### CLI 查询
+三入口共用 `listCli`：同一身份看到同一批 `package` 与 `connect.mode=coordinate`，MCP 端点与 Web href 不会出现，匿名只看到已审批公开记录。Portico 不安装、不执行、不下载该包。
+
+### 1. CLI 查询
 ```bash
 deno task cli -- cli list \
   --catalog ./data/catalog.json \
@@ -62,3 +64,11 @@ deno task cli -- cli describe \
 ```
 
 开发人员或 CI 脚本获取到该坐标后，可通过原生包管理器（如 `deno run jsr:@tools/reviewer`）在自己的沙箱环境中执行，Portico 本身绝不参与该工具的下载与执行。
+
+### 2. Portal `GET /api/cli`
+
+与 CLI `cli list`、MCP `portico_cli` 同一载荷。匿名只看到已审批公开记录。这不是安装入口。
+
+### 3. MCP `portico_cli`
+
+与 CLI `cli list`、Portal `GET /api/cli` 同一载荷。匿名只看到已审批公开记录。这不是安装器。

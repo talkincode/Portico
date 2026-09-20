@@ -268,3 +268,89 @@ Deno.test("a failed audit write kills no session; the revocation is not half-app
   const stillValid = await service.login({ id: reader.id, token: issued.token });
   assert(stillValid.token.startsWith("pst1_"));
 });
+
+Deno.test("auditor lists credential-revoke trail; maintainer, reader and anonymous are forbidden", async () => {
+  const { service } = await bootstrapped();
+  const issued = await service.issueCredential(auditor, { id: reader.id });
+  await service.login({ id: reader.id, token: issued.token });
+  const revoked = await service.revokeCredentials(auditor, { id: reader.id });
+
+  const listed = await service.listCredentialRevokes(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].id, revoked.id);
+  assertEquals(listed[0].subjectId, reader.id);
+  assertEquals(listed[0].kind, "human");
+  assertEquals(listed[0].role, "reader");
+  assertEquals(listed[0].revokedBy, { id: auditor.id, kind: "human" });
+  assertEquals(listed[0].revokedAt, revoked.revokedAt);
+  assertEquals(listed[0].credentials, 1);
+  assertEquals(listed[0].sessions, 1);
+  assertEquals(
+    Object.keys(listed[0]).sort(),
+    ["credentials", "id", "kind", "revokedAt", "revokedBy", "role", "sessions", "subjectId"],
+  );
+  assertEquals(Object.keys(listed[0].revokedBy).sort(), ["id", "kind"]);
+
+  await assertRejectsCode(() => service.listCredentialRevokes(maintainer), "FORBIDDEN");
+  await assertRejectsCode(() => service.listCredentialRevokes(reader), "FORBIDDEN");
+  await assertRejectsCode(
+    () => service.listCredentialRevokes(anonymous),
+    "FORBIDDEN",
+  );
+});
+
+Deno.test("listing credential revokes does not rewrite the identity file", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-cred-revoke-list-" });
+  const identities = `${dir}/identities.json`;
+  const sessions = `${dir}/sessions.json`;
+  const service = new AccessService(
+    new FileIdentityStore(identities),
+    new FileSessionStore(sessions),
+  );
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await service.grant(auditor, { id: reader.id, kind: "human", role: "reader" });
+  const issued = await service.issueCredential(auditor, { id: reader.id });
+  await service.login({ id: reader.id, token: issued.token });
+  await service.revokeCredentials(auditor, { id: reader.id });
+  const beforeIdentities = await Deno.readFile(identities);
+  const beforeSessions = await Deno.readFile(sessions);
+
+  const listed = await service.listCredentialRevokes(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(listed[0].subjectId, reader.id);
+  assertEquals(await Deno.readFile(identities), beforeIdentities);
+  assertEquals(await Deno.readFile(sessions), beforeSessions);
+});
+
+Deno.test("credential-revoke trail projection drops unknown fields from disk", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "portico-cred-revoke-projection-" });
+  const identities = `${dir}/identities.json`;
+  const sessions = `${dir}/sessions.json`;
+  const service = new AccessService(
+    new FileIdentityStore(identities),
+    new FileSessionStore(sessions),
+  );
+  await service.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await service.grant(auditor, { id: reader.id, kind: "human", role: "reader" });
+  const issued = await service.issueCredential(auditor, { id: reader.id });
+  await service.login({ id: reader.id, token: issued.token });
+  await service.revokeCredentials(auditor, { id: reader.id });
+
+  const file = JSON.parse(await Deno.readTextFile(identities)) as {
+    credentialRevokes: Array<Record<string, unknown>>;
+  };
+  file.credentialRevokes[0].note = "do-not-leak";
+  file.credentialRevokes[0].token = "literal-secret";
+  await Deno.writeTextFile(identities, JSON.stringify(file));
+
+  const listed = await service.listCredentialRevokes(auditor);
+  assertEquals(listed.length, 1);
+  assertEquals(
+    Object.keys(listed[0]).sort(),
+    ["credentials", "id", "kind", "revokedAt", "revokedBy", "role", "sessions", "subjectId"],
+  );
+  const payload = JSON.stringify(listed);
+  assertEquals(payload.includes("do-not-leak"), false);
+  assertEquals(payload.includes("literal-secret"), false);
+  assertEquals(payload.includes("note"), false);
+});

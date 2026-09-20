@@ -9,6 +9,7 @@
 - Portal 与 MCP 是只读入口，**不得**持有 `--allow-write`。
 - Gateway 的写权限只覆盖审计文件与它的临时兄弟 `gateway-audit.json.tmp`，**不覆盖目录**。`src/fs.ts` 之所以先 `stat` 父目录、只在确实缺失时才 `mkdir`，就是因为 `mkdir` 需要目录写权限，而无条件调用会让每次审计追加都以 `Requires write access to "/app/data"` 失败——上一次把脚本留在服务器上，这个回归就是这样漏到生产上的。
 - 三个入口都拿到同一个 `PORTICO_GATEWAY_AUDIT_PATH`，否则 Portal 与 MCP 的审计时间线会静默缺少 Gateway 访问事件，而 `audit list --audit` 有。
+- Portal 与 MCP 都拿到同一个 `PORTICO_CONCLUSIONS_PATH`，否则 `GET /api/conclusions` / `portico_conclusions` 静默返回空结论，而 `audit conclusions` 有结论。该文件只由 CLI 写（Portal 与 MCP 无写权限），Gateway 不读它，因此不注入。
 
 `tests/deploy_contract_test.ts` 会解析这些脚本并断言上述形状；改脚本而破坏契约会红。
 

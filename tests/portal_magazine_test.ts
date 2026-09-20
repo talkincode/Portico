@@ -676,3 +676,46 @@ Deno.test("signed-in magazine chrome links to /internal without bypassing anonym
   assert(!anonInternalHtml.includes("Docs Writer"));
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
 });
+
+Deno.test("signed-in magazine chrome links the unfiltered pending_public count to the queue", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  const before = JSON.stringify(await context.catalog.list(maintainer));
+
+  const filtered = await handlePortalRequest(
+    new Request("http://portico.local/?q=zzzz-no-match", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(filtered.status, 200);
+  const filteredHtml = await filtered.text();
+  assert(
+    hasHref(filteredHtml, "/internal/pending"),
+    "a signed-in reader must reach the pending queue from magazine chrome",
+  );
+  assert(
+    filteredHtml.includes(">待审 1</a>"),
+    "the chrome count is the actor's pending_public total, not the filtered stream",
+  );
+  assert(
+    !filteredHtml.includes("Docs Writer"),
+    "a miss on q must not dump the pending candidate into the magazine stream",
+  );
+
+  const anon = await handlePortalRequest(new Request("http://portico.local/"), context);
+  assertEquals(anon.status, 200);
+  const anonHtml = await anon.text();
+  assert(
+    !hasHref(anonHtml, "/internal/pending"),
+    "anonymous magazine must not advertise the queue",
+  );
+  assert(!anonHtml.includes(">待审 1</a>"));
+  assert(!anonHtml.includes("Docs Writer"));
+
+  assertEquals(
+    JSON.stringify(await context.catalog.list(maintainer)),
+    before,
+    "reading magazine chrome must not dirty the catalog",
+  );
+});

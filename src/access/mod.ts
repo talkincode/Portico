@@ -21,6 +21,7 @@ export {
 } from "./store.ts";
 export type { IdentityStore, SessionStore } from "./store.ts";
 export type {
+  CredentialAuditView,
   CredentialRecord,
   CredentialRevokeRecord,
   CredentialRevokeResult,
@@ -36,6 +37,7 @@ export type {
   RevokeInput,
   RevokeRecord,
   RevokeResult,
+  SessionAuditView,
   SessionRecord,
   SessionView,
 } from "./types.ts";

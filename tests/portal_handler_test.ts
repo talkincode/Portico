@@ -6,6 +6,7 @@ import {
   MemoryCatalogStore,
   type RegisterInput,
 } from "../src/catalog/mod.ts";
+import { GatewayService, MemoryGatewayAuditStore } from "../src/gateway/mod.ts";
 import { handlePortalRequest } from "../src/portal/mod.ts";
 
 const maintainer: Actor = {
@@ -772,6 +773,359 @@ Deno.test("auditor lists the same grant trail on portal; maintainer, reader and 
   assertEquals(posted.status, 405);
   assertEquals(posted.body.error?.code, "USAGE");
   assertEquals(await context.access.listGrants(auditor), expected);
+});
+
+Deno.test("auditor lists the same session trail on portal; maintainer, reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  const expected = await context.access.listSessions(auditor);
+  assertEquals(expected.length >= 3, true);
+  assertEquals(expected.some((row) => row.subjectId === auditor.id), true);
+  assertEquals(expected.some((row) => row.subjectId === maintainer.id), true);
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/sessions", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "session trail must not leak credential or session secrets",
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/sessions", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/sessions", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/sessions"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/sessions", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.access.listSessions(auditor), expected);
+});
+
+Deno.test("auditor lists the same credential trail on portal; maintainer, reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  const expected = await context.access.listCredentials(auditor);
+  assertEquals(expected.length >= 3, true);
+  assertEquals(expected.some((row) => row.subjectId === auditor.id), true);
+  assertEquals(expected.some((row) => row.subjectId === maintainer.id), true);
+  assertEquals(expected.some((row) => row.subjectId === reader.id), true);
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credentials", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "credential trail must not leak credential or session secrets",
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credentials", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credentials", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/credentials"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credentials", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.access.listCredentials(auditor), expected);
+});
+
+Deno.test("auditor lists the same credential-revoke trail on portal; maintainer, reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  await context.access.grant(auditor, {
+    id: "agent:retired-bot",
+    kind: "agent",
+    role: "maintainer",
+  });
+  await context.access.issueCredential(auditor, { id: "agent:retired-bot" });
+  await context.access.revokeCredentials(auditor, { id: "agent:retired-bot" });
+  const expected = await context.access.listCredentialRevokes(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].subjectId, "agent:retired-bot");
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credential-revokes", {
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "credential-revoke trail must not leak credential or session secrets",
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credential-revokes", {
+        headers: actorHeaders(maintainer),
+      }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credential-revokes", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/credential-revokes"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/credential-revokes", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.access.listCredentialRevokes(auditor), expected);
+});
+
+Deno.test("auditor lists the same gateway audit on portal; maintainer, reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  const gateway = new GatewayService(context.catalog, new MemoryGatewayAuditStore());
+  await context.catalog.register(maintainer, internalMcp());
+  await gateway.authorize(reader, "docs-mcp");
+  const withGateway = { ...context, gateway };
+  const expected = await gateway.listAudit(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].surfaceId, "docs-mcp");
+  assertEquals(expected[0].decision, "allowed");
+  assertEquals(expected[0].endpoint?.value, "https://mcp.example.test/servers/docs");
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/gateway-audit", { headers: actorHeaders(auditor) }),
+      withGateway,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "gateway audit trail must not leak credential or session secrets",
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/gateway-audit", { headers: actorHeaders(maintainer) }),
+      withGateway,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/gateway-audit", { headers: actorHeaders(reader) }),
+      withGateway,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/gateway-audit"), withGateway),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/gateway-audit", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      withGateway,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await gateway.listAudit(auditor), expected);
+
+  const missing = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/gateway-audit", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(missing.status, 200);
+  assertEquals(missing.body.data, []);
+  const missingMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/gateway-audit", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(missingMaintainer.status, 403);
+  assertEquals(missingMaintainer.body.error?.code, "FORBIDDEN");
+});
+
+Deno.test("auditor lists the same revoke trail on portal; maintainer, reader and anonymous cannot", async () => {
+  const context = await seededContext();
+  await context.access.grant(auditor, {
+    id: "agent:retired-bot",
+    kind: "agent",
+    role: "maintainer",
+  });
+  await context.access.revoke(auditor, { id: "agent:retired-bot" });
+  const expected = await context.access.listRevokes(auditor);
+  assertEquals(expected.length, 1);
+  assertEquals(expected[0].subjectId, "agent:retired-bot");
+
+  const asAuditor = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/revokes", { headers: actorHeaders(auditor) }),
+      context,
+    ),
+  );
+  assertEquals(asAuditor.status, 200);
+  assertEquals(asAuditor.body.ok, true);
+  assertEquals(asAuditor.body.data, expected);
+  assertEquals(
+    JSON.stringify(asAuditor.body.data).includes("secretHash") ||
+      JSON.stringify(asAuditor.body.data).includes("tokenHash") ||
+      JSON.stringify(asAuditor.body.data).includes("pct1_") ||
+      JSON.stringify(asAuditor.body.data).includes("pst1_"),
+    false,
+    "revoke trail must not leak credential or session secrets",
+  );
+
+  const asMaintainer = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/revokes", { headers: actorHeaders(maintainer) }),
+      context,
+    ),
+  );
+  assertEquals(asMaintainer.status, 403);
+  assertEquals(asMaintainer.body.error?.code, "FORBIDDEN");
+
+  const asReader = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/revokes", { headers: actorHeaders(reader) }),
+      context,
+    ),
+  );
+  assertEquals(asReader.status, 403);
+  assertEquals(asReader.body.error?.code, "FORBIDDEN");
+
+  const asAnon = await jsonOf(
+    await handlePortalRequest(new Request("http://portico.local/api/revokes"), context),
+  );
+  assertEquals(asAnon.status, 403);
+  assertEquals(asAnon.body.error?.code, "FORBIDDEN");
+
+  const posted = await jsonOf(
+    await handlePortalRequest(
+      new Request("http://portico.local/api/revokes", {
+        method: "POST",
+        headers: actorHeaders(auditor),
+      }),
+      context,
+    ),
+  );
+  assertEquals(posted.status, 405);
+  assertEquals(posted.body.error?.code, "USAGE");
+  assertEquals(await context.access.listRevokes(auditor), expected);
 });
 
 Deno.test("signed-in callers see their own identity on portal whoami; anonymous cannot", async () => {

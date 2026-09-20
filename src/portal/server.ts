@@ -1,5 +1,5 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
-import { AuditService } from "../audit/mod.ts";
+import { AuditService, ConclusionService, FileConclusionStore } from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
@@ -15,6 +15,13 @@ export interface PortalListenOptions {
    * Portal shows the same trail as `audit list --audit` instead of a subset.
    */
   gatewayAuditPath?: string;
+  /**
+   * When set, `GET /api/conclusions` serves the auditor's own security
+   * conclusions, the same records CLI `audit conclusions` and MCP
+   * `portico_conclusions` return. The Portal stays read-only: it can read a
+   * conclusion but never record one.
+   */
+  conclusionsPath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -38,6 +45,9 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
       new AuditService(catalog, access, gateway),
     )
     : undefined;
+  const conclusions = options.conclusionsPath
+    ? new ConclusionService(new FileConclusionStore(options.conclusionsPath), catalog)
+    : undefined;
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
@@ -49,6 +59,7 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
       access,
       gateway,
       pages,
+      conclusions,
       cfAccess: options.cfAccess,
     }));
 }

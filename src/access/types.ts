@@ -123,3 +123,28 @@ export interface SessionRecord {
   expiresAt: string;
   revokedAt?: string;
 }
+
+/**
+ * Auditor-facing session row. Tokens and hashes stay off this projection so
+ * CLI / Portal / MCP cannot disagree about what an audit view may show.
+ */
+export interface SessionAuditView {
+  id: string;
+  subjectId: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt?: string;
+}
+
+/**
+ * Auditor-facing credential row. The one-time token and its hash stay in the
+ * store; this projection is identity, issuer and timestamps only.
+ */
+export interface CredentialAuditView {
+  id: string;
+  subjectId: string;
+  credentialRef: string;
+  issuedBy: MaintainerRef;
+  issuedAt: string;
+  revokedAt?: string;
+}

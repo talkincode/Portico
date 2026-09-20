@@ -40,15 +40,7 @@ export class GatewayService {
   }
 
   async listAudit(actor: Actor): Promise<GatewayAuditRecord[]> {
-    if (!actor || typeof actor !== "object") {
-      throw new CatalogError(ErrorCode.INVALID_INPUT, "actor is required");
-    }
-    if (actor.kind !== "human" || actor.role !== "auditor") {
-      throw new CatalogError(
-        ErrorCode.FORBIDDEN,
-        "only a human auditor may read gateway access audit",
-      );
-    }
+    assertGatewayAuditor(actor);
     const records = await this.audit.list();
     return records.map((record) => structuredClone(record));
   }
@@ -65,6 +57,31 @@ export class GatewayService {
       at: now,
     };
     await this.audit.append(record);
+  }
+}
+
+/**
+ * Portal / MCP share this with CLI `gateway audit`. A missing Gateway
+ * service is an empty trail for an auditor, not a bypass for anyone else.
+ */
+export async function listGatewayAudit(
+  gateway: GatewayService | undefined,
+  actor: Actor,
+): Promise<GatewayAuditRecord[]> {
+  if (gateway) return await gateway.listAudit(actor);
+  assertGatewayAuditor(actor);
+  return [];
+}
+
+function assertGatewayAuditor(actor: Actor): void {
+  if (!actor || typeof actor !== "object") {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "actor is required");
+  }
+  if (actor.kind !== "human" || actor.role !== "auditor") {
+    throw new CatalogError(
+      ErrorCode.FORBIDDEN,
+      "only a human auditor may read gateway access audit",
+    );
   }
 }
 

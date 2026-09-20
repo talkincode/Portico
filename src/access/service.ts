@@ -2,6 +2,7 @@ import { CatalogError, ErrorCode } from "../catalog/errors.ts";
 import type { Actor, ActorKind, ActorRole } from "../catalog/types.ts";
 import type { IdentityStore, SessionStore } from "./store.ts";
 import type {
+  CredentialAuditView,
   CredentialRecord,
   CredentialRevokeRecord,
   CredentialRevokeResult,
@@ -17,6 +18,7 @@ import type {
   RevokeInput,
   RevokeRecord,
   RevokeResult,
+  SessionAuditView,
   SessionRecord,
   SessionView,
 } from "./types.ts";
@@ -247,6 +249,30 @@ export class AccessService {
   }
 
   /**
+   * Login-session trail for a human auditor. Hashes and tokens stay in the
+   * store; this projection is id / subject / timestamps only. Reading does
+   * not rewrite the session file.
+   */
+  async listSessions(actor: Actor): Promise<SessionAuditView[]> {
+    await this.#requireHumanAuditor(actor);
+    const sessions = this.#requireSessions();
+    const records = await sessions.listSessions();
+    return records.map(publicSession);
+  }
+
+  /**
+   * Issued-credential trail for a human auditor. The one-time token and its
+   * hash stay in the store; this projection is id / subject / issuer /
+   * timestamps only. Reading does not rewrite the session file.
+   */
+  async listCredentials(actor: Actor): Promise<CredentialAuditView[]> {
+    await this.#requireHumanAuditor(actor);
+    const sessions = this.#requireSessions();
+    const records = await sessions.listCredentials();
+    return records.map(publicCredential);
+  }
+
+  /**
    * Current proven identity. Anonymous is not an identity. Extra roster
    * fields (email, unknown keys) stay off this projection so CLI / Portal /
    * MCP cannot disagree about who is calling.
@@ -263,16 +289,21 @@ export class AccessService {
     return { id: record.id, kind: record.kind, role: record.role };
   }
 
+  /**
+   * Identity-revoke trail for a human auditor. Extra keys that may sit on
+   * disk stay off this projection so CLI / Portal / MCP cannot disagree
+   * about what an audit view may show. Reading does not rewrite the roster.
+   */
   async listRevokes(actor: Actor): Promise<RevokeRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listRevokes();
-    return records.map((record) => structuredClone(record));
+    return records.map(publicRevoke);
   }
 
   async listCredentialRevokes(actor: Actor): Promise<CredentialRevokeRecord[]> {
     await this.#requireHumanAuditor(actor);
     const records = await this.store.listCredentialRevokes();
-    return records.map((record) => structuredClone(record));
+    return records.map(publicCredentialRevoke);
   }
 
   async resolve(claimed: Actor): Promise<Actor> {
@@ -684,6 +715,53 @@ function publicGrant(record: GrantRecord): GrantRecord {
     grantedBy: { id: record.grantedBy.id, kind: record.grantedBy.kind },
     grantedAt: record.grantedAt,
   };
+}
+
+function publicRevoke(record: RevokeRecord): RevokeRecord {
+  return {
+    id: record.id,
+    subjectId: record.subjectId,
+    kind: record.kind,
+    role: record.role,
+    revokedBy: { id: record.revokedBy.id, kind: record.revokedBy.kind },
+    revokedAt: record.revokedAt,
+  };
+}
+
+function publicCredentialRevoke(record: CredentialRevokeRecord): CredentialRevokeRecord {
+  return {
+    id: record.id,
+    subjectId: record.subjectId,
+    kind: record.kind,
+    role: record.role,
+    revokedBy: { id: record.revokedBy.id, kind: record.revokedBy.kind },
+    revokedAt: record.revokedAt,
+    credentials: record.credentials,
+    sessions: record.sessions,
+  };
+}
+
+function publicSession(record: SessionRecord): SessionAuditView {
+  const view: SessionAuditView = {
+    id: record.id,
+    subjectId: record.subjectId,
+    createdAt: record.createdAt,
+    expiresAt: record.expiresAt,
+  };
+  if (record.revokedAt) view.revokedAt = record.revokedAt;
+  return view;
+}
+
+function publicCredential(record: CredentialRecord): CredentialAuditView {
+  const view: CredentialAuditView = {
+    id: record.id,
+    subjectId: record.subjectId,
+    credentialRef: record.credentialRef,
+    issuedBy: { id: record.issuedBy.id, kind: record.issuedBy.kind },
+    issuedAt: record.issuedAt,
+  };
+  if (record.revokedAt) view.revokedAt = record.revokedAt;
+  return view;
 }
 
 function assertClaimedActor(actor: Actor): void {
