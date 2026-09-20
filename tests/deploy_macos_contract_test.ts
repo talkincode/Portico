@@ -277,25 +277,31 @@ Deno.test("deploy macos: verify honours a pinned revision", async () => {
 
     // The probes hit 127.0.0.1 and the public site, so they fail in a bare
     // environment; only the revision lines are asserted here.
+    //
+    // Executed through its own shebang, the way the runbook runs it: `sh`
+    // here would be dash on some hosts and the gate is a bash script.
     const run = async (expected?: string) => {
       const env: Record<string, string> = {
         PATH: Deno.env.get("PATH") ?? "",
         PORTICO_DEPLOY_TREE: dir,
       };
       if (expected !== undefined) env.PORTICO_EXPECT_SHA = expected;
-      const out = await new Deno.Command("sh", {
-        args: [`${ROOT}deploy/macos/verify.sh`],
+      const out = await new Deno.Command(`${ROOT}deploy/macos/verify.sh`, {
         env,
         stdout: "piped",
         stderr: "piped",
       }).output();
-      return { out: decoder.decode(out.stdout), code: out.code };
+      return {
+        out: decoder.decode(out.stdout),
+        err: decoder.decode(out.stderr),
+        code: out.code,
+      };
     };
 
     const pinned = await run(sha);
     assert(
       pinned.out.includes("ok checkout-revision"),
-      `a matching pin must confirm the revision it was given, got: ${pinned.out}`,
+      `a matching pin must confirm the revision it was given, got: ${pinned.out} ${pinned.err}`,
     );
 
     // The probes cannot pass in a bare environment, so the exit status here is
@@ -303,7 +309,7 @@ Deno.test("deploy macos: verify honours a pinned revision", async () => {
     const mismatch = await run("0".repeat(40));
     assert(
       mismatch.out.startsWith("FAIL checkout-revision"),
-      `a mismatched pin must fail first and loudly, got: ${mismatch.out}`,
+      `a mismatched pin must fail first and loudly, got: ${mismatch.out} ${mismatch.err}`,
     );
     assert(mismatch.code !== 0, "a mismatched pin must not exit clean");
     assert(
