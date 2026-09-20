@@ -11,6 +11,12 @@
   <array>
     <string>/Users/example/portico/run-cloudflared.sh</string>
   </array>
+  <!-- Host egress IP comes from render.sh (PORTICO_EDGE_BIND), never baked here. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORTICO_EDGE_BIND</key>
+    <string>EDGE_BIND_IP</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

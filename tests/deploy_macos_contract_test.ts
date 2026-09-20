@@ -32,6 +32,9 @@ Deno.test("deploy macos: template keeps the live host out of the repo", async ()
       "deploy/macos/run.sh",
       "deploy/macos/run-cloudflared.sh",
       "deploy/macos/config.yml",
+      "deploy/macos/render.sh",
+      "deploy/macos/verify.sh",
+      "deploy/macos/portico.env.example",
       "deploy/macos/net.portico.macstudio.plist",
       "deploy/macos/net.portico.cloudflared.plist",
     ]
@@ -47,12 +50,12 @@ Deno.test("deploy macos: template keeps the live host out of the repo", async ()
   }
 });
 
-Deno.test("deploy macos: tunnel client pins update and addressing policy", async () => {
-  const source = (await text("deploy/macos/run-cloudflared.sh")).replaceAll("\\\n", " ");
+Deno.test("deploy macos: tunnel client pins update and addressing policy", async () => {  const source = (await text("deploy/macos/run-cloudflared.sh")).replaceAll("\\\n", " ");
   assert(source.includes("--config"), "tunnel client must run from the versioned ingress file");
   assert(source.includes("--no-autoupdate"), "tunnel client must not self-update under launchd");
   assert(source.includes("--edge-ip-version 4"), "tunnel client must pin IPv4 egress like mira");
   assert(source.includes("PORTICO_EDGE_BIND"), "edge bind address must come from host env");
+  assert(!source.includes("TUNNEL_TOKEN") && !source.includes("cloudflared.token"), "token mode is gone; config mode only");
   assert(
     !source.includes("TUNNEL_TOKEN") && !source.includes("cloudflared.token"),
     "tunnel client must use the credentials file from config.yml, not a token file",
@@ -81,6 +84,34 @@ Deno.test("deploy macos: ingress exposes only the portal with a catch-all", asyn
       .test(source),
     "config template must not embed an RFC1918 address",
   );
+});
+
+Deno.test("deploy macos: render is a closed function of repo plus host values", async () => {
+  const source = await text("deploy/macos/render.sh");
+  for (const required of ["PORTICO_HOME", "PORTICO_TUNNEL_ID", "PORTICO_EDGE_BIND", "PORTICO_USER"]) {
+    assert(source.includes(required), `render.sh must require ${required}`);
+  }
+  assert(source.includes("TUNNEL_ID"), "render.sh must fill the tunnel id");
+  assert(source.includes("EDGE_BIND_IP"), "render.sh must fill the egress ip");
+  assert(source.includes("<string>example</string>"), "render.sh must fill the daemon user");
+  assert(source.includes("portico.env.example"), "render.sh must seed env from the example");
+  assert(source.includes("ingress validate"), "render.sh must validate ingress on the host");
+});
+
+Deno.test("deploy macos: env example carries all four processes", async () => {
+  const source = await text("deploy/macos/portico.env.example");
+  for (const key of ["PORTICO_BIND", "PORTICO_DATA_DIR", "PORTICO_PORT", "PORTICO_GATEWAY_PORT", "PORTICO_MCP_PORT", "PORTICO_REVIEW_PORT"]) {
+    assert(new RegExp(`^${key}=`, "m").test(source), `env example must set ${key}`);
+  }
+  assert(!/pct1_|pst1_|eyJ[A-Za-z0-9_-]{10,}/.test(source), "env example must not carry secrets");
+});
+
+Deno.test("deploy macos: verify gates local and public without writes", async () => {
+  const source = await text("deploy/macos/verify.sh");
+  for (const probe of ["127.0.0.1:8788", "127.0.0.1:8791", "portico.talkincode.net/public", "portico.talkincode.net/review/login", "/internal"]) {
+    assert(source.includes(probe), `verify.sh must probe ${probe}`);
+  }
+  assert(source.includes("exit \"$fail\""), "verify.sh must fail loudly");
 });
 
 Deno.test("deploy macos: daemons mirror the mira shape", async () => {

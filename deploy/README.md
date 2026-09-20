@@ -57,27 +57,28 @@ OAuth 与登录证书两种 CLI 鉴权（`10405` / 认证失败），只能走�
 （`ingress validate` / `ingress rule` 可机检验），代价是 ingress 住在主机
 文件里而不是仪表盘。
 
-现场步骤（`~/portico` 下已有 `app` 检出、`data`、`logs`、`bin/cloudflared`）：
-
-1. `cloudflared tunnel create portico-macstudio`，把 `~/.cloudflared/<id>.json`
-   移到 `~/portico/portico-macstudio.json`（`chmod 600`，原路径删干净，
-   不出仓库）。
-2. `cloudflared tunnel route dns [--overwrite-dns] <id> portico.talkincode.net`。
-3. 按模板写好 `config.yml`（填真实隧道 id），`ingress validate` 与
-   `ingress rule https://portico.talkincode.net/review`、
-   `ingress rule https://portico.talkincode.net/public` 三检通过。
-4. 按模板写好 `run.sh` / `portico.env` / `run-cloudflared.sh`（`plutil -lint`
-   校验 plist），先手动各起一次验证三个本地端口，再：
+现场 runbook（幂等，可重复执行收敛主机到仓库）：
 
 ```sh
-sudo cp net.portico.macstudio.plist net.portico.cloudflared.plist /Library/LaunchDaemons/
-sudo launchctl bootstrap system /Library/LaunchDaemons/net.portico.macstudio.plist
-sudo launchctl bootstrap system /Library/LaunchDaemons/net.portico.cloudflared.plist
+cd ~/portico/app && git pull --ff-only origin main
+PORTICO_HOME=~/portico PORTICO_TUNNEL_ID=<uuid> \
+  PORTICO_EDGE_BIND=<本机出口 ip> PORTICO_USER=<本机用户名> \
+  ./deploy/macos/render.sh
+sudo cp ~/portico/net.portico.*.plist /Library/LaunchDaemons/
+sudo launchctl kickstart -k system/net.portico.macstudio
+sudo launchctl kickstart -k system/net.portico.cloudflared
+./deploy/macos/verify.sh
 ```
 
-5. 空库首次只给匿名视图（fail-closed），按上节“首次凭证引导”建首位人类
-   审计者，再由其 `grant agent:<name> --kind agent --role maintainer` 给
-   Agent 建维护身份；mira 的凭证在联调时再签发，避免提前签发的密钥闲置。
+`render.sh` 是无 sudo 的确定性渲染：模板里的 `/Users/example`、
+`TUNNEL_ID`、`EDGE_BIND_IP`、daemon 用户全部来自上述四个变量；
+`portico.env` 只在首次不存在时从示例创建，之后永不覆盖；渲染后自动
+`bash -n`、`plutil -lint` 与 `ingress validate`。`verify.sh` 只读探四
+个本地端口与两个公网地址，任一失败即非零退出。首次建隧道仍是三条 CLI：
+`cloudflared tunnel create` → `route dns` → 填 `PORTICO_TUNNEL_ID` 重跑
+`render.sh`。首次 bootstrap（空库只给匿名视图）见下节“首次凭证引导”：
+建首位人类审计者，再由其 `grant agent:<name> --kind agent --role maintainer`
+给 Agent 建维护身份；mira 的凭证在联调时再签发，避免提前签发的密钥闲置。
 
 ## 首次凭证引导
 
