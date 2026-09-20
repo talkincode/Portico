@@ -146,13 +146,16 @@ function htmlResponse(body: string, status = 200): Response {
 function portalStub(options: StubOptions): (request: Request) => Response {
   return (request) => {
     const { pathname } = new URL(request.url);
-    if (pathname === "/api/catalog") return jsonResponse({ ok: true, data: [] });
+    // The real Portal rejects a non-GET before it routes, so the read-only gate
+    // (POST /api/catalog => 405) must be answered here too. Serving the catalog
+    // first would make this stub claim a writable Portal and fail the gate.
     if (request.method !== "GET") {
       return jsonResponse(
         { ok: false, error: { code: "USAGE", message: "method not allowed" } },
         405,
       );
     }
+    if (pathname === "/api/catalog") return jsonResponse({ ok: true, data: [] });
     if (pathname === "/") {
       return htmlResponse(options.errorPage ? ERROR_PAGE : PRODUCT_PAGE);
     }
