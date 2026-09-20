@@ -68,9 +68,11 @@ function renderPublicPage(input: PublicShellInput): string {
   }>报告</a>
         </nav>
         <div class="pub-masthead__tools">
-          ${ctx.actor.role === "anonymous"
-    ? `<a class="pub-nav__link" href="/review/login">审核登录</a>`
-    : `<a class="pub-nav__link" href="/review">去审核</a>`}
+          ${
+    ctx.actor.role === "anonymous"
+      ? `<a class="pub-nav__link" href="/review/login">审核登录</a>`
+      : `<a class="pub-nav__link" href="/review">去审核</a>`
+  }
           <span class="tk-search" aria-hidden="true">
             <span>⌕</span><span>搜索文章、专题或关键词</span>
             <kbd class="tk-search__key">/</kbd>

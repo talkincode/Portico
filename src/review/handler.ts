@@ -356,7 +356,10 @@ function renderLoginPage(request: Request, githubEnabled: boolean): string {
   const github = githubEnabled
     ? `<a class="rv-github" href="/review/oauth/start">使用 GitHub 登录</a><div class="rv-div"><span>或一次性凭证</span></div>`
     : "";
-  return shell(request, "审核登录", `  <main class="rv-wrap">
+  return shell(
+    request,
+    "审核登录",
+    `  <main class="rv-wrap">
     <div class="tk-panel rv-card">
       <p class="tk-meta">PORTICO · 人工审核</p>
       <h1>审核登录</h1>
@@ -368,30 +371,41 @@ function renderLoginPage(request: Request, githubEnabled: boolean): string {
       </form>
       <p class="tk-note" style="margin-top:16px">仅 allowlisted 账号可登录；能审批什么由名册决定。</p>
     </div>
-  </main>`);
-}
-
-function escape(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
+  </main>`,
   );
 }
+
 function renderReviewPage(
   request: Request,
   actor: Actor,
   records: AgentSurface[],
 ): string {
   const rows = records.map((record) =>
-    `<tr><td><strong>${escape(record.name)}</strong><br><span class="tk-id">${escape(record.id)}</span></td><td><span class="tk-meta">${escape(record.version ?? "—")}</span></td><td><span class="tk-meta">${escape(record.publicSubmission?.submittedBy.id ?? "—")}</span></td><td>${stateChip(record.governanceState)}</td><td class="rv-table"><form method="post" action="/review/approve"><input type="hidden" name="id" value="${escape(record.id)}"><button class="tk-btn tk-btn--accent" type="submit">通过</button></form><form method="post" action="/review/reject"><input type="hidden" name="id" value="${escape(record.id)}"><button class="tk-btn" type="submit">驳回</button></form></td></tr>`
+    `<tr><td><strong>${esc(record.name)}</strong><br><span class="tk-id">${
+      esc(record.id)
+    }</span></td><td><span class="tk-meta">${
+      esc(record.version ?? "—")
+    }</span></td><td><span class="tk-meta">${
+      esc(record.publicSubmission?.submittedBy.id ?? "—")
+    }</span></td><td>${
+      stateChip(record.governanceState)
+    }</td><td class="rv-table"><form method="post" action="/review/approve"><input type="hidden" name="id" value="${
+      esc(record.id)
+    }"><button class="tk-btn tk-btn--accent" type="submit">通过</button></form><form method="post" action="/review/reject"><input type="hidden" name="id" value="${
+      esc(record.id)
+    }"><button class="tk-btn" type="submit">驳回</button></form></td></tr>`
   ).join("");
   const table = records.length === 0
     ? `<p class="rv-empty">暂无待审公开候选。</p>`
     : `<div class="tk-panel"><table class="tk-table"><thead><tr><th>名称</th><th>版本</th><th>提交者</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  return shell(request, "人工审核", `  <main class="rv-main">
+  return shell(
+    request,
+    "人工审核",
+    `  <main class="rv-main">
     <p class="tk-meta">PORTICO · 人工审核</p>
     <h1>待审公开</h1>
-    <p class="tk-meta">登录身份：${escape(actor.id)} · 提交者不能审批自己的候选</p>
+    <p class="tk-meta">登录身份：${esc(actor.id)} · 提交者不能审批自己的候选</p>
     ${table}
-  </main>`);
+  </main>`,
+  );
 }

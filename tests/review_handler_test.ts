@@ -1,4 +1,4 @@
-import { assertEquals } from "./assert.ts";
+import { assert, assertEquals } from "./assert.ts";
 import { handleReviewRequest } from "../src/review/handler.ts";
 import { isAllowedGithubUser, parseAllowlist, parseGithubEnv } from "../src/review/github.ts";
 
@@ -158,6 +158,42 @@ Deno.test("review POST routes approve and reject and GET is HTML", async () => {
   assertEquals((await page.text()).includes("人工审核"), true);
 });
 
+Deno.test("review page escapes untrusted candidate text for the auditor", async () => {
+  const hostile = {
+    id: "<img src=x onerror=1>",
+    name: "<script>alert(1)</script>",
+    governanceState: "pending_public",
+    publicSubmission: { submittedBy: { id: "<svg/onload=2>" } },
+  };
+  const state = {
+    catalog: { list: () => Promise.resolve([hostile]) },
+    access: {
+      resolveSession: () =>
+        Promise.resolve({ id: "<b>auditor</b>", kind: "human", role: "auditor" }),
+    },
+  };
+  const page = await handleReviewRequest(
+    request("/review", { headers: { "x-portico-session": "s" } }),
+    state as never,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  for (
+    const raw of [
+      "<script>alert(1)</script>",
+      "<img src=x onerror=1>",
+      "<svg/onload=2>",
+      "<b>auditor</b>",
+    ]
+  ) {
+    assert(!html.includes(raw), `raw markup must not appear: ${raw}`);
+  }
+  assert(
+    html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"),
+    "the candidate name must be escaped as text",
+  );
+});
+
 Deno.test("review github login is allowlisted and mints a session for the roster human", async () => {
   const auditor = { id: "human:auditor", kind: "human", role: "auditor" } as const;
   const sessions: string[] = [];
@@ -287,14 +323,23 @@ Deno.test("review login page uses the console shell with a github button when co
   const base = { catalog: {}, access: {} };
   const withGithub = await handleReviewRequest(
     new Request("http://127.0.0.1/review/login"),
-    { ...base, github: { config: { allowlist: ["jamiesun"] }, exchange: () => Promise.reject(new Error("x")) } } as never,
+    {
+      ...base,
+      github: {
+        config: { allowlist: ["jamiesun"] },
+        exchange: () => Promise.reject(new Error("x")),
+      },
+    } as never,
   );
   assertEquals(withGithub.status, 200);
   const withHtml = await withGithub.text();
   assertEquals(withHtml.includes("使用 GitHub 登录"), true);
   assertEquals(withHtml.includes("/review/oauth/start"), true);
   assertEquals(withHtml.includes("一次性凭证"), true);
-  const plain = await handleReviewRequest(new Request("http://127.0.0.1/review/login"), base as never);
+  const plain = await handleReviewRequest(
+    new Request("http://127.0.0.1/review/login"),
+    base as never,
+  );
   const plainHtml = await plain.text();
   assertEquals(plainHtml.includes("/review/oauth/start"), false);
   assertEquals(plainHtml.includes("一次性凭证"), true);
