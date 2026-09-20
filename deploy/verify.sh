@@ -15,7 +15,11 @@
 # so a deploy either proves itself or says which promise it broke.
 #
 # Environment (all optional):
-#   PORTICO_DEPLOY_BIND        listen address of the entrances (default 127.0.0.1)
+#   PORTICO_DEPLOY_BIND        address the entrances serve on, when the
+#                              deployment injects one (systemd drop-in /
+#                              EnvironmentFile). Unset means the gate reads it
+#                              from the listeners and refuses to guess when a
+#                              port has two of them.
 #   PORTICO_DEPLOY_PORTAL_PORT Portal port (default 8788)
 #   PORTICO_DEPLOY_GATEWAY_PORT Gateway port (default 8789)
 #   PORTICO_DEPLOY_MCP_PORT    MCP port (default 8790)
@@ -27,15 +31,11 @@
 #                              absolute origin the Portal links to
 set -uo pipefail
 
-BIND="${PORTICO_DEPLOY_BIND:-127.0.0.1}"
+BIND="${PORTICO_DEPLOY_BIND:-}"
 PORTAL_PORT="${PORTICO_DEPLOY_PORTAL_PORT:-8788}"
 GATEWAY_PORT="${PORTICO_DEPLOY_GATEWAY_PORT:-8789}"
 MCP_PORT="${PORTICO_DEPLOY_MCP_PORT:-8790}"
 TREE="${PORTICO_DEPLOY_TREE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-
-PORTAL="http://${BIND}:${PORTAL_PORT}"
-GATEWAY="http://${BIND}:${GATEWAY_PORT}"
-MCP="http://${BIND}:${MCP_PORT}"
 
 fail=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -62,8 +62,124 @@ expect_status() { # name url want [curl args...]
 
 contains() { printf '%s' "$1" | grep -qF -- "$2"; }
 
+# --- which address each entrance serves on ---------------------------------
+
+# `localhost` and `127.0.0.1` are the same entrance to curl, and IPv6 prints
+# its own brackets: comparing the two literally would call a working deployment
+# broken.
+same_address() {
+  local a b
+  a="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  b="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+  [ "$a" = "$b" ] && return 0
+  case "${a}/${b}" in
+    localhost/127.0.0.1 | 127.0.0.1/localhost) return 0 ;;
+    localhost/::1 | ::1/localhost) return 0 ;;
+  esac
+  return 1
+}
+
+is_wildcard() {
+  case "$1" in 0.0.0.0 | '*' | ::) return 0 ;; esac
+  return 1
+}
+
+# A wildcard entrance answers on every interface including the loopback, which
+# is the address this gate can always reach.
+probe_host() {
+  if is_wildcard "$1"; then printf '127.0.0.1\n'; else printf '%s\n' "$1"; fi
+}
+
+# Every address a port listens on, one per line. Reading the whole table rather
+# than the first matching row keeps a second listener on the same port visible
+# instead of hidden behind it.
+listener_addresses() { # port
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | awk '$1 == "LISTEN" { print $4 }'
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk '/\(LISTEN\)/ { print $(NF - 1) }'
+  fi | sed -n "s/^\(.*\):$1\$/\1/p" | sed 's/^\[\(.*\)\]$/\1/' | sort -u
+}
+
+SERVES_portal=""; SERVES_gateway=""; SERVES_mcp=""
+VERIFY_portal=""; VERIFY_gateway=""; VERIFY_mcp=""
+address_problems=""
+wildcard_ports=""
+
+# The address an entrance serves on is a property of the deployment — the run
+# scripts read it from the environment and the units inject it — so a gate that
+# assumes the loopback default reports a healthy deployment as ten broken
+# promises, all of them about its own guess. Read the address from the
+# deployment instead, and when the port alone cannot say which process serves
+# it, refuse to guess.
+for entry in "portal:${PORTAL_PORT}" "gateway:${GATEWAY_PORT}" "mcp:${MCP_PORT}"; do
+  name="${entry%%:*}"
+  port="${entry##*:}"
+  listeners="$(listener_addresses "$port")"
+  count=$(printf '%s' "$listeners" | grep -c . || true)
+  problem=""
+  if [ "$count" = "0" ]; then
+    served="${BIND:-127.0.0.1}"
+    if [ -n "$BIND" ]; then
+      problem="the ${name} port ${port} has nothing listening on it, and PORTICO_DEPLOY_BIND=${BIND} is declared"
+    else
+      problem="nothing is listening on the ${name} port ${port}"
+    fi
+  elif [ "$count" = "1" ] && { [ -z "$BIND" ] || same_address "$listeners" "$BIND"; }; then
+    served="${BIND:-$listeners}"
+  elif [ "$count" != "1" ]; then
+    listing="$(printf '%s' "$listeners" | tr '\n' ' ')"
+    if [ -n "$BIND" ]; then
+      served="$BIND"
+      problem="two addresses listen on the ${name} port ${port} (${listing% }), so PORTICO_DEPLOY_BIND=${BIND} cannot say which one this deployment serves"
+    else
+      served="$(printf '%s' "$listeners" | grep -vxE '0\.0\.0\.0|::|\*' | head -n 1)"
+      [ -n "$served" ] || served="$(printf '%s' "$listeners" | head -n 1)"
+      problem="two addresses listen on the ${name} port ${port} (${listing% }); declare PORTICO_DEPLOY_BIND so the gate knows which one this deployment serves"
+    fi
+  else
+    # The declared address is the entrance this deployment claims. Probing the
+    # address that does answer instead would verify somebody else's process and
+    # quietly pass the checks the declared entrance just failed.
+    served="$BIND"
+    problem="PORTICO_DEPLOY_BIND=${BIND} is declared, but the entrance on the ${name} port ${port} answers on ${listeners}"
+  fi
+  printf -v "SERVES_${name}" '%s' "$served"
+  printf -v "VERIFY_${name}" '%s' "$(probe_host "$served")"
+  [ -n "$problem" ] && address_problems="${address_problems}${problem}
+"
+  printf '%s' "$listeners" | grep -qxE '0\.0\.0\.0|::|\*' &&
+    wildcard_ports="${wildcard_ports}${name}:${port} "
+done
+
+PORTAL="http://${VERIFY_portal}:${PORTAL_PORT}"
+GATEWAY="http://${VERIFY_gateway}:${GATEWAY_PORT}"
+MCP="http://${VERIFY_mcp}:${MCP_PORT}"
+
 printf 'Portico deployment gate: portal=%s gateway=%s mcp=%s tree=%s\n' \
   "$PORTAL" "$GATEWAY" "$MCP" "$TREE"
+
+# Which address is serving has to be answered before anything is probed: the
+# behaviour checks below are only as honest as the address they were pointed at.
+if [ -n "$address_problems" ]; then
+  while IFS= read -r problem; do
+    [ -n "$problem" ] && bad entrance-address "$problem"
+  done <<EOF
+${address_problems}
+EOF
+elif [ -n "$BIND" ]; then
+  ok "entrance-address portal=${SERVES_portal}:${PORTAL_PORT} gateway=${SERVES_gateway}:${GATEWAY_PORT} mcp=${SERVES_mcp}:${MCP_PORT} (declared PORTICO_DEPLOY_BIND=${BIND})"
+else
+  ok "entrance-address portal=${SERVES_portal}:${PORTAL_PORT} gateway=${SERVES_gateway}:${GATEWAY_PORT} mcp=${SERVES_mcp}:${MCP_PORT} (discovered from the listeners)"
+fi
+
+# A wildcard entrance is reachable from every network the host is on. The
+# scripts cannot say `0.0.0.0`, but only the host can show what is running.
+if [ -n "$wildcard_ports" ]; then
+  bad entrance-not-all-interfaces "an entrance bound to every interface (${wildcard_ports% }) is not bound to the address this deployment serves"
+else
+  ok entrance-not-all-interfaces
+fi
 
 # The product page, not an error page. The live Portal answers a 404 with the
 # same `<title>Portico · Portico</title>` and the same shell, so a title check
@@ -144,14 +260,35 @@ touch_stamp() {
   printf '%s%s%s%s.%s\n' "$5" "$month" "$3" "${hhmm/:/}" "${4##*:}"
 }
 
-listener_pid() { # port
-  local pid=""
+# The pid behind one entrance. Matching the address as well as the port keeps a
+# second listener on the same port from being measured in place of the one this
+# deployment serves; a wildcard row owns the port rather than one address on
+# it, so it is the fallback.
+listener_pid() { # port [address]
+  local port="$1" want="${2:-}" pid=""
   if command -v ss >/dev/null 2>&1; then
-    pid=$(ss -ltnp 2>/dev/null | grep -F ":$1 " |
-      sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1)
+    pid=$(ss -ltnp 2>/dev/null | awk -v port="$port" -v want="$want" '
+      $1 == "LISTEN" && $4 ~ (":" port "$") {
+        address = $4
+        sub(":" port "$", "", address)
+        gsub(/^\[|\]$/, "", address)
+        if (address == want) exact = $0
+        else if (address == "0.0.0.0" || address == "::" || address == "*") every = $0
+      }
+      END {
+        row = (exact != "" ? exact : every)
+        if (row ~ /pid=/) {
+          sub(/.*pid=/, "", row)
+          sub(/[^0-9].*/, "", row)
+          print row
+        }
+      }')
+  fi
+  if [ -z "$pid" ] && [ -n "$want" ] && command -v lsof >/dev/null 2>&1; then
+    pid=$(lsof -nP -i@"${want}":"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1)
   fi
   if [ -z "$pid" ] && command -v lsof >/dev/null 2>&1; then
-    pid=$(lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -n 1)
+    pid=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1)
   fi
   printf '%s' "$pid"
 }
@@ -160,7 +297,7 @@ listener_pid() { # port
 # revision answering on the same ports. Comparing each listener's start time
 # against the tree it serves is what separates the two.
 check_running_code_is_current() {
-  local anchor stale=0 unknown=0 entry name port pid start stamp newest
+  local anchor stale=0 unknown=0 entry name port pid start stamp newest wanted
   if [ ! -d "$TREE/src" ]; then
     bad running-code-not-stale "no source tree at $TREE/src to compare against"
     return
@@ -172,7 +309,8 @@ check_running_code_is_current() {
   for entry in "portal:${PORTAL_PORT}" "gateway:${GATEWAY_PORT}" "mcp:${MCP_PORT}"; do
     name="${entry%%:*}"
     port="${entry##*:}"
-    pid=$(listener_pid "$port")
+    wanted="VERIFY_${name}"
+    pid=$(listener_pid "$port" "${!wanted}")
     if [ -z "$pid" ]; then
       unknown=1
       printf '     %s: nothing listening on port %s\n' "$name" "$port"

@@ -53,13 +53,15 @@ PORTICO_EXPECT_SHA=$(git rev-parse origin/main) ./deploy/verify.sh
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `PORTICO_DEPLOY_BIND` | `127.0.0.1` | 与 `run-*.sh` 同一个监听地址；内网实地用 drop-in / `EnvironmentFile` 注入，不要写进仓库 |
+| `PORTICO_DEPLOY_BIND` | 不设 | 与 `run-*.sh` 同一个监听地址；内网实地用 drop-in / `EnvironmentFile` 注入，不要写进仓库。不设时门禁从监听表读地址；同一端口有两个监听地址就 FAIL，不猜 |
 | `PORTICO_DEPLOY_PORTAL_PORT` / `PORTICO_DEPLOY_GATEWAY_PORT` / `PORTICO_DEPLOY_MCP_PORT` | 8788 / 8789 / 8790 | 三个入口的端口 |
 | `PORTICO_DEPLOY_TREE` | 脚本的上一级 | 入口所服务的检出；用来判断监听进程是否比代码旧 |
 | `PORTICO_EXPECT_SHA` | 不设 | 钉住检出修订；不设时该条报 `skip`，不冒充通过 |
 | `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 与 `run-portal.sh` 同一个声明；门禁据此判断产品页有没有挂出本部署不提供的审核入口 |
 
-它分开检查的三件事各自都像成功：端口有回答、页面有标题、进程还在跑。发现页与 404 壳共用同一个 `<title>`，所以门禁按发现壳的结构标记判断，而不是只看状态码。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。
+它分开检查的四件事各自都像成功：端口有回答、地址是部署声明的那个、页面有标题、进程还在跑。发现页与 404 壳共用同一个 `<title>`，所以门禁按发现壳的结构标记判断，而不是只看状态码。
+
+`entrance-address` 与 `entrance-not-all-interfaces` 先把「验证的是哪个地址」说清楚。内网部署把入口绑到单播地址（既不是回环，也不是 `0.0.0.0`），门禁必须按同一个地址验证：地址来自 `PORTICO_DEPLOY_BIND`，没声明时来自监听表里唯一的那个地址，端口上有两个地址时 FAIL 并点名，绝不用回环默认值去替一份健康的内网部署宣布失败。同理，只按端口取进程会让同端口上的遗留入口冒充正在服务的那个，所以进程时间这条也按地址匹配。绑定到所有接口的入口只有在主机上才看得见，因此这条也只能在主机上判。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。
 
 # macOS（macstudio，LaunchDaemon）
 
