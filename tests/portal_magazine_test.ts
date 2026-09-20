@@ -719,3 +719,36 @@ Deno.test("signed-in magazine chrome links the unfiltered pending_public count t
     "reading magazine chrome must not dirty the catalog",
   );
 });
+
+Deno.test("one-click review entry: anonymous shells link login, signed-in shells link review", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const anonMag = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const anonMagHtml = await anonMag.text();
+  assert(anonMagHtml.includes('href="/review/login"'));
+  assert(!anonMagHtml.includes('href="/review"'));
+
+  const readerMag = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  const readerMagHtml = await readerMag.text();
+  assert(readerMagHtml.includes('href="/review"'));
+  assert(!readerMagHtml.includes('href="/review/login"'));
+
+  const anonPublic = await handlePortalRequest(new Request("http://portico.local/public"), context);
+  const anonPublicHtml = await anonPublic.text();
+  assert(anonPublicHtml.includes('href="/review/login"'));
+
+  const auditorInternal = await handlePortalRequest(
+    new Request("http://portico.local/internal", { headers: actorHeaders(auditor) }),
+    context,
+  );
+  assert((await auditorInternal.text()).includes('href="/review"'));
+  const readerInternal = await handlePortalRequest(
+    new Request("http://portico.local/internal", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assert(!(await readerInternal.text()).includes('href="/review"'));
+});

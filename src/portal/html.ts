@@ -985,6 +985,11 @@ function renderChrome(input: {
   const pendingLink = input.showInternal === true && input.pendingPublic !== undefined
     ? `\n        <a class="" href="/internal/pending">待审 ${input.pendingPublic}</a>`
     : "";
+  // One-click human path: anonymous callers get the login entry, signed-in
+  // callers jump straight to the pending list. Neither leaks /internal.
+  const reviewLink = input.showInternal === true
+    ? `\n        <a class="" href="/review">去审核</a>`
+    : `\n        <a class="" href="/review/login">审核登录</a>`;
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>
@@ -1007,7 +1012,7 @@ function renderChrome(input: {
       <nav class="nav">
         <a class="${contentActive.trim()}" href="${escapeHtml(contentHref)}">内容</a>
         <a class="${topicActive.trim()}" href="${escapeHtml(topicHref)}">专题</a>
-        <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}
+        <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}${reviewLink}
         <span aria-disabled="true">收藏</span>
       </nav>
       <div class="topbar-right">

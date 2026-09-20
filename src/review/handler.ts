@@ -56,7 +56,16 @@ export async function handleReviewRequest(
       if (url.pathname !== "/review" && url.pathname !== "/review/") {
         return new Response("Not found", { status: 404 });
       }
-      if (actor.role === "anonymous") return forbidden(401, "authentication required");
+      // Browser-first login wall: a real navigation (Accept: text/html)
+      // without proof lands on the login page instead of a JSON 401 it
+      // cannot act on. API-style callers keep the machine-readable 401, so
+      // the documented 401/403 split across entrances does not fork.
+      if (actor.role === "anonymous") {
+        if (wantsHtml(request)) {
+          return new Response(null, { status: 303, headers: { "location": "/review/login" } });
+        }
+        return jsonError(401, "authentication required");
+      }
       const records = (await context.catalog.list(actor)).filter((item) =>
         item.governanceState === "pending_public"
       );
@@ -142,6 +151,11 @@ async function resolveActor(request: Request, context: ReviewContext): Promise<A
     }
   }
   return anonymous();
+}
+
+function wantsHtml(request: Request): boolean {
+  const accept = request.headers.get("accept") ?? "";
+  return accept.split(",").some((part) => part.split(";")[0].trim().toLowerCase() === "text/html");
 }
 
 function anonymous(): Actor {

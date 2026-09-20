@@ -27,15 +27,24 @@ function context(
 }
 const request = (path: string, init?: RequestInit) => new Request(`http://127.0.0.1${path}`, init);
 
-Deno.test("review rejects unauthenticated GET and non-auditor POST", async () => {
-  const get = await handleReviewRequest(
-    request("/review"),
+Deno.test("review anonymous browser GET redirects to login; API callers keep JSON errors", async () => {
+  const page = await handleReviewRequest(
+    request("/review", { headers: { accept: "text/html,application/xhtml+xml" } }),
     {
       catalog: {} as never,
       access: { resolveSession: () => Promise.reject(new Error("not used")) },
     } as never,
   );
-  assertEquals(get.status, 401);
+  assertEquals(page.status, 303);
+  assertEquals(page.headers.get("location"), "/review/login");
+  const api = await handleReviewRequest(
+    request("/review", { headers: { accept: "application/json" } }),
+    {
+      catalog: {} as never,
+      access: { resolveSession: () => Promise.reject(new Error("not used")) },
+    } as never,
+  );
+  assertEquals(api.status, 401);
   const reader = context({ id: "human:reader", kind: "human", role: "reader" });
   const response = await handleReviewRequest(
     request("/review/approve", {

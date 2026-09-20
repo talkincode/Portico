@@ -223,6 +223,9 @@ ${
           active: screen === "pending",
           count: byState.pending_public,
         }) +
+        (ctx.actor.kind === "human" && ctx.actor.role === "auditor"
+          ? item("◈", "去审核", "/review", {})
+          : "") +
         item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }),
     )
   }
