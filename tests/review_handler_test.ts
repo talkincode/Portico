@@ -250,6 +250,7 @@ Deno.test("review github login is allowlisted and mints a session for the roster
     } as never,
   );
   assertEquals(stranger.status, 403);
+  assertEquals((await stranger.text()).includes("不在 allowlist 中"), true);
   assertEquals(sessions.length, 0);
   // Callback with mismatched state is rejected before any exchange.
   let exchanged = false;
@@ -268,6 +269,7 @@ Deno.test("review github login is allowlisted and mints a session for the roster
     } as never,
   );
   assertEquals(badState.status, 400);
+  assertEquals((await badState.text()).includes("重新点击登录"), true);
   assertEquals(exchanged, false);
   // Happy path mints one session and sets the cookie.
   const done = await handleReviewRequest(

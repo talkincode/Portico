@@ -192,48 +192,54 @@ async function handleOauthCallback(request: Request, context: ReviewContext): Pr
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const expected = readCookie(request, "portico_oauth_state");
+  // Browser flow: failures re-render the login page with the reason inline
+  // (a raw JSON body strands the user), and log one line for the operator.
+  // Status stays non-2xx so machines can still tell success apart.
+  const fail = (status: number, reason: string, log: string): Response => {
+    console.error(`[review/oauth] ${log}`);
+    return new Response(renderLoginPage(request, true, reason), {
+      status,
+      headers: securityHeaders("text/html; charset=utf-8"),
+    });
+  };
   if (!code || !state || !expected || state !== expected) {
-    return jsonError(400, "invalid oauth callback");
+    return fail(400, "GitHub 回调校验失败，请重新点击登录。", "state mismatch or missing code");
   }
   let user;
   try {
     user = await context.github.exchange(context.github.config, code);
   } catch {
-    return jsonError(502, "github exchange failed");
+    return fail(502, "GitHub 换 token 失败，请重试。", "github exchange failed");
   }
   if (!isAllowedGithubUser(user, context.github.config.allowlist)) {
-    return jsonError(403, "this GitHub account is not allowlisted");
+    console.error(`[review/oauth] allowlist deny login=${user.login}`);
+    return fail(403, `GitHub 账号 ${user.login} 不在 allowlist 中。`, "allowlist deny");
   }
   const emails = [user.email, ...user.emails].filter((email): email is string => !!email);
-  let session = null;
   for (const email of emails) {
     try {
-      session = await context.access.createBrowserSession(email);
-      break;
+      const session = await context.access.createBrowserSession(email);
+      return new Response(null, { status: 303, headers: oauthSessionHeaders(session.token) });
     } catch {
       // Try the next verified email; a roster miss is not fatal yet.
     }
   }
-  if (!session) {
-    return jsonError(
-      403,
-      `no roster human matches this login (${
-        emails[0] ?? "no email"
-      }); ask the operator to bind it`,
-    );
-  }
-  return new Response(null, {
-    status: 303,
-    headers: {
-      "location": "/review",
-      "set-cookie": [
-        `portico_session=${
-          encodeURIComponent(session.token)
-        }; Path=/review; Secure; HttpOnly; SameSite=Lax`,
-        "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0",
-      ].join(", "),
-    },
-  });
+  console.error(`[review/oauth] roster miss login=${user.login} emails=${emails.join(",")}`);
+  return fail(
+    403,
+    `GitHub 登录成功，但名册里没有 ${emails[0] ?? "你的邮箱"}，请联系管理员绑定。`,
+    "roster miss",
+  );
+}
+
+function oauthSessionHeaders(sessionToken: string): Headers {
+  const headers = new Headers({ "location": "/review" });
+  headers.append(
+    "set-cookie",
+    `portico_session=${encodeURIComponent(sessionToken)}; Path=/review; Secure; HttpOnly; SameSite=Lax`,
+  );
+  headers.append("set-cookie", "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0");
+  return headers;
 }
 
 function readCookie(request: Request, name: string): string | null {
@@ -352,10 +358,11 @@ const REVIEW_CSS = `
 .rv-empty{color:var(--tk-muted);padding:28px 0}
 `;
 
-function renderLoginPage(request: Request, githubEnabled: boolean): string {
+function renderLoginPage(request: Request, githubEnabled: boolean, error?: string): string {
   const github = githubEnabled
     ? `<a class="rv-github" href="/review/oauth/start">使用 GitHub 登录</a><div class="rv-div"><span>或一次性凭证</span></div>`
     : "";
+  const alert = error ? `<p class="tk-note" role="alert">${esc(error)}</p>` : "";
   return shell(
     request,
     "审核登录",
@@ -363,6 +370,7 @@ function renderLoginPage(request: Request, githubEnabled: boolean): string {
     <div class="tk-panel rv-card">
       <p class="tk-meta">PORTICO · 人工审核</p>
       <h1>审核登录</h1>
+      ${alert}
       ${github}
       <form method="post">
         <div class="rv-field"><label for="rv-id">身份</label><input id="rv-id" name="id" autocomplete="username" required></div>
