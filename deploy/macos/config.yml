@@ -1,0 +1,19 @@
+# Portico tunnel ingress (macOS template, locally-managed).
+#
+# TEMPLATE: copy to $PORTICO_HOME/config.yml, replace TUNNEL_ID with the
+# `cloudflared tunnel create` output and /Users/example with the real home.
+# Keep the catch-all last: without it cloudflared proxies unmatched traffic
+# to port 8080. Validate on the host with:
+#   cloudflared tunnel --config config.yml ingress validate
+tunnel: TUNNEL_ID
+credentials-file: /Users/example/portico/portico-macstudio.json
+
+ingress:
+  # The browser review boundary is a separate process with its own write scope.
+  # Keep this rule before the Portal catch-all: cloudflared evaluates top-down.
+  - hostname: portico.talkincode.net
+    path: ^/review(?:/.*)?$
+    service: http://127.0.0.1:8791
+  - hostname: portico.talkincode.net
+    service: http://127.0.0.1:8788
+  - service: http_status:404

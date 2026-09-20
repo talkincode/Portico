@@ -38,6 +38,22 @@ export function gatewayPerms(hostname: string = LOOPBACK_HOSTNAME): readonly str
   return ["--allow-read", "--allow-write", "--allow-env", netAllow(hostname)];
 }
 
+/**
+ * Review reads the roster and catalog, creates browser sessions, and atomically
+ * updates catalog decisions. It never writes identities: granting/revoking
+ * identities and issuing credentials remain CLI-only trust-root operations.
+ */
+export function reviewPerms(
+  hostname: string = LOOPBACK_HOSTNAME,
+  paths?: { catalog: string; identities: string; sessions: string },
+): readonly string[] {
+  const read = paths ? `--allow-read=${paths.catalog},${paths.identities},${paths.sessions}` : "--allow-read";
+  const write = paths
+    ? `--allow-write=${paths.catalog},${paths.catalog}.tmp,${paths.sessions},${paths.sessions}.tmp`
+    : "--allow-write";
+  return [read, write, "--allow-env", netAllow(hostname)];
+}
+
 export const CLI_PERMS: readonly string[] = cliPerms();
 export const PORTAL_PERMS: readonly string[] = readOnlyHttpPerms();
 export const MCP_PERMS: readonly string[] = readOnlyHttpPerms();

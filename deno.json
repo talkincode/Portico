@@ -16,7 +16,7 @@
   },
   "tasks": {
     "test": "deno test --allow-read --allow-write --allow-env --allow-run --allow-net=127.0.0.1 tests/",
-    "check": "deno check src/cli/main.ts src/catalog/mod.ts src/access/mod.ts src/audit/mod.ts src/portal/mod.ts src/portal/main.ts src/gateway/mod.ts src/gateway/main.ts src/mcp/mod.ts src/mcp/main.ts src/ui/mod.ts src/up/main.ts src/build/main.ts src/runtime/bind.ts",
+    "check": "deno check src/cli/main.ts src/catalog/mod.ts src/access/mod.ts src/audit/mod.ts src/portal/mod.ts src/portal/main.ts src/gateway/mod.ts src/gateway/main.ts src/mcp/mod.ts src/mcp/main.ts src/ui/mod.ts src/up/main.ts src/build/main.ts src/review/mod.ts src/review/handler.ts src/review/server.ts src/review/main.ts src/runtime/bind.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
     "up": "deno run --allow-env --allow-run src/up/main.ts",
@@ -24,6 +24,7 @@
     "cli": "deno run --allow-read --allow-write --allow-env src/cli/main.ts",
     "portal": "deno run --allow-read --allow-env --allow-net=127.0.0.1 src/portal/main.ts",
     "mcp": "deno run --allow-read --allow-env --allow-net=127.0.0.1 src/mcp/main.ts",
+    "review": "deno run --allow-read --allow-write --allow-env --allow-net=127.0.0.1 src/review/main.ts",
     "gateway": "deno run --allow-read --allow-write --allow-env --allow-net=127.0.0.1 src/gateway/main.ts",
     "docs:build": "mdbook build",
     "docs:serve": "mdbook serve"

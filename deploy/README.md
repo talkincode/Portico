@@ -38,6 +38,46 @@ sudo systemctl enable --now portico-portal portico-gateway portico-mcp
 
 端口仍是 8788/8789/8790。不要改成 `0.0.0.0`，不要占用无关生产端口。`tests/deploy_contract_test.ts` 同样解析这些 unit。
 
+# macOS（macstudio，LaunchDaemon）
+
+模板在 `macos/`：`run.sh`（单监管整体，非三入口三守护）、
+`run-cloudflared.sh` + `config.yml`（本地管理 ingress，公开同一域名：
+`/review*` → Review 8791，其余 → Portal 8788，catch-all 404）、两份
+LaunchDaemon plist。macstudio 不跑 Docker，
+用本机 Deno（与发布镜像同版本）直接起 `src/up/main.ts`；权限仍以
+`src/perms.ts` 为准，监管者只持 `--allow-env --allow-run`。形状由
+`tests/deploy_macos_contract_test.ts` 锁定：模板不得含 `0.0.0.0`、
+RFC1918 地址、真实用户名、真实隧道 id 与 token 明文。
+
+选本地管理而不用 token + 仪表盘（mira 模式）的原因：`wrangler tunnel`
+（已验证最新版 4.135.0）没有写 ingress 的子命令，而隧道配置接口拒绝
+OAuth 与登录证书两种 CLI 鉴权（`10405` / 认证失败），只能走仪表盘点
+一次；本地 `config.yml` 让建隧道到跑流量全程 CLI 可完成
+（`ingress validate` / `ingress rule` 可机检验），代价是 ingress 住在主机
+文件里而不是仪表盘。
+
+现场步骤（`~/portico` 下已有 `app` 检出、`data`、`logs`、`bin/cloudflared`）：
+
+1. `cloudflared tunnel create portico-macstudio`，把 `~/.cloudflared/<id>.json`
+   移到 `~/portico/portico-macstudio.json`（`chmod 600`，原路径删干净，
+   不出仓库）。
+2. `cloudflared tunnel route dns [--overwrite-dns] <id> portico.talkincode.net`。
+3. 按模板写好 `config.yml`（填真实隧道 id），`ingress validate` 与
+   `ingress rule https://portico.talkincode.net/review`、
+   `ingress rule https://portico.talkincode.net/public` 三检通过。
+4. 按模板写好 `run.sh` / `portico.env` / `run-cloudflared.sh`（`plutil -lint`
+   校验 plist），先手动各起一次验证三个本地端口，再：
+
+```sh
+sudo cp net.portico.macstudio.plist net.portico.cloudflared.plist /Library/LaunchDaemons/
+sudo launchctl bootstrap system /Library/LaunchDaemons/net.portico.macstudio.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/net.portico.cloudflared.plist
+```
+
+5. 空库首次只给匿名视图（fail-closed），按上节“首次凭证引导”建首位人类
+   审计者，再由其 `grant agent:<name> --kind agent --role maintainer` 给
+   Agent 建维护身份；mira 的凭证在联调时再签发，避免提前签发的密钥闲置。
+
 ## 首次凭证引导
 
 全新部署没有任何凭证，因此**只提供匿名视图**——这是有意的 fail-closed：身份只能靠会话证明，而没有凭证就没有会话。运维者需要执行一次 bootstrap，token 只打印一次，请交给审计者本人：

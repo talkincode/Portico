@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.portico.cloudflared</string>
+  <!-- TEMPLATE: same install rule as net.portico.macstudio. -->
+  <key>UserName</key>
+  <string>example</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/example/portico/run-cloudflared.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/example/portico/logs/cloudflared.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/example/portico/logs/cloudflared.stderr.log</string>
+</dict>
+</plist>

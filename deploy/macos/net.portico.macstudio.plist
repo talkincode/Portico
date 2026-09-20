@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.portico.macstudio</string>
+  <!-- TEMPLATE: install to /Library/LaunchDaemons/ and replace the example
+       user/home. LaunchDaemon (system domain) on purpose, mirroring mira:
+       the portal must not depend on a graphical login session. -->
+  <key>UserName</key>
+  <string>example</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/example/portico/run.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/example/portico/app</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/example/portico/logs/stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/example/portico/logs/stderr.log</string>
+</dict>
+</plist>

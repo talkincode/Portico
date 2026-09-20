@@ -1,5 +1,5 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
-import { gatewayPerms as gatewayPermsFor, readOnlyHttpPerms } from "../perms.ts";
+import { gatewayPerms as gatewayPermsFor, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
 import { parseBindHostname, parseBindPort } from "../runtime/bind.ts";
 
 /**
@@ -32,6 +32,7 @@ if (!SRC_DIR) throw new UsageError("cannot locate the Portico source directory")
 const PORTAL_ENTRY = `${SRC_DIR}/../portal/main.ts`;
 const GATEWAY_ENTRY = `${SRC_DIR}/../gateway/main.ts`;
 const MCP_ENTRY = `${SRC_DIR}/../mcp/main.ts`;
+const REVIEW_ENTRY = `${SRC_DIR}/../review/main.ts`;
 
 interface Setup {
   hostname: string;
@@ -44,6 +45,7 @@ interface Setup {
   portalPort: number;
   gatewayPort: number;
   mcpPort: number;
+  reviewPort: number;
 }
 
 interface Started {
@@ -70,6 +72,7 @@ function readSetup(env: Record<string, string | undefined>): Setup {
     portalPort: parseBindPort(env.PORTICO_PORT, 8788),
     gatewayPort: parseBindPort(env.PORTICO_GATEWAY_PORT, 8789),
     mcpPort: parseBindPort(env.PORTICO_MCP_PORT, 8790),
+    reviewPort: parseBindPort(env.PORTICO_REVIEW_PORT, 8791),
   };
 }
 
@@ -229,6 +232,7 @@ if (import.meta.main) {
   const portalPerms = readOnlyHttpPerms(setup.hostname);
   const gatewayPerms = gatewayPermsFor(setup.hostname);
   const mcpPerms = readOnlyHttpPerms(setup.hostname);
+  const reviewPermsFor = reviewPerms(setup.hostname, { catalog: setup.catalog, identities: setup.identities, sessions: setup.sessions });
 
   try {
     started.push(
@@ -267,6 +271,16 @@ if (import.meta.main) {
         PORTICO_PORT: String(setup.mcpPort),
       }),
     );
+
+    started.push(
+      await start("review", REVIEW_ENTRY, reviewPermsFor, {
+        PORTICO_CATALOG_PATH: setup.catalog,
+        PORTICO_IDENTITIES_PATH: setup.identities,
+        PORTICO_SESSIONS_PATH: setup.sessions,
+        PORTICO_BIND: setup.hostname,
+        PORTICO_PORT: String(setup.reviewPort),
+      }),
+    );
   } catch (error) {
     const code = error instanceof CatalogError || error instanceof UsageError
       ? error.code
@@ -277,7 +291,7 @@ if (import.meta.main) {
     Deno.exit(1);
   }
 
-  const [portal, gateway, mcp] = started;
+  const [portal, gateway, mcp, review] = started;
   console.log(JSON.stringify({
     ok: true,
     data: {
@@ -285,6 +299,7 @@ if (import.meta.main) {
       portal: { url: portal.url },
       gateway: { url: gateway.url },
       mcp: { url: mcp.url },
+      review: { url: review.url },
     },
   }));
 
