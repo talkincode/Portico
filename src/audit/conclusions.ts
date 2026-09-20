@@ -42,6 +42,7 @@ import {
   SECRET_KEYS,
 } from "../catalog/mod.ts";
 import { serialize, writeJsonFile } from "../fs.ts";
+import { cloneSeal, type SealEntry, sealRecord } from "./seal.ts";
 
 /**
  * The security questions `AGENTS.md` and `docs/roadmap.md` assign to the human
@@ -164,6 +165,8 @@ export interface ConclusionStore {
   /** Append-only. Implementations must refuse a duplicate id, never replace. */
   append(record: AuditConclusion): Promise<void>;
   list(): Promise<AuditConclusion[]>;
+  /** The seal chain covering every appended conclusion. */
+  listSeal(): Promise<SealEntry[]>;
 }
 
 function cloneConclusion(record: AuditConclusion): AuditConclusion {
@@ -181,24 +184,31 @@ function cloneConclusion(record: AuditConclusion): AuditConclusion {
 
 export class MemoryConclusionStore implements ConclusionStore {
   #conclusions: AuditConclusion[] = [];
+  #seal: SealEntry[] = [];
 
-  append(record: AuditConclusion): Promise<void> {
+  async append(record: AuditConclusion): Promise<void> {
     if (this.#conclusions.some((item) => item.id === record.id)) {
-      return Promise.reject(
-        new CatalogError(ErrorCode.ALREADY_EXISTS, `conclusion '${record.id}' already exists`),
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `conclusion '${record.id}' already exists`,
       );
     }
     this.#conclusions.push(cloneConclusion(record));
-    return Promise.resolve();
+    this.#seal = await sealRecord(this.#seal, "conclusions", "conclusion", record.id, record);
   }
 
   list(): Promise<AuditConclusion[]> {
     return Promise.resolve(this.#conclusions.map(cloneConclusion));
   }
+
+  listSeal(): Promise<SealEntry[]> {
+    return Promise.resolve(cloneSeal(this.#seal));
+  }
 }
 
 interface ConclusionFile {
   conclusions: AuditConclusion[];
+  seal: SealEntry[];
 }
 
 export class FileConclusionStore implements ConclusionStore {
@@ -217,12 +227,18 @@ export class FileConclusionStore implements ConclusionStore {
       );
     }
     file.conclusions.push(cloneConclusion(record));
-    await writeJsonFile(this.path, { conclusions: file.conclusions });
+    file.seal = await sealRecord(file.seal, "conclusions", "conclusion", record.id, record);
+    await writeJsonFile(this.path, { conclusions: file.conclusions, seal: file.seal });
   }
 
   async list(): Promise<AuditConclusion[]> {
     const file = await this.#load();
     return file.conclusions.map(cloneConclusion);
+  }
+
+  async listSeal(): Promise<SealEntry[]> {
+    const file = await this.#load();
+    return cloneSeal(file.seal);
   }
 
   async #load(): Promise<ConclusionFile> {
@@ -232,10 +248,13 @@ export class FileConclusionStore implements ConclusionStore {
       if (!parsed || !Array.isArray(parsed.conclusions)) {
         throw new Error(`conclusion file is corrupt: ${this.path}`);
       }
-      return { conclusions: parsed.conclusions.map(cloneConclusion) };
+      return {
+        conclusions: parsed.conclusions.map(cloneConclusion),
+        seal: Array.isArray(parsed.seal) ? cloneSeal(parsed.seal) : [],
+      };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { conclusions: [] };
+        return { conclusions: [], seal: [] };
       }
       throw error;
     }
@@ -294,6 +313,11 @@ export class ConclusionService {
     };
     await this.store.append(record);
     return cloneConclusion(record);
+  }
+
+  /** The conclusion seal chain. */
+  listSeal(): Promise<SealEntry[]> {
+    return this.store.listSeal();
   }
 
   async list(actor: Actor, query: ConclusionQuery = {}): Promise<AuditConclusion[]> {

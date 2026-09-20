@@ -102,6 +102,20 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" "http://127.0.0.1:8788
 
 ---
 
+### 4c. 审计封条校验 (`GET /api/audit-verify`)
+重算四个支柱（目录、身份名册、Gateway 访问审计、安全结论）的封条链，回答“这些记录是否还是写入时的样子”。与 CLI `audit verify`、MCP `portico_audit_verify` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/audit-verify
+```
+
+返回每支柱的 `ok`、已封条数、`unsealed`（没有任何环节覆盖的记录数），以及被改写的第一条记录（`seq` / `kind` / `id` / 原因：`digest` 摘要不符、`missing` 记录被删、`chain` 链条断开）和链末摘要 `tip`。
+
+> [!NOTE]
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这是只读面：`POST` 返回 `405`，校验本身不改任何记录，也不写审计文件。`unsealed` 是如实报告，不代表通过；封条链能指认改写与删除，但不能自证“从未被整体重写”——链末摘要需要与外部留存的 `tip` 比对才能发现整链替换。
+
+---
+
 ### 5. 授权轨迹接口 (`GET /api/grants`)
 列出追加式身份授权记录。与 CLI `identity grants`、MCP `portico_grants` 同一载荷。
 

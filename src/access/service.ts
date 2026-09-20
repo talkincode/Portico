@@ -1,4 +1,5 @@
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
+import type { SealEntry } from "../audit/seal.ts";
 import type { Actor, ActorKind, ActorRole } from "../catalog/types.ts";
 import type { IdentityStore, SessionStore } from "./store.ts";
 import type {
@@ -240,6 +241,11 @@ export class AccessService {
     const match = roster.find((item) => item.kind === "human" && item.email === normalized);
     if (!match) return null;
     return { id: match.id, kind: match.kind, role: match.role };
+  }
+
+  /** The identity seal chain covering grants, revokes and credential revokes. */
+  listSeal(): Promise<SealEntry[]> {
+    return this.store.listSeal();
   }
 
   async listGrants(actor: Actor): Promise<GrantRecord[]> {

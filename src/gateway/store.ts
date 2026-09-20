@@ -1,8 +1,11 @@
 import { serialize, writeJsonFile } from "../fs.ts";
+import { cloneSeal, type SealEntry, sealRecord } from "../audit/seal.ts";
 import type { GatewayAuditRecord } from "./types.ts";
 
 export interface GatewayAuditStore {
   list(): Promise<GatewayAuditRecord[]>;
+  /** The seal chain covering every appended record. */
+  listSeal(): Promise<SealEntry[]>;
   append(record: GatewayAuditRecord): Promise<void>;
 }
 
@@ -12,19 +15,25 @@ function cloneRecord(record: GatewayAuditRecord): GatewayAuditRecord {
 
 export class MemoryGatewayAuditStore implements GatewayAuditStore {
   #records: GatewayAuditRecord[] = [];
+  #seal: SealEntry[] = [];
 
   list(): Promise<GatewayAuditRecord[]> {
     return Promise.resolve(this.#records.map(cloneRecord));
   }
 
-  append(record: GatewayAuditRecord): Promise<void> {
+  listSeal(): Promise<SealEntry[]> {
+    return Promise.resolve(cloneSeal(this.#seal));
+  }
+
+  async append(record: GatewayAuditRecord): Promise<void> {
     this.#records.push(cloneRecord(record));
-    return Promise.resolve();
+    this.#seal = await sealRecord(this.#seal, "gateway", "record", record.id, record);
   }
 }
 
 interface AuditFile {
   records: GatewayAuditRecord[];
+  seal: SealEntry[];
 }
 
 export class FileGatewayAuditStore implements GatewayAuditStore {
@@ -35,6 +44,11 @@ export class FileGatewayAuditStore implements GatewayAuditStore {
     return file.records.map(cloneRecord);
   }
 
+  async listSeal(): Promise<SealEntry[]> {
+    const file = await this.#load();
+    return cloneSeal(file.seal);
+  }
+
   append(record: GatewayAuditRecord): Promise<void> {
     return serialize(this.path, () => this.#appendImpl(record));
   }
@@ -42,6 +56,7 @@ export class FileGatewayAuditStore implements GatewayAuditStore {
   async #appendImpl(record: GatewayAuditRecord): Promise<void> {
     const file = await this.#load();
     file.records.push(cloneRecord(record));
+    file.seal = await sealRecord(file.seal, "gateway", "record", record.id, record);
     await this.#save(file);
   }
 
@@ -52,16 +67,19 @@ export class FileGatewayAuditStore implements GatewayAuditStore {
       if (!parsed || !Array.isArray(parsed.records)) {
         throw new Error(`gateway audit file is corrupt: ${this.path}`);
       }
-      return { records: parsed.records.map(cloneRecord) };
+      return {
+        records: parsed.records.map(cloneRecord),
+        seal: Array.isArray(parsed.seal) ? cloneSeal(parsed.seal) : [],
+      };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {
-        return { records: [] };
+        return { records: [], seal: [] };
       }
       throw error;
     }
   }
 
   async #save(file: AuditFile): Promise<void> {
-    await writeJsonFile(this.path, { records: file.records });
+    await writeJsonFile(this.path, { records: file.records, seal: file.seal });
   }
 }

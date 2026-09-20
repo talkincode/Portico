@@ -1,4 +1,5 @@
 import { CatalogError, ErrorCode } from "./errors.ts";
+import type { SealEntry } from "../audit/seal.ts";
 import type { CatalogStore } from "./store.ts";
 import type {
   Actor,
@@ -532,6 +533,14 @@ export class CatalogService {
     if (actor.role === "anonymous") return [];
     const records = await this.store.listApprovals();
     return records.map((record) => structuredClone(record));
+  }
+
+  /**
+   * The catalog seal chain. Read-only: the store appends to it inside the same
+   * write that appends the record, and nothing rewrites it.
+   */
+  listSeal(): Promise<SealEntry[]> {
+    return this.store.listSeal();
   }
 
   async listChanges(actor: Actor): Promise<CatalogChangeRecord[]> {

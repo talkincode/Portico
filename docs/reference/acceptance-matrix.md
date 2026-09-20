@@ -55,6 +55,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **Agent 维护与人类安全审计** | 高 | `tests/catalog_change_test.ts`；`tests/audit_service_test.ts`；`tests/portal_handler_test.ts`；`tests/e2e/cli_audit_e2e_test.ts`；`tests/e2e/portal_audit_e2e_test.ts` |
 | **安全审计结论（维护权 ≠ 审计权）** | 高 | `tests/audit_conclusions_test.ts`；`tests/e2e/audit_conclusions_e2e_test.ts` |
 | **审计时间线过滤查询** | 高 | `tests/audit_query_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/audit_query_e2e_test.ts` |
+| **审计封条校验（篡改可指名）** | 高 | `tests/audit_seal_test.ts`；`tests/e2e/audit_seal_e2e_test.ts` |
 | **公开面脱敏（开源公开合同）** | 高 | `tests/public_surface_redaction_test.ts`；`tests/redaction.ts` |
 | **运行时边界（L0 公开合同）** | 高 | `tests/runtime_boundary_test.ts`；`tests/runtime_boundary.ts` |
 | **部署契约与入口健康门禁** | 中 | `tests/e2e/deploy_verify_e2e_test.ts`；`tests/deploy_contract_test.ts` |

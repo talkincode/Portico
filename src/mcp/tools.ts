@@ -10,6 +10,7 @@ import {
   type ConclusionService,
   parseAuditQuery,
   parseConclusionQuery,
+  type SealService,
 } from "../audit/mod.ts";
 import type { AccessService } from "../access/mod.ts";
 import {
@@ -60,6 +61,7 @@ export interface McpTool {
 export interface McpToolDeps {
   catalog: CatalogService;
   audit: AuditService;
+  seal: SealService;
   access: AccessService;
   pages?: PageService;
   gateway?: GatewayService;
@@ -168,6 +170,12 @@ export const TOOLS: readonly McpTool[] = [
       },
       additionalProperties: false,
     },
+  },
+  {
+    name: "portico_audit_verify",
+    description:
+      "重算安全审计的封条链，报告每个环节是否与写入时一致：哪条记录被改写、被删除或链条断开，也会列出没有任何环节覆盖的记录（未封存）。等价于 CLI `audit verify` 与 Portal `GET /api/audit-verify`。仅人类审计者可读；其他身份得到 FORBIDDEN。只读：不写审计文件，也不修改任何记录。返回的 tip 是该链当前末端摘要，可用于与外部留存的摘要比对。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "portico_approvals",
@@ -306,6 +314,8 @@ export async function callTool(
       const events = await deps.audit.list(actor);
       return applyAuditQuery(events, parseAuditQuery(input));
     }
+    case "portico_audit_verify":
+      return await deps.seal.report(actor);
     case "portico_approvals":
       return await deps.catalog.listApprovals(actor);
     case "portico_identities":

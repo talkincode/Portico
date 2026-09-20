@@ -242,6 +242,7 @@ Deno.test("a failed audit write kills no session; the revocation is not half-app
     listGrants: () => inner.listGrants(),
     listRevokes: () => inner.listRevokes(),
     listCredentialRevokes: () => inner.listCredentialRevokes(),
+    listSeal: () => inner.listSeal(),
     commitGrant: (identity, grant) => inner.commitGrant(identity, grant),
     commitRevoke: (revoke) => inner.commitRevoke(revoke),
     commitCredentialRevoke: () => Promise.reject(new Error("audit store is unavailable")),

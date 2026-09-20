@@ -1,6 +1,6 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
-import { AuditService, type ConclusionService } from "../audit/mod.ts";
+import { AuditService, type ConclusionService, SealService } from "../audit/mod.ts";
 import { type Actor, CatalogError, CatalogService } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
 import type { PageService } from "../ui/mod.ts";
@@ -176,6 +176,12 @@ async function toolsCall(
     const data = await callTool(actor, name, params.arguments, {
       catalog: context.catalog,
       audit: new AuditService(context.catalog, context.access, context.gateway),
+      seal: new SealService(
+        context.catalog,
+        context.access,
+        context.gateway,
+        context.conclusions,
+      ),
       access: context.access,
       pages: context.pages,
       gateway: context.gateway,
