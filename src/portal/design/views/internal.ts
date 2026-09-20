@@ -35,6 +35,7 @@ import {
 } from "../components.ts";
 import { renderShell, themeSwitch } from "../page.ts";
 import { CHANNEL_LABEL, STATE_LABEL } from "../tokens.ts";
+import { type ReviewEntry, reviewHref } from "../../review-entry.ts";
 import type { PageTheme } from "./types.ts";
 
 /** Everything a view needs that is not catalog data. */
@@ -45,6 +46,8 @@ export interface ViewContext {
   theme: PageTheme;
   /** Catalog counts for the rail; computed from what the actor can see. */
   counts: CountSummary;
+  /** The Review entrance this deployment serves; absent means same-origin. */
+  reviewEntry?: ReviewEntry;
 }
 
 export interface CountSummary {
@@ -188,6 +191,9 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
 function renderRail(ctx: ViewContext, screen: InternalScreen): string {
   const { byState, byChannel, total } = ctx.counts;
   const contentActive = screen === "content" || screen === "surface";
+  // The auditor's review queue, or nothing when this deployment serves no
+  // Review entrance behind the chrome.
+  const review = reviewHref(ctx.reviewEntry, true);
   const group = (heading: string, entries: string) =>
     `<div class="tk-rail__group"><p class="tk-rail__heading">${esc(heading)}</p>${entries}</div>`;
   const item = (
@@ -223,8 +229,8 @@ ${
           active: screen === "pending",
           count: byState.pending_public,
         }) +
-        (ctx.actor.kind === "human" && ctx.actor.role === "auditor"
-          ? item("◈", "去审核", "/review", {})
+        (ctx.actor.kind === "human" && ctx.actor.role === "auditor" && review !== undefined
+          ? item("◈", "去审核", review, {})
           : "") +
         item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }),
     )

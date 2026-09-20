@@ -1,6 +1,7 @@
 import type { AgentSurface, Channel } from "../catalog/mod.ts";
 import type { DashboardView } from "../catalog/dashboard.ts";
 import { CHANNEL_LABEL } from "./design/tokens.ts";
+import { type ReviewEntry, reviewHref } from "./review-entry.ts";
 
 export type { DashboardView };
 
@@ -31,6 +32,11 @@ export interface MagazinePageInput {
    * so the magazine never advertises `/internal/pending`.
    */
   pendingPublic?: number;
+  /**
+   * The Review entrance this deployment serves. Absent means the same-origin
+   * default; `{ kind: "none" }` removes every Review link from the chrome.
+   */
+  reviewEntry?: ReviewEntry;
 }
 
 const TITLE_FONT =
@@ -940,22 +946,30 @@ export function renderMagazinePage(input: MagazinePageInput): string {
     title: selected ? selected.name : "Portico",
     showInternal: input.showInternal === true,
     pendingPublic: input.pendingPublic,
+    reviewEntry: input.reviewEntry,
     body: `<div class="${frameClass}">${main}${side}</div>`,
   });
 }
 
-export function renderNotFoundPage(theme: ThemeMode = "system"): string {
+export function renderNotFoundPage(
+  theme: ThemeMode = "system",
+  reviewEntry?: ReviewEntry,
+): string {
   return renderChrome({
     theme,
     channel: null,
     path: "/",
     title: "Portico",
+    reviewEntry,
     body: `<div class="frame"><p class="empty">没有这个入口，或你无权看见。</p></div>`,
   });
 }
 
-export function renderDiscoveryPage(view: DashboardView): string {
-  return renderMagazinePage({ theme: "system", channel: null, view, picks: [] });
+export function renderDiscoveryPage(
+  view: DashboardView,
+  reviewEntry?: ReviewEntry,
+): string {
+  return renderMagazinePage({ theme: "system", channel: null, view, picks: [], reviewEntry });
 }
 
 // `dashboardFrom` now lives in `../catalog/dashboard.ts`: it is derived purely
@@ -979,6 +993,7 @@ function renderChrome(input: {
   body: string;
   showInternal?: boolean;
   pendingPublic?: number;
+  reviewEntry?: ReviewEntry;
 }): string {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
   const q = input.q;
@@ -993,10 +1008,14 @@ function renderChrome(input: {
     ? `\n        <a class="" href="/internal/pending">待审 ${input.pendingPublic}</a>`
     : "";
   // One-click human path: anonymous callers get the login entry, signed-in
-  // callers jump straight to the pending list. Neither leaks /internal.
-  const reviewLink = input.showInternal === true
-    ? `\n        <a class="" href="/review">去审核</a>`
-    : `\n        <a class="" href="/review/login">审核登录</a>`;
+  // callers jump straight to the pending list. Neither leaks /internal, and a
+  // deployment that serves no Review entrance renders no entry at all.
+  const review = reviewHref(input.reviewEntry, input.showInternal === true);
+  const reviewLink = review
+    ? `\n        <a class="" href="${escapeHtml(review)}">${
+      input.showInternal === true ? "去审核" : "审核登录"
+    }</a>`
+    : "";
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>

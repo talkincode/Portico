@@ -29,7 +29,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **Review 独立人类审核入口** | 高 | `tests/review_handler_test.ts`；`tests/e2e/review_http_e2e_test.ts`；`tests/e2e/system_up_e2e_test.ts` |
 | **Portal 发现与仪表盘** | 中 | `tests/portal_handler_test.ts`；`tests/portal_magazine_test.ts`；`tests/portal_ui_test.ts`；`tests/catalog_dashboard_test.ts`；`tests/e2e/portal_discovery_e2e_test.ts`；`tests/e2e/portal_magazine_e2e_test.ts`；`tests/e2e/catalog_dashboard_e2e_test.ts` |
 | **目录过滤查询** | 中 | `tests/catalog_query_test.ts`；`tests/portal_handler_test.ts`；`tests/portal_magazine_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/catalog_query_e2e_test.ts`；`tests/e2e/portal_magazine_e2e_test.ts` |
-| **Portal 双平面 UI 与颜色主题** | 中 | `tests/portal_ui_test.ts`；`tests/portal_theme_test.ts`；`tests/e2e/portal_ui_e2e_test.ts` |
+| **Portal 双平面 UI 与颜色主题** | 中 | `tests/portal_ui_test.ts`；`tests/portal_theme_test.ts`；`tests/portal_review_entry_test.ts`；`tests/e2e/portal_ui_e2e_test.ts`；`tests/e2e/portal_review_entry_e2e_test.ts` |
 | **Access Control 分级权限** | 高 | `tests/access_service_test.ts`；`tests/e2e/cli_access_e2e_test.ts` |
 | **身份名册只读查询** | 高 | `tests/access_service_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/identity_roster_e2e_test.ts` |
 | **授权轨迹只读查询** | 高 | `tests/access_service_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/identity_grants_e2e_test.ts` |

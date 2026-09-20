@@ -176,6 +176,29 @@ Deno.test("deploy contract: portal and mcp are told where the security conclusio
   );
 });
 
+Deno.test("deploy contract: the portal is told which Review entrance it serves", async () => {
+  // The chrome links to whatever this variable declares, so leaving it unset
+  // would make the shipped deployment advertise a same-origin `/review` that
+  // nothing answers. The three-entrance deployment serves no Review, and the
+  // run script must say so explicitly rather than inherit a default.
+  const source = await script(CONTRACTS.portal.file);
+  assert(
+    source.includes("PORTICO_REVIEW_ORIGIN="),
+    `${CONTRACTS.portal.file} must pass PORTICO_REVIEW_ORIGIN`,
+  );
+  assert(
+    source.includes("${PORTICO_DEPLOY_REVIEW_ORIGIN:-off}"),
+    `${CONTRACTS.portal.file} must default to serving no Review entrance`,
+  );
+  for (const name of ["gateway", "mcp"] as const) {
+    const other = await script(CONTRACTS[name].file);
+    assert(
+      !other.includes("PORTICO_REVIEW_ORIGIN="),
+      `${CONTRACTS[name].file} renders no chrome and must not be handed it`,
+    );
+  }
+});
+
 /**
  * systemd units are part of the same contract as the run scripts. The live
  * host used to start Portal/Gateway from an unversioned extra checkout and

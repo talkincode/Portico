@@ -35,8 +35,10 @@ import {
   resolvePageTheme,
   summarize,
   type Tone,
+  type ViewContext,
 } from "./design/mod.ts";
 import { parseChannel, parseTheme, renderMagazinePage, renderNotFoundPage } from "./html.ts";
+import type { ReviewEntry } from "./review-entry.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
 
 export interface PortalCfAccess {
@@ -59,6 +61,12 @@ export interface PortalContext {
    * not grow an equivalent field.
    */
   cfAccess?: PortalCfAccess;
+  /**
+   * The Review entrance this deployment serves, from `PORTICO_REVIEW_ORIGIN`.
+   * Absent means the same-origin default; `{ kind: "none" }` means this
+   * deployment ships no Review behind the chrome, so no page advertises one.
+   */
+  reviewEntry?: ReviewEntry;
 }
 
 export async function handlePortalRequest(
@@ -163,7 +171,7 @@ export async function handlePortalRequest(
     // caller learns nothing about which routes exist.
     if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) {
       if (actor.role === "anonymous") {
-        return htmlNotFound(request);
+        return htmlNotFound(request, context.reviewEntry);
       }
       return await internalPage(request, url, actor, context);
     }
@@ -217,10 +225,11 @@ export async function handlePortalRequest(
             path: url.pathname,
             showInternal: actor.role !== "anonymous",
             pendingPublic,
+            reviewEntry: context.reviewEntry,
           }));
         } catch (error) {
           if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-            return html(renderNotFoundPage(theme), 404);
+            return html(renderNotFoundPage(theme, context.reviewEntry), 404);
           }
           throw error;
         }
@@ -234,6 +243,7 @@ export async function handlePortalRequest(
         path: "/",
         showInternal: actor.role !== "anonymous",
         pendingPublic,
+        reviewEntry: context.reviewEntry,
       }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
@@ -337,7 +347,13 @@ async function internalPage(
   const theme = pageTheme(request, url, "internal");
   const path = url.pathname + url.search;
   const surfaces = await context.catalog.list(actor);
-  const base = { actor, path, theme, counts: summarize(surfaces) };
+  const base: ViewContext = {
+    actor,
+    path,
+    theme,
+    counts: summarize(surfaces),
+    reviewEntry: context.reviewEntry,
+  };
 
   if (url.pathname === "/internal") {
     const events = await auditTrail(actor, context);
@@ -372,7 +388,7 @@ async function internalPage(
   if (url.pathname === "/internal/audit") {
     // The trail is a privileged surface, not an empty screen for everyone
     // else: a non-auditor must not learn that the route exists at all.
-    if (!isAuditor(actor)) return htmlNotFound(request);
+    if (!isAuditor(actor)) return htmlNotFound(request, context.reviewEntry);
     const query = auditQueryFrom(url);
     const events = applyAuditQuery(await auditTrail(actor, context), query);
     return html(renderAuditView({ ctx: base, events, query }));
@@ -386,13 +402,13 @@ async function internalPage(
       return html(renderSurfaceView({ ctx: base, surface, events }));
     } catch (error) {
       if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-        return htmlNotFound(request);
+        return htmlNotFound(request, context.reviewEntry);
       }
       throw error;
     }
   }
 
-  return htmlNotFound(request);
+  return htmlNotFound(request, context.reviewEntry);
 }
 
 /* ── public editorial surface ─────────────────────────────────────────── */
@@ -405,7 +421,7 @@ async function publicPage(
 ): Promise<Response> {
   const theme = pageTheme(request, url, "public");
   const path = url.pathname + url.search;
-  const ctx: PublicContext = { actor, path, theme };
+  const ctx: PublicContext = { actor, path, theme, reviewEntry: context.reviewEntry };
   // The editorial surface renders only what crossed the approval boundary, even
   // for an internal session: `publicOnly` is applied inside the views.
   const surfaces = await context.catalog.list(actor);
@@ -427,17 +443,17 @@ async function publicPage(
       const surface = await context.catalog.get(actor, storyMatch[1]);
       const page = renderPublicArticle({ ctx, surface, others: surfaces });
       // A record that never crossed the boundary has no published page at all.
-      if (page === null) return htmlNotFound(request);
+      if (page === null) return htmlNotFound(request, context.reviewEntry);
       return html(page);
     } catch (error) {
       if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-        return htmlNotFound(request);
+        return htmlNotFound(request, context.reviewEntry);
       }
       throw error;
     }
   }
 
-  return htmlNotFound(request);
+  return htmlNotFound(request, context.reviewEntry);
 }
 
 function jsonOk(data: unknown): Response {
@@ -483,9 +499,12 @@ function html(body: string, status = 200): Response {
  * an API, and it would disagree with the magazine shell's missing `/s/:id`
  * page. API routes still use `jsonError`.
  */
-function htmlNotFound(request: Request): Response {
+function htmlNotFound(request: Request, reviewEntry?: ReviewEntry): Response {
   const url = new URL(request.url);
-  return html(renderNotFoundPage(parseTheme(url.searchParams.get("theme"))), 404);
+  return html(
+    renderNotFoundPage(parseTheme(url.searchParams.get("theme")), reviewEntry),
+    404,
+  );
 }
 
 function securityHeaders(contentType: string): HeadersInit {

@@ -31,6 +31,7 @@ const MCP = `${ROOT}src/mcp/main.ts`;
  */
 const CHECKS = [
   "portal-product-page",
+  "portal-review-entry",
   "portal-public-plane",
   "portal-internal-fail-closed",
   "portal-catalog-envelope",
@@ -122,9 +123,19 @@ const ERROR_PAGE = '<!DOCTYPE html><html lang="zh-CN"><head>' +
   "<title>Portico · Portico</title></head><body>" +
   '<div class="frame"><p class="empty">没有这个入口，或你无权看见。</p></div></body></html>';
 
+/** The same product shell, plus the Review entry a deployment may advertise. */
+function withReviewEntry(href: string): string {
+  return PRODUCT_PAGE.replace(
+    "</body>",
+    `<a class="pub-nav__link" href="${href}">审核登录</a></body>`,
+  );
+}
+
 interface StubOptions {
   /** Answer `/` with a 200 HTML page that is not the product shell. */
   errorPage?: boolean;
+  /** Advertise this Review entry href in the product page chrome. */
+  reviewHref?: string;
   /** Answer an anonymous `/internal` with 200 instead of 404. */
   failOpenInternal?: boolean;
 }
@@ -157,7 +168,8 @@ function portalStub(options: StubOptions): (request: Request) => Response {
     }
     if (pathname === "/api/catalog") return jsonResponse({ ok: true, data: [] });
     if (pathname === "/") {
-      return htmlResponse(options.errorPage ? ERROR_PAGE : PRODUCT_PAGE);
+      if (options.errorPage) return htmlResponse(ERROR_PAGE);
+      return htmlResponse(options.reviewHref ? withReviewEntry(options.reviewHref) : PRODUCT_PAGE);
     }
     if (pathname === "/public") return htmlResponse(PRODUCT_PAGE);
     if (pathname === "/internal") {
@@ -267,6 +279,9 @@ Deno.test("E2E: the deploy gate passes against the three shipped entrances", asy
     PORTICO_CATALOG_PATH: catalog,
     PORTICO_IDENTITIES_PATH: identities,
     PORTICO_SESSIONS_PATH: sessions,
+    // What `deploy/run-portal.sh` passes: three entrances, no Review behind
+    // the chrome, so the shipped deployment must gate green with no entry.
+    PORTICO_REVIEW_ORIGIN: "off",
     PORTICO_PORT: "0",
   }, PORTAL_PERMS);
   const gateway = await bootEntrypoint<{ url: string }>(GATEWAY, {
@@ -329,6 +344,20 @@ Deno.test("E2E: the deploy gate refuses an error page dressed as the product pag
     const report = await runVerify(stubEnv(stubs));
     assertFailed(report, "portal-product-page");
     assertEquals(report.code !== 0, true, "an error page must exit non-zero");
+  } finally {
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate refuses a Review entrance this deployment does not serve", async () => {
+  // Three entrances, no Review behind them: a `/review` link on the chromed
+  // page is a dead governance path. (The stub defaults to origin `off`.)
+  const stubs = startStubs({ reviewHref: "/review" });
+  try {
+    const report = await runVerify(stubEnv(stubs));
+    assertFailed(report, "portal-review-entry");
+    assertEquals(report.code !== 0, true, "an advertised dead entrance must exit non-zero");
+    assertPassed(report, "portal-product-page");
   } finally {
     await stubs.stop();
   }
