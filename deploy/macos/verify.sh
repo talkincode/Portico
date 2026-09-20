@@ -5,9 +5,12 @@
 # of leaving a half-system behind.
 #
 # Three claims, in the order they are cheapest to detect and most expensive to
-# miss: the checkout is the revision you pinned, the four entrances are served
-# by processes started from that checkout rather than by the previous revision
-# the restart never replaced, and each entrance answers its own contract.
+# miss: the checkout is the revision you pinned, the four entrances were started
+# from that checkout rather than from the previous revision the restart never
+# replaced, and each entrance answers its own contract. The middle claim is read
+# twice, from the revision each launcher recorded and from when each process
+# started, because the first is what a restart writes and the second is what a
+# pull that skipped the restart leaves behind.
 #
 # Environment (all optional; the defaults are the shipped deployment):
 #   PORTICO_DEPLOY_BIND           address the four entrances serve on
@@ -136,6 +139,61 @@ listener_pid() { # port [address]
   printf '%s' "$found"
 }
 
+# What a launcher recorded for one process, read back from the kernel. `ps eww`
+# prints the environment a process was *started* with, so the value is fixed at
+# exec time and only starting the process again can change it; macOS quotes each
+# entry in that output. (The Linux gate reads the same record, unquoted.)
+#
+# Only that one variable is extracted, and only when it looks like a revision:
+# the same output carries whatever else the launcher exported, and the env file
+# this host runs from holds credentials — repeating it would turn a read-only
+# check into a disclosure in the deploy log.
+capture_launch_revision() { # pid
+  local pid="$1" line
+  line=$(ps eww -p "$pid" 2>/dev/null) || line=""
+  printf '%s\n' "$line" | tr -d "'" | tr ' ' '\n' |
+    sed -n 's/^PORTICO_REVISION=\([0-9a-f]\{7,64\}\)$/\1/p' | head -n 1
+}
+
+# The same silent no-op restart the start-time comparison below catches, caught
+# instead by the record the launcher left behind. A file time can be moved
+# without restarting anything (a restore, a touch, a clock), and the previous
+# revision answers every probe with the same product page; the revision a
+# process was started from cannot be talked out of it, because `kickstart -k` is
+# the only thing that rewrites it.
+check_running_revision() {
+  local expected entry name port pid reported wrong=0
+  expected=$(git -C "$TREE" rev-parse HEAD 2>/dev/null) || expected=""
+  if [ -z "$expected" ]; then
+    echo "skip running-revision the tree at $TREE is not a git checkout, so there is no revision for the daemons to have been started from"
+    return
+  fi
+  for entry in "portal:$PORTAL_PORT" "gateway:$GATEWAY_PORT" "mcp:$MCP_PORT" "review:$REVIEW_PORT"; do
+    name="${entry%%:*}"
+    port="${entry##*:}"
+    pid=$(listener_pid "$port" "$BIND")
+    if [ -z "$pid" ]; then
+      echo "FAIL running-revision: nothing is listening on the $name entrance ${BIND}:${port}, so the revision it serves is unknown"
+      wrong=1
+      continue
+    fi
+    reported=$(capture_launch_revision "$pid")
+    if [ -z "$reported" ]; then
+      echo "FAIL running-revision: the $name entrance (pid $pid) recorded no PORTICO_REVISION, so the revision it serves is unknown; restart it from a launcher that records one"
+      wrong=1
+    elif [ "$reported" != "$expected" ]; then
+      echo "FAIL running-revision: the $name entrance (pid $pid) was started from $reported, but $TREE is at $expected; restart it onto this checkout"
+      wrong=1
+    fi
+  done
+  if [ "$wrong" = "1" ]; then
+    echo "FAIL running-revision: a listening entrance was not started from the revision this checkout is at; restart the daemons"
+    fail=1
+  else
+    echo "ok running-revision"
+  fi
+}
+
 # A pull that is not followed by a real restart leaves the previous revision
 # answering on every port with the same product page, so no behaviour probe can
 # tell "restarted onto the new revision" from "still the old process". Comparing
@@ -191,6 +249,7 @@ check_running_code_is_current() {
   fi
 }
 
+check_running_revision
 check_running_code_is_current
 
 check "portal-local" "http://${BIND}:${PORTAL_PORT}/public" "200"

@@ -15,6 +15,10 @@
 # touches governance data, so it holds only --allow-env (config) and
 # --allow-run (spawning); it must never gain --allow-all, --allow-write or
 # --allow-net.
+#
+# It also exports PORTICO_REVISION so the four entrances record the revision
+# they were started from; `deploy/macos/verify.sh` reads it back and fails any
+# entrance that is serving something other than this checkout.
 set -euo pipefail
 
 ROOT="/Users/example/portico"
@@ -30,4 +34,11 @@ done < "$ROOT/portico.env"
 export PORTICO_DATA_DIR="${PORTICO_DATA_DIR:-$ROOT/data}"
 mkdir -p "$PORTICO_DATA_DIR" "$ROOT/logs"
 cd "$ROOT/app"
+# What the daemons were started from, for the health gate to read back out of
+# each entrance's launch environment: a pull that is not followed by a real
+# restart cannot rewrite it, which is the one deploy fact the ports cannot show.
+# It is set after the env file above on purpose — whatever `portico.env` holds,
+# the record must be the checkout the daemons are actually running from.
+PORTICO_REVISION="$(git -C "$ROOT/app" rev-parse HEAD 2>/dev/null || true)"
+export PORTICO_REVISION="${PORTICO_REVISION:-unknown}"
 exec "$HOME/.deno/bin/deno" run --allow-env --allow-run src/up/main.ts

@@ -312,6 +312,31 @@ for (const [name, unit] of Object.entries(UNITS)) {
   });
 }
 
+Deno.test("deploy contract: every entrance is told the revision it was launched from", async () => {
+  // The gate reads this back out of the running entrance's launch environment,
+  // which is the one record of a deploy that a pull without a restart cannot
+  // rewrite: the value is fixed when the process starts, so the only way to make
+  // it name the new revision is to actually start the process from it. A
+  // launcher that records nothing leaves "restarted onto this revision"
+  // unprovable, and the gate fails that entrance by name rather than trusting
+  // the ports — which a never-restarted process answers just as cheerfully.
+  for (const contract of Object.values(CONTRACTS)) {
+    const source = await rawScript(contract.file);
+    assert(
+      source.includes("-e PORTICO_REVISION="),
+      `${contract.file} must hand the revision to the entrance it launches`,
+    );
+    assert(
+      /git -C "\$ROOT" rev-parse HEAD/.test(source),
+      `${contract.file} must resolve the revision from the checkout it launches`,
+    );
+    assert(
+      !/[0-9a-f]{40}/.test(source),
+      `${contract.file} must not bake a revision into the script`,
+    );
+  }
+});
+
 Deno.test("deploy contract: drop-in example keeps live bind out of the repo", async () => {
   const text = await Deno.readTextFile(`${ROOT}deploy/drop-in.example.conf`);
   assert(

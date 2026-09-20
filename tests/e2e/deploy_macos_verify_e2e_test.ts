@@ -24,6 +24,7 @@ const SCRIPT = `${ROOT}deploy/macos/verify.sh`;
 
 /** Every verdict the gate must report, by name. */
 const CHECKS = [
+  "running-revision",
   "running-code-not-stale",
   "portal-local",
   "review-local",
@@ -183,23 +184,113 @@ interface Deployment {
   stop: () => Promise<void>;
 }
 
-/**
- * A healthy deployment: four entrances listening and one public origin, with a
- * checkout whose sources are older than the processes serving them.
- */
-async function startDeployment(
-  options: { staleSources?: boolean; gatewayExecutesTools?: boolean } = {},
-): Promise<Deployment> {
+/** What a launcher recorded for the processes it started. */
+interface Launch {
+  /** The revision it recorded; `null` stands for a launcher that records none. */
+  revision: string | null;
+  /** Anything else it exported. The gate must never repeat it. */
+  extra?: Record<string, string>;
+}
+
+async function git(args: string[]): Promise<string> {
+  const output = await new Deno.Command("git", {
+    args,
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  const stdout = new TextDecoder().decode(output.stdout).trim();
+  assert(
+    output.code === 0,
+    `git ${args.join(" ")} failed: ${new TextDecoder().decode(output.stderr)}`,
+  );
+  return stdout;
+}
+
+/** The tree the daemons were started from, as the gate sees it: a checkout. */
+async function checkoutTree(): Promise<string> {
   const tree = await Deno.makeTempDir({ prefix: "portico-macos-tree-" });
   await Deno.mkdir(`${tree}/src`, { recursive: true });
+  await Deno.writeTextFile(
+    `${tree}/src/portal.ts`,
+    "// the revision the daemons were started from\n",
+  );
+  await git(["-C", tree, "init", "--quiet"]);
+  await git(["-C", tree, "add", "-A"]);
+  await git([
+    "-C",
+    tree,
+    "-c",
+    "user.email=portico@example.invalid",
+    "-c",
+    "user.name=portico",
+    "commit",
+    "--quiet",
+    "-m",
+    "the revision the daemons were started from",
+  ]);
+  return tree;
+}
+
+async function treeRevision(tree: string): Promise<string> {
+  return await git(["-C", tree, "rev-parse", "HEAD"]);
+}
+
+/**
+ * The launch environment of the serving processes. `ps eww` is where the kernel
+ * keeps what a process was *started* with, so a fake here is a fake launcher:
+ * the gate is handed an environment of our choosing while every other question
+ * it asks (the start time behind `running-code-not-stale`, the listener table)
+ * still goes to the real host.
+ */
+async function fakeLaunchEnvironment(
+  launch: Launch,
+): Promise<{ env: Record<string, string>; stop: () => Promise<void> }> {
+  const dir = await Deno.makeTempDir({ prefix: "portico-macos-launch-" });
+  const recorded = launch.revision === null ? [] : [`PORTICO_REVISION=${launch.revision}`];
+  const extra = Object.entries(launch.extra ?? {}).map(([key, value]) => `${key}=${value}`);
+  const line = ["1", "?", "00:00:00", "deno", ...recorded, ...extra].join(" ");
+  await Deno.writeTextFile(
+    `${dir}/ps`,
+    `#!/bin/sh\n` +
+      `# Only the launch environment is synthetic; everything else is the host's.\n` +
+      `if [ "$1" = "eww" ]; then\n  printf '%s\\n' '${line}'\n  exit 0\nfi\n` +
+      `exec /bin/ps "$@"\n`,
+  );
+  await Deno.chmod(`${dir}/ps`, 0o755);
+  return {
+    env: { PATH: `${dir}:${Deno.env.get("PATH") ?? ""}` },
+    stop: () => Deno.remove(dir, { recursive: true }),
+  };
+}
+
+/**
+ * A healthy deployment: four entrances listening and one public origin, with a
+ * checkout whose sources are older than the processes serving them and whose
+ * launcher recorded the revision it started them from.
+ */
+async function startDeployment(
+  options: {
+    staleSources?: boolean;
+    gatewayExecutesTools?: boolean;
+    /** Recorded revision; defaults to the tree's own, which is the healthy case. */
+    launchRevision?: string | null;
+    extraLaunchEnv?: Record<string, string>;
+  } = {},
+): Promise<Deployment> {
+  const tree = await checkoutTree();
   const source = `${tree}/src/portal.ts`;
-  await Deno.writeTextFile(source, "// the revision the daemons were started from\n");
   if (!options.staleSources) {
     // Older than every process in this test run, which is what a restart onto
     // the pulled revision looks like from the outside.
     const longAgo = new Date(Date.now() - 3_600_000);
     await Deno.utime(source, longAgo, longAgo);
   }
+  const launch = await fakeLaunchEnvironment({
+    revision: options.launchRevision === undefined
+      ? await treeRevision(tree)
+      : options.launchRevision,
+    extra: options.extraLaunchEnv,
+  });
 
   const edge = listen(edgeStub());
   const portal = listen(edgeStub());
@@ -217,10 +308,11 @@ async function startDeployment(
       PORTICO_DEPLOY_REVIEW_PORT: portOf(review.url),
       PORTICO_DEPLOY_PUBLIC_ORIGIN: edge.url,
       PORTICO_DEPLOY_TREE: tree,
-      // The tree here is a stand-in, not a checkout, so there is no revision to
-      // pin: the run accepts a behaviour-only verdict explicitly. The gate still
-      // reports `skip checkout-revision`, so it never passes silently as if the
-      // revision had been checked.
+      PATH: launch.env.PATH,
+      // The tree here is a stand-in, not the production checkout, so there is
+      // no revision to *pin*: the run accepts a behaviour-only verdict
+      // explicitly. The gate still reports `skip checkout-revision`, so it
+      // never passes silently as if the revision had been checked.
       PORTICO_DEPLOY_ALLOW_UNPINNED: "1",
     },
     stopGateway: () => gateway.stop(),
@@ -230,7 +322,10 @@ async function startDeployment(
       gateway.stop();
       mcp.stop();
       edge.stop();
-      return Deno.remove(tree, { recursive: true });
+      return Promise.all([
+        Deno.remove(tree, { recursive: true }),
+        launch.stop(),
+      ]).then(() => {});
     },
   };
 }
@@ -293,6 +388,74 @@ Deno.test("E2E: the macOS gate refuses a Gateway that executes tools", async () 
     const report = await runGate(deployment.env);
     assertFailed(report, "gateway-does-not-execute-tools");
     assertEquals(report.code !== 0, true, "a Gateway that executes tools must exit non-zero");
+  } finally {
+    await deployment.stop();
+  }
+});
+
+Deno.test("E2E: the macOS gate refuses a daemon started from the revision the tree left behind", async () => {
+  // The pull landed and the restart did not: every entrance answers, the
+  // product page is identical, and the only thing that changed is which
+  // revision the serving processes were started from. File times can be
+  // rewritten by a restore that preserves them; the launch environment is fixed
+  // when the process starts, so this is the one claim that a pull-then-no-restart
+  // cannot retcon — and the tree's own revision is what it has to match.
+  const deployment = await startDeployment({ launchRevision: "0".repeat(40) });
+  const treeSha = await treeRevision(deployment.tree);
+  try {
+    const report = await runGate(deployment.env);
+    assertFailed(report, "running-revision");
+    assertPassed(report, "portal-local");
+    assert(
+      verdictOf(report, "running-revision").includes("restart"),
+      `the gate must say what to do about it:\n${report.stdout}`,
+    );
+    assert(
+      report.stdout.includes("0".repeat(40)) && report.stdout.includes(treeSha),
+      `the gate must name both revisions:\n${report.stdout}`,
+    );
+    assertEquals(report.code !== 0, true, "an un-restarted daemon must exit non-zero");
+  } finally {
+    await deployment.stop();
+  }
+});
+
+Deno.test("E2E: the macOS gate refuses a launcher that recorded no revision", async () => {
+  // A run script that never records what it launched leaves the claim
+  // unprovable, and an unprovable claim is not a passing one: the gate has to
+  // fail the entrance rather than accept a host where nobody can say which
+  // revision the daemons are running.
+  const deployment = await startDeployment({ launchRevision: null });
+  try {
+    const report = await runGate(deployment.env);
+    assertFailed(report, "running-revision");
+    assertPassed(report, "portal-local");
+    assert(
+      report.stdout.includes("PORTICO_REVISION"),
+      `the gate must name what the launcher was supposed to record:\n${report.stdout}`,
+    );
+    assertEquals(report.code !== 0, true, "an unrecorded launch must exit non-zero");
+  } finally {
+    await deployment.stop();
+  }
+});
+
+Deno.test("E2E: the macOS gate never echoes the launch environment it reads", async () => {
+  // Reading a running process's environment means reading whatever else the
+  // launcher exported, and a gate that printed that would turn a read-only
+  // check into a disclosure of every secret in the deployment's env file. Only
+  // the one variable it asks about may reach the output.
+  const sentinel = "sentinel-value-that-must-not-be-printed";
+  const deployment = await startDeployment({
+    extraLaunchEnv: { PORTICO_TEST_SENTINEL: sentinel },
+  });
+  try {
+    const report = await runGate(deployment.env);
+    assertPassed(report, "running-revision");
+    assert(
+      !report.stdout.includes(sentinel) && !report.stderr.includes(sentinel),
+      `the gate must not repeat the environment it read:\n${report.stdout}${report.stderr}`,
+    );
   } finally {
     await deployment.stop();
   }

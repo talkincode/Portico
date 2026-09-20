@@ -342,6 +342,67 @@ check_running_code_is_current() {
   fi
 }
 
+# What a launcher recorded for one process, read back from the kernel: `ps eww`
+# prints the environment a process was *started* with, so the value is fixed at
+# exec time and only starting the process again can change it. (macOS quotes
+# each entry in that output; the Linux form is bare.)
+#
+# Only that one variable is extracted, and only when it looks like a revision:
+# the same output carries whatever else the deployment exported — env files hold
+# credentials — so repeating it would turn a read-only check into a disclosure
+# in the deploy log.
+capture_launch_revision() { # pid
+  local pid="$1" line
+  line=$(ps eww -p "$pid" 2>/dev/null)
+  printf '%s\n' "$line" | tr -d "'" | tr ' ' '\n' |
+    sed -n 's/^PORTICO_REVISION=\([0-9a-f]\{7,64\}\)$/\1/p' | head -n 1
+}
+
+# The same no-op restart `check_running_code_is_current` below catches by dates,
+# caught instead by the record the launcher left behind. A file time can be moved
+# without restarting anything (a restore, a touch, a clock), and a previous
+# revision answers every probe with the same product page; the revision a process
+# was started from cannot be talked out of it — it is the only evidence here that
+# *is* the restart, rather than a side effect of one.
+check_running_revision() {
+  local expected entry name port pid wanted reported seen=0 wrong=0
+  expected=$(git -C "$TREE" rev-parse HEAD 2>/dev/null)
+  if [ -z "$expected" ]; then
+    skip running-revision "the tree at $TREE is not a git checkout, so there is no revision for the entrances to have been started from"
+    return
+  fi
+  for entry in "portal:${PORTAL_PORT}" "gateway:${GATEWAY_PORT}" "mcp:${MCP_PORT}"; do
+    name="${entry%%:*}"
+    port="${entry##*:}"
+    wanted="VERIFY_${name}"
+    pid=$(listener_pid "$port" "${!wanted}")
+    if [ -z "$pid" ]; then
+      # Nothing is listening, so there is no launch record to read; the address
+      # check above and the start-time check below already report that as their
+      # own failure rather than letting it read as a verified entrance here.
+      continue
+    fi
+    seen=1
+    reported=$(capture_launch_revision "$pid")
+    if [ -z "$reported" ]; then
+      wrong=1
+      bad running-revision "the ${name} entrance (pid ${pid}) recorded no PORTICO_REVISION, so the revision it serves is unknown; restart it with the launcher that records one"
+    elif [ "$reported" != "$expected" ]; then
+      wrong=1
+      bad running-revision "the ${name} entrance (pid ${pid}) was started from ${reported}, but the tree is at ${expected}; restart it onto this checkout"
+    fi
+  done
+  if [ "$wrong" = "1" ]; then
+    return
+  fi
+  if [ "$seen" = "0" ]; then
+    skip running-revision "no listening entrance to read a launch record from"
+  else
+    ok running-revision
+  fi
+}
+
+check_running_revision
 check_running_code_is_current
 
 # The revision pin is required, not optional. Behaviour is exactly what a

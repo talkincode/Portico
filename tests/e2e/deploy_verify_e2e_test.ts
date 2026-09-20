@@ -42,6 +42,7 @@ const CHECKS = [
   "gateway-audit-is-auditor-only",
   "mcp-jsonrpc-initialize",
   "mcp-get-is-not-a-transport",
+  "running-revision",
   "running-code-not-stale",
 ];
 
@@ -106,6 +107,57 @@ async function headRevision(): Promise<string> {
   return head;
 }
 
+/** What a launcher recorded for the processes it started. */
+interface Launch {
+  /**
+   * The revision it recorded. The default is a launcher that records the tree it
+   * launched, which is what `run-*.sh` does; `null` is a launcher that records
+   * no revision at all, which leaves the claim unprovable.
+   */
+  revision?: string | null;
+  /** Anything else it exported. The gate must never repeat it. */
+  extra?: Record<string, string>;
+}
+
+/**
+ * The launch environment the gate reads back out of a serving process. `ps eww`
+ * is where the kernel keeps what a process was *started* with, so shadowing it
+ * here is shadowing the launcher — and that record is the one piece of
+ * deploy evidence a restart cannot retcon: the only way to make it name a
+ * revision is to actually start the process from it.
+ *
+ * Only the launch environment is synthetic. Everything the gate asks about the
+ * host itself (the listener table, a process's start time) still reaches the
+ * real `ps` through the fallback below.
+ */
+function writeFakeLauncher(dir: string, launch: Launch = {}): void {
+  const entries = ["1", "?", "00:00:00", "deno"];
+  if (launch.revision !== null) {
+    entries.push(`PORTICO_REVISION=${launch.revision ?? headRevisionSync()}`);
+  }
+  for (const [key, value] of Object.entries(launch.extra ?? {})) entries.push(`${key}=${value}`);
+  Deno.writeTextFileSync(
+    `${dir}/ps`,
+    `#!/bin/sh\n` +
+      `# Only the launch environment is synthetic; everything else is the host's.\n` +
+      `if [ "$1" = "eww" ]; then\n  printf '%s\\n' '${entries.join(" ")}'\n  exit 0\nfi\n` +
+      `exec /bin/ps "$@"\n`,
+  );
+  Deno.chmodSync(`${dir}/ps`, 0o755);
+}
+
+/** `headRevision` for the fixtures below, which build their launcher synchronously. */
+function headRevisionSync(): string {
+  const output = new Deno.Command("git", {
+    args: ["-C", ROOT, "rev-parse", "HEAD"],
+    stdout: "piped",
+    stderr: "piped",
+  }).outputSync();
+  const head = new TextDecoder().decode(output.stdout).trim();
+  assert(output.code === 0 && head.length > 0, "the test tree must be a git checkout");
+  return head;
+}
+
 /**
  * Stand-ins for the three entrances, so the failure paths below can flip one
  * behaviour at a time while everything else stays healthy — a gate that only
@@ -140,6 +192,8 @@ interface StubOptions {
   reviewHref?: string;
   /** Answer an anonymous `/internal` with 200 instead of 404. */
   failOpenInternal?: boolean;
+  /** What the launcher behind these entrances recorded. */
+  launch?: Launch;
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -221,6 +275,8 @@ interface Stubs {
   portal: string;
   gateway: string;
   mcp: string;
+  /** `PATH` carrying the fake launcher this deployment's processes started from. */
+  path: string;
   stop: () => Promise<void>;
   stopMcp: () => void;
 }
@@ -247,15 +303,20 @@ function startStubs(options: StubOptions = {}): Stubs {
   const portal = listen(portalStub(options));
   const gateway = listen(gatewayStub());
   const mcp = listen(mcpStub());
+  const launchDir = Deno.makeTempDirSync({ prefix: "portico-verify-launch-" });
+  writeFakeLauncher(launchDir, options.launch);
   return {
     portal: portal.url,
     gateway: gateway.url,
     mcp: mcp.url,
-    stop: () => {
+    path: `${launchDir}:${Deno.env.get("PATH") ?? ""}`,
+    stop: async () => {
       portal.stop();
       gateway.stop();
       mcp.stop();
-      return Promise.resolve();
+      // Best effort: stop() is called from both the body and a finally in a few
+      // tests, and a second cleanup has nothing left to remove.
+      await Deno.remove(launchDir, { recursive: true }).catch(() => {});
     },
     stopMcp: () => mcp.stop(),
   };
@@ -275,6 +336,7 @@ function stubEnv(stubs: Stubs, extra: Record<string, string> = {}): Record<strin
     PORTICO_DEPLOY_GATEWAY_PORT: portOf(stubs.gateway),
     PORTICO_DEPLOY_MCP_PORT: portOf(stubs.mcp),
     PORTICO_DEPLOY_ALLOW_UNPINNED: "1",
+    PATH: stubs.path,
     ...extra,
   };
 }
@@ -293,6 +355,10 @@ Deno.test("E2E: the deploy gate passes against the three shipped entrances", asy
     // the chrome, so the shipped deployment must gate green with no entry.
     PORTICO_REVIEW_ORIGIN: "off",
     PORTICO_PORT: "0",
+    // The revision the launcher recorded, read back by the gate out of this
+    // process's own launch environment — no fixture stands in for the launcher
+    // here, which is what makes this the end-to-end half of the claim.
+    PORTICO_REVISION: await headRevision(),
   }, PORTAL_PERMS);
   const gateway = await bootEntrypoint<{ url: string }>(GATEWAY, {
     PORTICO_CATALOG_PATH: catalog,
@@ -300,12 +366,14 @@ Deno.test("E2E: the deploy gate passes against the three shipped entrances", asy
     PORTICO_SESSIONS_PATH: sessions,
     PORTICO_GATEWAY_AUDIT_PATH: audit,
     PORTICO_PORT: "0",
+    PORTICO_REVISION: await headRevision(),
   }, GATEWAY_PERMS);
   const mcp = await bootEntrypoint<{ url: string }>(MCP, {
     PORTICO_CATALOG_PATH: catalog,
     PORTICO_IDENTITIES_PATH: identities,
     PORTICO_SESSIONS_PATH: sessions,
     PORTICO_PORT: "0",
+    PORTICO_REVISION: await headRevision(),
   }, MCP_PERMS);
 
   try {
@@ -403,6 +471,68 @@ Deno.test("E2E: the deploy gate refuses a process older than the tree it serves"
   }
 });
 
+Deno.test("E2E: the deploy gate refuses an entrance started from a revision the tree left behind", async () => {
+  // The pull landed and the restart did not. Every port still answers with the
+  // same product page, so only the record of what the process was *started* from
+  // separates "restarted onto the new revision" from "still the previous one" —
+  // and that record cannot be rewritten after the fact the way a file time can.
+  const stubs = startStubs({ launch: { revision: "0".repeat(40) } });
+  try {
+    const report = await runVerify(stubEnv(stubs));
+    assertFailed(report, "running-revision");
+    assertPassed(report, "portal-product-page");
+    assert(
+      verdictOf(report, "running-revision").includes("restart"),
+      `the gate must say what to do about it:\n${report.stdout}`,
+    );
+    assert(
+      report.stdout.includes("0".repeat(40)) && report.stdout.includes(await headRevision()),
+      `the gate must name both revisions:\n${report.stdout}`,
+    );
+    assertEquals(report.code !== 0, true, "an un-restarted entrance must exit non-zero");
+  } finally {
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate refuses an entrance whose launcher recorded no revision", async () => {
+  // A launcher that never records what it started — an older copy of the run
+  // script, say — leaves the claim unprovable, and an unprovable claim is not a
+  // passing one: the gate must name the variable and fail the entrance.
+  const stubs = startStubs({ launch: { revision: null } });
+  try {
+    const report = await runVerify(stubEnv(stubs));
+    assertFailed(report, "running-revision");
+    assertPassed(report, "portal-product-page");
+    assert(
+      report.stdout.includes("PORTICO_REVISION"),
+      `the gate must name what the launcher was supposed to record:\n${report.stdout}`,
+    );
+    assertEquals(report.code !== 0, true, "an unrecorded launch must exit non-zero");
+  } finally {
+    await stubs.stop();
+  }
+});
+
+Deno.test("E2E: the deploy gate never echoes the launch environment it reads", async () => {
+  // Reading a running process's environment means reading whatever else the
+  // launcher exported, and the deployment's env file holds credentials. A gate
+  // that printed that would turn a read-only check into a disclosure in the
+  // deploy log; only the one variable it asks about may reach the output.
+  const sentinel = "sentinel-value-that-must-not-be-printed";
+  const stubs = startStubs({ launch: { extra: { PORTICO_TEST_SENTINEL: sentinel } } });
+  try {
+    const report = await runVerify(stubEnv(stubs));
+    assertPassed(report, "running-revision");
+    assert(
+      !report.stdout.includes(sentinel) && !report.stderr.includes(sentinel),
+      `the gate must not repeat the environment it read:\n${report.stdout}${report.stderr}`,
+    );
+  } finally {
+    await stubs.stop();
+  }
+});
+
 Deno.test("E2E: the deploy gate pins the checkout revision when asked", async () => {
   const stubs = startStubs();
   try {
@@ -476,6 +606,10 @@ async function fakeListenerTable(
   // so shadowing one is enough to hand the gate a table of our choosing.
   await Deno.writeTextFile(`${dir}/ss`, `#!/bin/sh\ncat <<'TABLE'\n${rows.join("\n")}\nTABLE\n`);
   await Deno.chmod(`${dir}/ss`, 0o755);
+  // This table replaces `PATH` wholesale, so the launcher has to travel with it:
+  // a deployment described by a listener table is still a deployment whose
+  // processes were started from some revision.
+  writeFakeLauncher(dir);
   return {
     env: { PATH: `${dir}:${Deno.env.get("PATH") ?? ""}` },
     stop: () => Deno.remove(dir, { recursive: true }),
