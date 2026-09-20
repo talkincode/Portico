@@ -25,6 +25,7 @@ Portico MCP 服务端暴露了 18 个经过安全收敛的只读治理工具：
 | **`portico_web`** | `{}` | 匿名或持会话 | 列出当前身份可见的 Web 直连入口。与 CLI `web list`、Portal `GET /api/web` 同一载荷。MCP 端点与 CLI 包坐标不会出现。匿名只看到已审批公开记录。不代理页面。 |
 | **`portico_cli`** | `{}` | 匿名或持会话 | 列出当前身份可见的 CLI 包坐标。与 CLI `cli list`、Portal `GET /api/cli` 同一载荷。MCP 端点与 Web href 不会出现。匿名只看到已审批公开记录。不安装、不执行。 |
 | **`portico_dashboard`**| `{}` | 匿名或持会话 | 获取系统资产大盘统计（服务总数、渠道分布、公开数）。 |
+| **`portico_audience`** | `{ id: string }` | **维护者与人类审计者** | 单条记录在公开信任边界上的状态：记录自身声明的 `claimed`、读路径实际返回的 `served`、轨迹对该 surface 的最新一条 `decision`、匿名是否可达的 `reachable`，以及按 id 排序的名册受众（`{id,kind,role,reachable}`，角色来自名册，不含邮箱）。字节与轨迹不一致时给出 `mismatch`（`claimed_public_without_approval` / `approved_without_public_record`），两种情况下 `reachable` 都是 `false`。与 CLI `catalog audience`、Portal `GET /api/audience/<id>` 同一载荷。只读与匿名返回 `FORBIDDEN`，草稿对审计者返回 `NOT_FOUND`。只读：不写目录、不追加审批记录，也不是批准入口。 |
 | **`portico_audit`** | `{ q?: string, kind?: string, action?: string, subject?: string }` | **仅限人类审计者** | 查询审计时间线流水。非审计者调用返回 `FORBIDDEN`。 |
 | **`portico_audit_verify`** | `{}` | **仅限人类审计者** | 重算安全审计的封条链，报告每个环节是否与写入时一致：哪条记录被改写、被删除或链条断开，也会列出没有任何环节覆盖的记录（未封存）。等价于 CLI `audit verify` 与 Portal `GET /api/audit-verify`。非审计者返回 `FORBIDDEN`。只读：不写审计文件，也不修改任何记录；返回的 `tip` 是该链当前末端摘要，可与外部留存的摘要比对。 |
 | **`portico_seal_anchors`** | `{}` | **仅限人类审计者** | 列出外部方保留的封条检查点：谁在何时钉住了每条链的末端摘要与长度。封条本身只能证明「链内部一致」；整条链被重写、尾部被截断时链仍然自洽，只有链外的检查点能把这两种情况区分出来。与 CLI `audit anchors`、Portal `GET /api/seal-anchors` 同一载荷，读同一个锚点文件。非审计者返回 `FORBIDDEN`。只读：钉新检查点只能经 CLI `audit anchor` 写入，Portal 与 MCP 无写权限。 |

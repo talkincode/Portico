@@ -98,6 +98,9 @@ portico catalog withdraw --catalog <path> --identities <path> --sessions <path> 
 # 列出公开边界审批记录（通过 / 拒绝 / 撤回，含可选备注）；匿名为空列表
 portico catalog approvals --catalog <path> --identities <path> --sessions <path> --session <token>
 
+# 单条记录在公开边界上的状态与名册受众（仅维护者与人类审计者；只读，不改可见性）
+portico catalog audience --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+
 # 列表查询可见服务
 portico catalog list --catalog <path> [--identities <path> --sessions <path> --session <token>]
 

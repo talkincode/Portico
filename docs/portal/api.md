@@ -211,3 +211,14 @@ curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/approvals
 
 > [!NOTE]
 > 已登录身份看到同一批记录与同一顺序。匿名得到空列表，不泄漏待审、已拒绝入口或备注。人看的决定页是 `/internal/approvals`，待审候选在 `/internal/pending`（可按 `?channel=` 只读筛选 cli / mcp / web；筛选 tab 显示该渠道待审计数；入口标明种类 url / package / mcp_endpoint，引用为转义文本、不可点击；匿名均为 HTML 404）。这不是批准/驳回/撤回写入入口；`POST` 返回 `405`。
+
+### 9a. 公开边界与受众 (`GET /api/audience/<id>`)
+
+单条记录在公开信任边界上的状态：记录自身声明的 `claimed`、读路径实际返回的 `served`、审批轨迹对该 surface 的最新一条 `decision`、匿名是否可达的 `reachable`，以及按 id 排序的名册受众（`{id,kind,role,reachable}`）。与 CLI `catalog audience`、MCP `portico_audience` 同一载荷。
+
+```bash
+curl -s -H "Authorization: Bearer $AUDITOR_SESSION" http://127.0.0.1:8788/api/audience/docs-writer
+```
+
+> [!NOTE]
+> 仅维护者与人类审计者可读；只读与匿名返回 `403 FORBIDDEN`，草稿对审计者返回 `404`（门禁先于取值，被拒身份对存在与不存在的 id 得到同一拒绝码）。`claimed` 与轨迹不一致时给出 `mismatch`：`claimed_public_without_approval`（字节自称公开而轨迹没有授予）或 `approved_without_public_record`（轨迹仍授予而字节已被写回 `internal`）；两种情况下 `reachable` 都是 `false`。每个主体的 `reachable` 与其自身 `GET /api/catalog/<id>` 的结果一致。只读：不改可见性、不追加审批记录，也不是批准入口。

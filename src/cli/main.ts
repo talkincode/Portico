@@ -25,6 +25,7 @@ import {
   type ActorRole,
   applyCatalogQuery,
   type ApprovalDecisionInput,
+  audienceReport,
   CatalogError,
   CatalogService,
   dashboardFrom,
@@ -65,6 +66,7 @@ Commands:
   catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
   catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog dashboard --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog audience  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected]
   catalog get       --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   mcp list          --catalog <path> --identities <path> --session <token> --sessions <path>
@@ -243,6 +245,14 @@ export async function runCli(
 
     if (action === "dashboard") {
       return ok(dashboardFrom(await service.list(actor)));
+    }
+
+    if (action === "audience") {
+      if (!flags.id) throw new UsageError("missing --id");
+      const access = new AccessService(
+        new FileIdentityStore(readIdentitiesPath(flags, env)),
+      );
+      return ok(await audienceReport(service, access, actor, flags.id));
     }
 
     if (action === "list") {
