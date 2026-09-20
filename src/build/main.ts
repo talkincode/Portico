@@ -1,6 +1,12 @@
 import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { parseCfAccessEnv } from "../access/mod.ts";
-import { cliPerms, cfAccessNetHost, gatewayPerms, readOnlyHttpPerms, reviewPerms } from "../perms.ts";
+import {
+  cfAccessNetHost,
+  cliPerms,
+  gatewayPerms,
+  readOnlyHttpPerms,
+  reviewPerms,
+} from "../perms.ts";
 import { parseBindHostname } from "../runtime/bind.ts";
 
 /**
@@ -32,7 +38,11 @@ function targets(hostname: string, reviewExtraNet: readonly string[]): Target[] 
     { name: "portico-portal", entry: "src/portal/main.ts", perms: readOnlyHttpPerms(hostname) },
     { name: "portico-gateway", entry: "src/gateway/main.ts", perms: gatewayPerms(hostname) },
     { name: "portico-mcp", entry: "src/mcp/main.ts", perms: readOnlyHttpPerms(hostname) },
-    { name: "portico-review", entry: "src/review/main.ts", perms: reviewPerms(hostname, undefined, reviewExtraNet) },
+    {
+      name: "portico-review",
+      entry: "src/review/main.ts",
+      perms: reviewPerms(hostname, undefined, reviewExtraNet),
+    },
   ];
 }
 
