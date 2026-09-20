@@ -155,7 +155,7 @@ Deno.test("review POST routes approve and reject and GET is HTML", async () => {
     state.context,
   );
   assertEquals(page.status, 200);
-  assertEquals((await page.text()).includes("Human review"), true);
+  assertEquals((await page.text()).includes("人工审核"), true);
 });
 
 Deno.test("review github login is allowlisted and mints a session for the roster human", async () => {
@@ -281,4 +281,21 @@ Deno.test("review github env parses allowlist and fails closed", () => {
     true,
   );
   assertEquals(isAllowedGithubUser({ login: "jamiesun", emails: [] }, []), false);
+});
+
+Deno.test("review login page uses the console shell with a github button when configured", async () => {
+  const base = { catalog: {}, access: {} };
+  const withGithub = await handleReviewRequest(
+    new Request("http://127.0.0.1/review/login"),
+    { ...base, github: { config: { allowlist: ["jamiesun"] }, exchange: () => Promise.reject(new Error("x")) } } as never,
+  );
+  assertEquals(withGithub.status, 200);
+  const withHtml = await withGithub.text();
+  assertEquals(withHtml.includes("使用 GitHub 登录"), true);
+  assertEquals(withHtml.includes("/review/oauth/start"), true);
+  assertEquals(withHtml.includes("一次性凭证"), true);
+  const plain = await handleReviewRequest(new Request("http://127.0.0.1/review/login"), base as never);
+  const plainHtml = await plain.text();
+  assertEquals(plainHtml.includes("/review/oauth/start"), false);
+  assertEquals(plainHtml.includes("一次性凭证"), true);
 });

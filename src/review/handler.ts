@@ -1,7 +1,14 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
 import { CatalogError, CatalogService, ErrorCode } from "../catalog/mod.ts";
-import type { Actor, RegisterInput } from "../catalog/mod.ts";
+import type { Actor, AgentSurface, RegisterInput } from "../catalog/mod.ts";
+import {
+  esc,
+  prefersDark,
+  renderShell,
+  resolvePageTheme,
+  stateChip,
+} from "../portal/design/mod.ts";
 import {
   type ExchangeGithubCode,
   githubAuthorizeUrl,
@@ -69,9 +76,7 @@ export async function handleReviewRequest(
       const records = (await context.catalog.list(actor)).filter((item) =>
         item.governanceState === "pending_public"
       );
-      return new Response(renderReview(actor, records), {
-        headers: securityHeaders("text/html; charset=utf-8"),
-      });
+      return html(renderReviewPage(request, actor, records));
     }
     if (request.method !== "POST") return jsonError(405, "method not allowed");
     if (actor.role === "anonymous") return forbidden(401, "authentication required");
@@ -247,13 +252,7 @@ function readSessionCookie(request: Request): string | null {
 }
 async function handleLogin(request: Request, context: ReviewContext): Promise<Response> {
   if (request.method === "GET") {
-    const github = context.github
-      ? `<p><a href="/review/oauth/start">Sign in with GitHub</a></p>`
-      : "";
-    return new Response(
-      `<!doctype html><meta charset="utf-8"><title>Portico review login</title>${github}<form method="post"><label>Identity <input name="id" required></label><label>One-time credential <input name="token" type="password" required></label><button>Sign in</button></form>`,
-      { headers: securityHeaders("text/html; charset=utf-8") },
-    );
+    return html(renderLoginPage(request, context.github !== undefined));
   }
   if (request.method !== "POST") return jsonError(405, "method not allowed");
   const contentType = request.headers.get("content-type") ?? "";
@@ -311,26 +310,88 @@ function securityHeaders(contentType: string): HeadersInit {
     "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
   };
 }
+function html(body: string): Response {
+  return new Response(body, {
+    status: 200,
+    headers: securityHeaders("text/html; charset=utf-8"),
+  });
+}
+
+/** Same shell and token vocabulary as the internal console. */
+function shell(
+  request: Request,
+  title: string,
+  body: string,
+): string {
+  return renderShell({
+    title,
+    tone: "internal",
+    theme: resolvePageTheme("internal", null, prefersDark(request.headers)),
+    path: new URL(request.url).pathname,
+    head: `<style>${REVIEW_CSS}</style>`,
+    body,
+  });
+}
+
+const REVIEW_CSS = `
+.rv-wrap{min-height:72vh;display:flex;align-items:center;justify-content:center;padding:32px 16px}
+.rv-card{max-width:400px;width:100%;padding:28px}
+.rv-card h1{font-size:1.25rem;margin:6px 0 4px}
+.rv-card .tk-meta{margin:0}
+.rv-github{display:block;text-align:center;text-decoration:none;font-weight:600;font-size:0.9rem;color:#f0f3f6;background:#24292f;border:1px solid #444c56;border-radius:8px;padding:10px;margin:16px 0 4px}
+.rv-github:hover{background:#2f363d}
+.rv-div{display:flex;align-items:center;gap:10px;color:var(--tk-muted);font-size:0.78rem;margin:18px 0 6px}
+.rv-div::before,.rv-div::after{content:"";flex:1;border-top:1px solid var(--tk-border, #2a2f36)}
+.rv-field{margin:12px 0}
+.rv-field label{display:block;font-size:0.8rem;color:var(--tk-muted);margin-bottom:6px}
+.rv-field input{display:block;width:100%;box-sizing:border-box;font-size:0.9rem;color:var(--tk-ink);background:var(--tk-sunken);border:1px solid var(--tk-border, #2a2f36);border-radius:8px;padding:9px 10px}
+.rv-card .tk-btn{width:100%;margin-top:14px;padding:10px}
+.rv-main{max-width:880px;margin:0 auto;padding:32px 20px 64px}
+.rv-main h1{font-size:1.4rem;margin:6px 0 4px}
+.rv-table td form{display:inline;margin-right:8px}
+.rv-empty{color:var(--tk-muted);padding:28px 0}
+`;
+
+function renderLoginPage(request: Request, githubEnabled: boolean): string {
+  const github = githubEnabled
+    ? `<a class="rv-github" href="/review/oauth/start">使用 GitHub 登录</a><div class="rv-div"><span>或一次性凭证</span></div>`
+    : "";
+  return shell(request, "审核登录", `  <main class="rv-wrap">
+    <div class="tk-panel rv-card">
+      <p class="tk-meta">PORTICO · 人工审核</p>
+      <h1>审核登录</h1>
+      ${github}
+      <form method="post">
+        <div class="rv-field"><label for="rv-id">身份</label><input id="rv-id" name="id" autocomplete="username" required></div>
+        <div class="rv-field"><label for="rv-token">一次性凭证</label><input id="rv-token" name="token" type="password" autocomplete="current-password" required></div>
+        <button class="tk-btn" type="submit">登录</button>
+      </form>
+      <p class="tk-note" style="margin-top:16px">仅 allowlisted 账号可登录；能审批什么由名册决定。</p>
+    </div>
+  </main>`);
+}
+
 function escape(value: string): string {
   return value.replace(
     /[&<>"']/g,
     (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
   );
 }
-function renderReview(
+function renderReviewPage(
+  request: Request,
   actor: Actor,
-  records: Array<{ id: string; name: string; publicSubmission?: { submittedBy: { id: string } } }>,
+  records: AgentSurface[],
 ): string {
-  const cards = records.map((record) =>
-    `<li><strong>${escape(record.name)}</strong> <code>${
-      escape(record.id)
-    }</code><br><form method="post" action="/review/approve"><input type="hidden" name="id" value="${
-      escape(record.id)
-    }"><button>Approve</button></form> <form method="post" action="/review/reject"><input type="hidden" name="id" value="${
-      escape(record.id)
-    }"><button>Reject</button></form></li>`
+  const rows = records.map((record) =>
+    `<tr><td><strong>${escape(record.name)}</strong><br><span class="tk-id">${escape(record.id)}</span></td><td><span class="tk-meta">${escape(record.version ?? "—")}</span></td><td><span class="tk-meta">${escape(record.publicSubmission?.submittedBy.id ?? "—")}</span></td><td>${stateChip(record.governanceState)}</td><td class="rv-table"><form method="post" action="/review/approve"><input type="hidden" name="id" value="${escape(record.id)}"><button class="tk-btn tk-btn--accent" type="submit">通过</button></form><form method="post" action="/review/reject"><input type="hidden" name="id" value="${escape(record.id)}"><button class="tk-btn" type="submit">驳回</button></form></td></tr>`
   ).join("");
-  return `<!doctype html><meta charset="utf-8"><title>Portico review</title><main><h1>Human review</h1><p>Signed in as ${
-    escape(actor.id)
-  }.</p><ul>${cards || "<li>No pending public candidates.</li>"}</ul></main>`;
+  const table = records.length === 0
+    ? `<p class="rv-empty">暂无待审公开候选。</p>`
+    : `<div class="tk-panel"><table class="tk-table"><thead><tr><th>名称</th><th>版本</th><th>提交者</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return shell(request, "人工审核", `  <main class="rv-main">
+    <p class="tk-meta">PORTICO · 人工审核</p>
+    <h1>待审公开</h1>
+    <p class="tk-meta">登录身份：${escape(actor.id)} · 提交者不能审批自己的候选</p>
+    ${table}
+  </main>`);
 }

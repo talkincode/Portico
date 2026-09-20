@@ -152,6 +152,13 @@ const MAGAZINE_CSS = `
         align-items: center;
         gap: 1.25rem;
       }
+      .review-entry a {
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .review-entry a:hover { color: var(--text); }
       .search-box {
         display: flex;
         align-items: center;
@@ -1012,10 +1019,11 @@ function renderChrome(input: {
       <nav class="nav">
         <a class="${contentActive.trim()}" href="${escapeHtml(contentHref)}">内容</a>
         <a class="${topicActive.trim()}" href="${escapeHtml(topicHref)}">专题</a>
-        <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}${reviewLink}
+        <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}
         <span aria-disabled="true">收藏</span>
       </nav>
       <div class="topbar-right">
+        ${reviewLink ? `<span class="review-entry">${reviewLink.trim()}</span>` : ""}
         <form class="search-box" method="get" action="/" role="search">
           ${
     input.theme === "system"

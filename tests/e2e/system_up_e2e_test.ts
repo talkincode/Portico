@@ -132,7 +132,7 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     });
     assertEquals(auditorReview.status, 200);
     assert(
-      (await auditorReview.text()).includes("Human review"),
+      (await auditorReview.text()).includes("人工审核"),
       "the review entrance must serve the pending queue",
     );
 
