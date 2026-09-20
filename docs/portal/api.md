@@ -111,8 +111,22 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/audit-verify
 
 返回每支柱的 `ok`、已封条数、`unsealed`（没有任何环节覆盖的记录数），以及被改写的第一条记录（`seq` / `kind` / `id` / 原因：`digest` 摘要不符、`missing` 记录被删、`chain` 链条断开）和链末摘要 `tip`。
 
+配置了 `PORTICO_SEAL_ANCHORS_PATH` 时，载荷另含 `anchored`（已被检查点覆盖的支柱数）与每支柱的 `anchor`（`state`：`intact` / `moved` / `truncated` / `rewritten`，以及锚定时的 `seq` / `tip` / `links` / `foundAt`）。未配置该路径时如实返回 `anchored: 0`，不把支柱当作已校验。
+
 > [!NOTE]
-> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这是只读面：`POST` 返回 `405`，校验本身不改任何记录，也不写审计文件。`unsealed` 是如实报告，不代表通过；封条链能指认改写与删除，但不能自证“从未被整体重写”——链末摘要需要与外部留存的 `tip` 比对才能发现整链替换。
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`。这是只读面：`POST` 返回 `405`，校验本身不改任何记录，也不写审计文件。`unsealed` 是如实报告，不代表通过；封条链能指认改写与删除，但不能自证“从未被整体重写”——这正是 `anchor.state` 回答的问题（`rewritten` / `truncated` / `moved`），钉检查点只能经 CLI `audit anchor`。
+
+---
+
+### 4d. 封条检查点 (`GET /api/seal-anchors`)
+列出人类审计者钉下的封条检查点：谁在何时钉住了哪条链的哪个位置与摘要，最新的一条在最后。与 CLI `audit anchors`、MCP `portico_seal_anchors` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/seal-anchors
+```
+
+> [!NOTE]
+> 仅人类审计者可读（其他身份 `403 Forbidden`）。只读面：`POST` 返回 `405`，该入口不会创建检查点——写入只能经 CLI `audit anchor`。锚点文件与四个支柱文件在同一台主机上，拿到写权限的人可以一并删除；检查点小而有顺序，本来就是给人抄进外部报告/运维日志的。
 
 ---
 

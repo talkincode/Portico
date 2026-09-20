@@ -31,6 +31,7 @@ if (import.meta.main) {
       gatewayAuditPath: env.PORTICO_GATEWAY_AUDIT_PATH,
       cfAccess: cfAccess.enabled ? new CfAccessVerifier(cfAccess) : undefined,
       conclusionsPath: env.PORTICO_CONCLUSIONS_PATH,
+      sealAnchorsPath: env.PORTICO_SEAL_ANCHORS_PATH,
       reviewEntry: parseReviewEntry(env),
       hostname,
       port,

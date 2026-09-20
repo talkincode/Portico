@@ -1,10 +1,13 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
 import {
+  AnchorService,
+  type AnchorStore,
   applyAuditQuery,
   applyConclusionQuery,
   AuditService,
   type ConclusionService,
+  MemoryAnchorStore,
   parseAuditQuery,
   parseConclusionQuery,
   SealService,
@@ -56,6 +59,12 @@ export interface PortalContext {
    * writes one — the process runs without `--allow-write`.
    */
   conclusions?: ConclusionService;
+  /**
+   * Optional seal checkpoints. Read-only here as well: the Portal compares the
+   * pillars against them and reports, but only an auditor with CLI access can
+   * take a new one.
+   */
+  sealAnchors?: AnchorStore;
   /**
    * Optional Portal-only Cloudflare Access mapping. Absent means the feature
    * is off: `Cf-Access-Jwt-Assertion` is ignored. CLI / Gateway / MCP must
@@ -121,6 +130,11 @@ export async function handlePortalRequest(
       // Read-only, like the rest of the Portal: it re-derives the seal from the
       // files and reports. A non-auditor gets FORBIDDEN from the service.
       return jsonOk(await sealService(context).report(actor));
+    }
+    if (url.pathname === "/api/seal-anchors") {
+      // The checkpoints themselves, newest last: who pinned which tips, when.
+      // Same gate as the seal report — the service refuses a non-auditor.
+      return jsonOk(await anchorService(context).list(actor));
     }
     if (url.pathname === "/api/dashboard") {
       const surfaces = await context.catalog.list(actor);
@@ -320,7 +334,20 @@ function auditService(context: PortalContext): AuditService {
 }
 
 function sealService(context: PortalContext): SealService {
-  return new SealService(context.catalog, context.access, context.gateway, context.conclusions);
+  return new SealService(
+    context.catalog,
+    context.access,
+    context.gateway,
+    context.conclusions,
+    context.sealAnchors,
+  );
+}
+
+function anchorService(context: PortalContext): AnchorService {
+  // With no configured file this entrance has no checkpoints to show, which an
+  // empty in-memory store says exactly. Reporting `[]` is honest here; taking
+  // a checkpoint is a CLI action and stays unreachable from the Portal.
+  return new AnchorService(context.sealAnchors ?? new MemoryAnchorStore(), sealService(context));
 }
 
 function auditQueryFrom(url: URL) {

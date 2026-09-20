@@ -1,6 +1,13 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
-import { AuditService, type ConclusionService, SealService } from "../audit/mod.ts";
+import {
+  AnchorService,
+  type AnchorStore,
+  AuditService,
+  type ConclusionService,
+  MemoryAnchorStore,
+  SealService,
+} from "../audit/mod.ts";
 import { type Actor, CatalogError, CatalogService } from "../catalog/mod.ts";
 import type { GatewayService } from "../gateway/mod.ts";
 import type { PageService } from "../ui/mod.ts";
@@ -34,6 +41,11 @@ export interface McpContext {
   pages?: PageService;
   /** Present when a conclusion path is configured; feeds `portico_conclusions`. */
   conclusions?: ConclusionService;
+  /**
+   * Present when a seal anchor path is configured; feeds
+   * `portico_audit_verify` (comparison) and `portico_seal_anchors` (listing).
+   */
+  sealAnchors?: AnchorStore;
 }
 
 export async function handleMcpRequest(
@@ -173,15 +185,20 @@ async function toolsCall(
   // envelope the CLI prints, so "the three entrances agree" is checkable by
   // comparing payloads rather than by reading three implementations.
   try {
+    const seal = new SealService(
+      context.catalog,
+      context.access,
+      context.gateway,
+      context.conclusions,
+      context.sealAnchors,
+    );
     const data = await callTool(actor, name, params.arguments, {
       catalog: context.catalog,
       audit: new AuditService(context.catalog, context.access, context.gateway),
-      seal: new SealService(
-        context.catalog,
-        context.access,
-        context.gateway,
-        context.conclusions,
-      ),
+      seal,
+      // With no configured file there is nothing pinned to show, and an empty
+      // store says that rather than inventing a checkpoint.
+      anchors: new AnchorService(context.sealAnchors ?? new MemoryAnchorStore(), seal),
       access: context.access,
       pages: context.pages,
       gateway: context.gateway,

@@ -146,6 +146,17 @@ portico audit conclude --conclusions <path> --catalog <path> --identities <path>
 # 查询追加式安全结论（全部，或按主体 / 作用域 / 判定过滤）
 portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
 
+# 钉一个封条检查点：钉住四个支柱的 (pillar, seq, tip)（写操作，仅人类审计者）
+portico audit anchor --anchors <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
+  [--audit <path>] [--conclusions <path>]
+
+# 列出已钉的检查点（只读，仅人类审计者）
+portico audit anchors --anchors <path> --catalog <path> --identities <path> --sessions <path> --session <token>
+
+# 校验时带上检查点：每个支柱多出 anchor（intact / moved / truncated / rewritten）
+portico audit verify --anchors <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
+  [--audit <path>] [--conclusions <path>]
+
 # 设置自定义门户卡片配置
 portico page set --page <path> --catalog <path> --identities <path> --sessions <path> --session <token> --input <page.json>
 

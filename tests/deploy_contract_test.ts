@@ -176,6 +176,25 @@ Deno.test("deploy contract: portal and mcp are told where the security conclusio
   );
 });
 
+Deno.test("deploy contract: portal and mcp are told where the seal checkpoints live", async () => {
+  // Otherwise `GET /api/audit-verify` and `portico_audit_verify` report every
+  // pillar as unanchored (count 0) while `audit verify --anchors` compares them
+  // — a wholly rewritten chain or a truncated tail would look clean on the web
+  // surfaces. The Gateway never verifies the seal and must not be handed it.
+  for (const name of ["portal", "mcp"] as const) {
+    const source = await script(CONTRACTS[name].file);
+    assert(
+      source.includes("PORTICO_SEAL_ANCHORS_PATH="),
+      `${CONTRACTS[name].file} must pass PORTICO_SEAL_ANCHORS_PATH`,
+    );
+  }
+  const gateway = await script(CONTRACTS.gateway.file);
+  assert(
+    !gateway.includes("PORTICO_SEAL_ANCHORS_PATH="),
+    `${CONTRACTS.gateway.file} must not be handed a file it never reads`,
+  );
+});
+
 Deno.test("deploy contract: the portal is told which Review entrance it serves", async () => {
   // The chrome links to whatever this variable declares, so leaving it unset
   // would make the shipped deployment advertise a same-origin `/review` that

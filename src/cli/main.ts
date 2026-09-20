@@ -5,6 +5,7 @@ import {
   type GrantInput,
 } from "../access/mod.ts";
 import {
+  AnchorService,
   applyAuditQuery,
   applyConclusionQuery,
   AuditService,
@@ -12,6 +13,7 @@ import {
   CONCLUSION_SCOPES,
   type ConclusionInput,
   ConclusionService,
+  FileAnchorStore,
   FileConclusionStore,
   parseAuditQuery,
   parseConclusionQuery,
@@ -73,10 +75,12 @@ Commands:
   cli describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
-  audit verify      --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>]
+  audit verify      --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>] [--anchors <path>]
   audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
   audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope ${SCOPE_ARG} --verdict cleared|flagged [--note <text>]
   audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
+  audit anchor      --anchors <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>]
+  audit anchors     --anchors <path> --catalog <path> --identities <path> --session <token> --sessions <path>
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   page get          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
 
@@ -85,6 +89,11 @@ Identity path may also be set with PORTICO_IDENTITIES_PATH.
 Session path may also be set with PORTICO_SESSIONS_PATH.
 Gateway audit path may also be set with PORTICO_GATEWAY_AUDIT_PATH.
 Conclusion path may also be set with PORTICO_CONCLUSIONS_PATH.
+Seal anchor path may also be set with PORTICO_SEAL_ANCHORS_PATH.
+Without an anchor path, audit verify reports every pillar as unanchored
+(count 0), because nothing outside the pillar files then agrees on the tips;
+a rewrite of a whole chain and a truncation of its tail are invisible to the
+seal alone, and the anchors are what make them visible.
 Page path may also be set with PORTICO_PAGE_PATH.
 A non-anonymous command proves its identity with --session; --actor-* alone is
 refused (USAGE). With no identity flags at all a command runs as anonymous.
@@ -365,7 +374,7 @@ async function runAudit(
 ): Promise<CliResult> {
   if (
     action !== "list" && action !== "verify" && action !== "conclude" &&
-    action !== "conclusions"
+    action !== "conclusions" && action !== "anchor" && action !== "anchors"
   ) {
     throw new UsageError(action ? `unknown audit action '${action}'` : "missing audit action");
   }
@@ -413,14 +422,32 @@ async function runAudit(
     ? new GatewayService(catalog, new FileGatewayAuditStore(auditPath))
     : undefined;
 
+  // The seal-facing actions share one construction. Conclusions and anchors
+  // are optional files, and an absent anchors file is exactly what "no
+  // checkpoint was ever taken" looks like, so `audit verify` stays usable
+  // without one — every pillar then reports anchored: 0 rather than verified.
+  const conclusionsPath = flags.conclusions ?? env.PORTICO_CONCLUSIONS_PATH;
+  const conclusions = conclusionsPath
+    ? new ConclusionService(new FileConclusionStore(conclusionsPath), catalog)
+    : undefined;
+  const anchorsPath = flags.anchors ?? env.PORTICO_SEAL_ANCHORS_PATH;
+  const anchors = anchorsPath ? new FileAnchorStore(anchorsPath) : undefined;
+  const seals = new SealService(catalog, access, gateway, conclusions, anchors);
+
   if (action === "verify") {
-    const conclusionsPath = flags.conclusions ?? env.PORTICO_CONCLUSIONS_PATH;
-    const conclusions = conclusionsPath
-      ? new ConclusionService(new FileConclusionStore(conclusionsPath), catalog)
-      : undefined;
     // Role check first: the seal report names records, so only an auditor may
     // ask for it — same gate as `audit list`.
-    return ok(await new SealService(catalog, access, gateway, conclusions).report(actor));
+    return ok(await seals.report(actor));
+  }
+
+  if (action === "anchor" || action === "anchors") {
+    // Taking a checkpoint changes state, so it needs a real path instead of
+    // succeeding against nothing.
+    if (!anchors) {
+      throw new UsageError("missing --anchors or PORTICO_SEAL_ANCHORS_PATH");
+    }
+    const service = new AnchorService(anchors, seals);
+    return ok(action === "anchor" ? await service.anchor(actor) : await service.list(actor));
   }
 
   const events = await new AuditService(catalog, access, gateway).list(actor);

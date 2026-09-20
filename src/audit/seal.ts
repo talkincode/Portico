@@ -65,6 +65,12 @@ export interface SealVerdict {
   ok: boolean;
   /** Records this chain covers. */
   sealed: number;
+  /**
+   * Links in the chain, which is also the position the tip sits at. Recorded
+   * separately from `sealed` because a checkpoint pins a *position*: an
+   * anchor compares the chain's shape, not just how many records it covers.
+   */
+  links: number;
   /** Records present in the store that no link covers, in store order. */
   unsealed: string[];
   /** First break found, in chain order. */
@@ -187,6 +193,7 @@ export async function verifySeal(
     pillar,
     ok: firstBreak === undefined,
     sealed: covered.size,
+    links: chain.length,
     unsealed,
     tip: prev,
   };
