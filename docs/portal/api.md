@@ -78,7 +78,7 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/
 列出 Gateway 允许与拒绝的直连授权记录。与 CLI `gateway audit`、MCP `portico_gateway_audit` 同一载荷。
 
 ```bash
-curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/gateway-audit
+curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/api/gateway-audit
 ```
 
 > [!NOTE]
@@ -91,10 +91,10 @@ curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/gateway-audit
 
 ```bash
 # 全部结论
-curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/conclusions
+curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/api/conclusions
 
 # 按主体 / 作用域 / 判定过滤
-curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions?subject=<id>&scope=public_boundary&verdict=flagged"
+curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" "http://127.0.0.1:8788/api/conclusions?subject=<id>&scope=public_boundary&verdict=flagged"
 ```
 
 > [!NOTE]
@@ -106,7 +106,7 @@ curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions?subjec
 列出追加式身份授权记录。与 CLI `identity grants`、MCP `portico_grants` 同一载荷。
 
 ```bash
-curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/grants
+curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/api/grants
 ```
 
 > [!NOTE]
@@ -130,7 +130,7 @@ curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/revokes
 返回当前已证明身份的 id / kind / role。与 CLI `identity whoami`、MCP `portico_whoami` 同一载荷。
 
 ```bash
-curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/whoami
+curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/whoami
 ```
 
 > [!NOTE]
@@ -178,7 +178,7 @@ curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/credentia
 列出公开边界上的通过 / 拒绝 / 撤回记录（含可选 `note`）。与 CLI `catalog approvals`、MCP `portico_approvals` 同一载荷。
 
 ```bash
-curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/approvals
+curl -s -H "Authorization: Bearer <session>" http://127.0.0.1:8788/api/approvals
 ```
 
 > [!NOTE]
