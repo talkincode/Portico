@@ -261,12 +261,20 @@ function startStubs(options: StubOptions = {}): Stubs {
   };
 }
 
+/**
+ * The stubs stand in for a deployment, not for a checkout: there is no revision
+ * for these runs to pin, so they accept a behaviour-only verdict explicitly
+ * instead of tripping over a revision they never had. The gate still reports
+ * `skip checkout-revision` for them, so nothing here passes while silently
+ * pretending the revision was checked.
+ */
 function stubEnv(stubs: Stubs, extra: Record<string, string> = {}): Record<string, string> {
   return {
     PORTICO_DEPLOY_BIND: "127.0.0.1",
     PORTICO_DEPLOY_PORTAL_PORT: portOf(stubs.portal),
     PORTICO_DEPLOY_GATEWAY_PORT: portOf(stubs.gateway),
     PORTICO_DEPLOY_MCP_PORT: portOf(stubs.mcp),
+    PORTICO_DEPLOY_ALLOW_UNPINNED: "1",
     ...extra,
   };
 }
@@ -411,10 +419,38 @@ Deno.test("E2E: the deploy gate pins the checkout revision when asked", async ()
       "a tree that is not at the pinned revision must exit non-zero",
     );
 
-    // Without a pinned revision the gate must say so rather than claim to have
-    // checked something it did not check.
-    const unpinned = await runVerify(stubEnv(stubs));
-    assertEquals(outcome(unpinned, "checkout-revision"), "skip");
+    // A run that never named a revision has not verified a deployment: the
+    // probes can all be green because the process answering them is the one
+    // the pull never replaced. It must fail loudly rather than exit 0 behind
+    // a wall of green probes.
+    const silent = await runVerify({ ...stubEnv(stubs), PORTICO_DEPLOY_ALLOW_UNPINNED: "" });
+    assertFailed(silent, "checkout-revision");
+    assertEquals(
+      silent.code !== 0,
+      true,
+      "a run that never named a revision must not exit clean",
+    );
+
+    // A non-empty value is not an acceptance: the runtime's own flag reader
+    // takes only an explicit yes, so `PORTICO_DEPLOY_ALLOW_UNPINNED=0` must not
+    // open the hatch either.
+    const zeroed = await runVerify({ ...stubEnv(stubs), PORTICO_DEPLOY_ALLOW_UNPINNED: "0" });
+    assertFailed(zeroed, "checkout-revision");
+    assertEquals(
+      zeroed.code !== 0,
+      true,
+      "a flag that is not an explicit yes must not accept an unpinned run",
+    );
+
+    // Accepting the gap explicitly keeps ad-hoc probing possible, and the gate
+    // still records what it did not check instead of going quiet about it.
+    const accepted = await runVerify(stubEnv(stubs));
+    assertEquals(outcome(accepted, "checkout-revision"), "skip");
+    assertEquals(
+      accepted.code,
+      0,
+      `a behaviour-only run must still prove behaviour:\n${accepted.stdout}${accepted.stderr}`,
+    );
   } finally {
     await stubs.stop();
   }

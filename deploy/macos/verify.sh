@@ -20,7 +20,11 @@
 #                                 https://portico.talkincode.net)
 #   PORTICO_DEPLOY_TREE           checkout the daemons were started from
 #                                 (default: the checkout this script is in)
-#   PORTICO_EXPECT_SHA            pin the checkout revision; mismatch fails
+#   PORTICO_EXPECT_SHA            pin the checkout revision; mismatch fails, and
+#                                 leaving it unset fails too unless the run
+#                                 accepts a behaviour-only verdict below
+#   PORTICO_DEPLOY_ALLOW_UNPINNED accept a run that pins no revision; it reports
+#                                 a `skip` instead of a verdict
 set -euo pipefail
 
 BIND="${PORTICO_DEPLOY_BIND:-127.0.0.1}"
@@ -45,16 +49,21 @@ check() {
   fi
 }
 
-# Optional revision pin, mirroring deploy/verify.sh. The probes below only
-# prove behaviour, and behaviour is exactly what a daemon that was never
-# restarted still answers, so a run that has to name the shipped revision
-# sets PORTICO_EXPECT_SHA and gets a verdict on it. Unpinned runs stay silent
-# rather than claim a revision they were never told to check.
+# The revision pin, mirroring deploy/verify.sh. The probes below only prove
+# behaviour, and behaviour is exactly what a daemon that was never restarted
+# still answers, so a run that never named a revision has verified no
+# deployment. Leaving the pin out therefore fails; only an explicit acceptance
+# turns the omission into a `skip`, so a host that is not a checkout can still be
+# probed while saying so on the record.
 #
 # This runs before the probes on purpose: a wrong revision is the cheapest
 # thing to detect and the most expensive to miss, so it reports first and
 # survives a probe that hangs or dies half way through.
 TREE="${PORTICO_DEPLOY_TREE:-$(cd "$(dirname "$0")/../.." && pwd)}"
+case "$(printf '%s' "${PORTICO_DEPLOY_ALLOW_UNPINNED:-}" | tr '[:upper:]' '[:lower:]')" in
+  1 | true | yes | on) accepts_unpinned="1" ;;
+  *) accepts_unpinned="" ;;
+esac
 if [ -n "${PORTICO_EXPECT_SHA:-}" ]; then
   head=$(git -C "$TREE" rev-parse HEAD 2>/dev/null) || head=""
   if [ "$head" = "$PORTICO_EXPECT_SHA" ]; then
@@ -63,6 +72,11 @@ if [ -n "${PORTICO_EXPECT_SHA:-}" ]; then
     echo "FAIL checkout-revision got ${head:-unknown} want $PORTICO_EXPECT_SHA"
     fail=1
   fi
+elif [ -n "$accepts_unpinned" ]; then
+  echo "skip checkout-revision PORTICO_EXPECT_SHA is not set, so this run proves behaviour only (accepted by PORTICO_DEPLOY_ALLOW_UNPINNED)"
+else
+  echo "FAIL checkout-revision PORTICO_EXPECT_SHA is not set, so nothing here names the revision being served; pin it, or accept a behaviour-only run with PORTICO_DEPLOY_ALLOW_UNPINNED=1"
+  fail=1
 fi
 
 month_number() {

@@ -257,8 +257,14 @@ Deno.test("deploy macos: daemons mirror the mira shape", async () => {
  * The Linux gate pins `PORTICO_EXPECT_SHA` (deploy/verify.sh); the macOS
  * gate has to honour the same pin or a green run says nothing about what
  * shipped.
+ *
+ * Honouring it was not enough on its own. While the pin stayed optional, a
+ * runbook that forgot it got an all-green gate whose strongest claim was never
+ * made — the same silence the pin exists to remove. So the pin is now what a
+ * run owes by default, and only an explicit `PORTICO_DEPLOY_ALLOW_UNPINNED`
+ * turns the omission into a recorded `skip`.
  */
-Deno.test("deploy macos: verify honours a pinned revision", async () => {
+Deno.test("deploy macos: verify requires a revision pin and honours it", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-verify-" });
   const decoder = new TextDecoder();
   try {
@@ -296,10 +302,11 @@ Deno.test("deploy macos: verify honours a pinned revision", async () => {
     //
     // Executed through its own shebang, the way the runbook runs it: `sh`
     // here would be dash on some hosts and the gate is a bash script.
-    const run = async (expected?: string) => {
+    const run = async (expected?: string, extra: Record<string, string> = {}) => {
       const env: Record<string, string> = {
         PATH: Deno.env.get("PATH") ?? "",
         PORTICO_DEPLOY_TREE: dir,
+        ...extra,
       };
       if (expected !== undefined) env.PORTICO_EXPECT_SHA = expected;
       const out = await new Deno.Command(`${ROOT}deploy/macos/verify.sh`, {
@@ -333,12 +340,32 @@ Deno.test("deploy macos: verify honours a pinned revision", async () => {
       "a mismatched pin must not also report ok",
     );
 
-    // Unpinned runs keep probing behaviour; they must not invent a verdict
-    // about a revision they were never told to check.
+    // Unpinned runs keep probing behaviour, but they no longer pass as a
+    // verified deployment: nothing in the run names which revision is serving,
+    // and that is the one claim a deploy gate exists to make. They fail the
+    // revision promise first and loudly, and never invent an `ok` for it.
     const unpinned = await run();
     assert(
-      !unpinned.out.includes("checkout-revision"),
+      unpinned.out.startsWith("FAIL checkout-revision"),
+      `an unpinned run must fail the revision promise first, got: ${unpinned.out} ${unpinned.err}`,
+    );
+    assert(
+      !unpinned.out.includes("ok checkout-revision"),
       "an unpinned run must not report a revision verdict",
+    );
+    assertEquals(unpinned.code !== 0, true, "an unpinned run must not exit clean");
+
+    // A host whose tree is not a checkout can still be probed, but only by
+    // saying so: the accepted run stays a `skip`, so the omission is on the
+    // record rather than hidden behind green probes.
+    const accepted = await run(undefined, { PORTICO_DEPLOY_ALLOW_UNPINNED: "1" });
+    assert(
+      accepted.out.startsWith("skip checkout-revision"),
+      `an accepted unpinned run must record the omission, got: ${accepted.out} ${accepted.err}`,
+    );
+    assert(
+      !accepted.out.includes("ok checkout-revision"),
+      "an accepted unpinned run still must not claim a revision verdict",
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
