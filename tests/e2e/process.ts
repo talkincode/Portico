@@ -92,7 +92,11 @@ export async function bootEntrypoint<T>(
     }, 3_000);
     await child.status;
     clearTimeout(force);
-    await child.stderr.cancel();
+    try {
+      await child.stderr.cancel();
+    } catch {
+      // Already read or closed.
+    }
   };
 
   try {
@@ -117,7 +121,8 @@ export async function bootEntrypoint<T>(
     })();
     return { body: body as JsonBody<T> & { data: T }, stop };
   } catch (error) {
+    const detail = await new Response(child.stderr).text();
     await stop();
-    throw error;
+    throw new Error(`${(error as Error).message}\n[stderr] ${detail}`, { cause: error });
   }
 }

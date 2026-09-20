@@ -91,14 +91,17 @@ deno task cli -- audit list \
 ```typescript
 interface AuditConclusion {
   id: string;                      // ccl-<subject>-<scope>-<stamp>-<seq>
-  subjectId: string;               // 被审计的目录登记
-  scope: ConclusionScope;          // public_boundary | entry_target | permission_change | secret_leakage | gateway_scope
+  subjectId: string;               // 被审计的目录登记，或仓库级边界契约 boundary:<name>
+  scope: ConclusionScope;          // public_boundary | entry_target | permission_change | secret_leakage | gateway_scope | runtime_l0
   verdict: ConclusionVerdict;      // cleared | flagged
   auditorId: string;               // 写下判定的人类审计者
   at: string;                      // ISO 8601
+  gate?: string;                   // 仅边界契约：回答它的门禁任务，如 check:runtime-boundary
   note?: string;                   // flagged 必填；含明文密钥或控制字符被拒
 }
 ```
+
+两个问题问的不是某一条登记，而是仓库整体：Deno L0 运行时边界（`runtime_l0`）与公开面脱敏。它们没有目录记录可以挂判定，也不该为此造一条假记录，因此是自带契约的**边界主体**——`boundary:runtime-l0`（门禁 `deno task check:runtime-boundary`）与 `boundary:public-redaction`（门禁 `deno task check:redaction`）。每个边界主体只回答一个问题，判定上因此带 `gate` 字段，把结论与可重跑的证据绑在一起。两个命名空间不会互相冒充：表面 id 是小写 kebab-case，带 `boundary:` 前缀的 id 注册成表面会被拒；`runtime_l0` 也不能用在对表面的判定上；不存在的边界 id 得到 `NOT_FOUND`。
 
 约束与上述四大支柱一致，并额外要求审计独立性：
 

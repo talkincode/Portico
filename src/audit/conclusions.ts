@@ -1,6 +1,7 @@
 /**
  * Security conclusions: what a human auditor decided about a registered
- * surface, kept apart from what a maintainer did to it.
+ * surface, or about one of the repository-wide contracts that has no surface,
+ * kept apart from what a maintainer did to it.
  *
  * `AGENTS.md` and `docs/roadmap.md` split the two roles hard — maintainers
  * curate, humans audit — and require the maintenance trail and the audit
@@ -43,12 +44,13 @@ import {
 import { serialize, writeJsonFile } from "../fs.ts";
 
 /**
- * The five security questions `docs/roadmap.md` assigns to the human auditor,
- * named so a conclusion states which one it answers instead of leaving that to
- * prose. `permission_change` and `gateway_scope` are answered about the surface
- * they affected, so every conclusion has exactly one catalog subject.
+ * The security questions `AGENTS.md` and `docs/roadmap.md` assign to the human
+ * auditor, named so a conclusion states which one it answers instead of leaving
+ * that to prose. `permission_change` and `gateway_scope` are answered about the
+ * surface they affected, so every surface conclusion has exactly one catalog
+ * subject.
  */
-export const CONCLUSION_SCOPES = [
+export const SURFACE_SCOPES = [
   "public_boundary",
   "entry_target",
   "permission_change",
@@ -56,7 +58,43 @@ export const CONCLUSION_SCOPES = [
   "gateway_scope",
 ] as const;
 
+/**
+ * Two of the auditor's questions are about the repository as a whole rather
+ * than about one registered surface: the Deno L0 runtime boundary and the
+ * public-surface redaction rule. Both are rows in the acceptance matrix with a
+ * `deno task` gate of their own, and neither has a catalog record that a
+ * verdict could be attached to. Leaving them out would mean the two contracts
+ * the repository enforces against itself are the only ones a human can never
+ * sign off on, so they are subjects in their own namespace instead of pretend
+ * records: a boundary id is not a legal surface id (catalog ids are lowercase
+ * kebab-case, these carry a `boundary:` prefix), which keeps the two namespaces
+ * from shadowing each other. Each contract declares the single scope that
+ * answers it and the gate that produces its evidence.
+ */
+export const BOUNDARY_SUBJECTS: readonly BoundarySubject[] = [
+  {
+    id: "boundary:runtime-l0",
+    scope: "runtime_l0",
+    gate: "check:runtime-boundary",
+  },
+  {
+    id: "boundary:public-redaction",
+    scope: "secret_leakage",
+    gate: "check:redaction",
+  },
+];
+
+export const CONCLUSION_SCOPES = [...SURFACE_SCOPES, "runtime_l0"] as const;
+
 export type ConclusionScope = (typeof CONCLUSION_SCOPES)[number];
+
+export interface BoundarySubject {
+  readonly id: string;
+  /** The one question this contract answers. */
+  readonly scope: ConclusionScope;
+  /** The `deno task` that verifies the contract. */
+  readonly gate: string;
+}
 
 /**
  * `flagged` is the direction that needs a reason: a finding with no note is not
@@ -70,12 +108,29 @@ export const CONCLUSION_NOTE_MAX = 500;
 const SUBJECT_ID_MAX = 120;
 
 const SCOPES = new Set<string>(CONCLUSION_SCOPES);
+const SURFACE_SCOPES_SET = new Set<string>(SURFACE_SCOPES);
+/**
+ * Scopes only a repository boundary contract can answer. `secret_leakage` is
+ * both a surface question and the redaction contract's, so it must stay legal
+ * for a surface; `runtime_l0` is about the tree as a whole and has no surface
+ * meaning.
+ */
+const BOUNDARY_ONLY_SCOPES = new Set<string>(
+  BOUNDARY_SUBJECTS.map((item) => item.scope).filter((scope) => !SURFACE_SCOPES_SET.has(scope)),
+);
+const BOUNDARY_BY_ID = new Map<string, BoundarySubject>(
+  BOUNDARY_SUBJECTS.map((item) => [item.id, item]),
+);
 const VERDICTS = new Set<string>(CONCLUSION_VERDICTS);
 const ALLOWED_INPUT_KEYS = new Set(["id", "scope", "verdict", "note"]);
 const ALLOWED_QUERY_KEYS = new Set(["subject", "scope", "verdict"]);
 
+function findBoundary(id: string): BoundarySubject | undefined {
+  return BOUNDARY_BY_ID.get(id);
+}
+
 export interface ConclusionInput {
-  /** The catalog surface this verdict is about. */
+  /** The catalog surface, or the repository boundary contract, this verdict is about. */
   id: string;
   scope: ConclusionScope;
   verdict: ConclusionVerdict;
@@ -89,6 +144,13 @@ export interface AuditConclusion {
   verdict: ConclusionVerdict;
   auditorId: string;
   at: string;
+  /**
+   * The gate that answered a boundary contract, recorded with the verdict so
+   * the evidence stays re-runnable instead of being inferred from today's
+   * vocabulary. Absent on surface conclusions, which are answered by the
+   * surface itself.
+   */
+  gate?: string;
   note?: string;
 }
 
@@ -112,6 +174,7 @@ function cloneConclusion(record: AuditConclusion): AuditConclusion {
     verdict: record.verdict,
     auditorId: record.auditorId,
     at: record.at,
+    ...(record.gate ? { gate: record.gate } : {}),
     ...(record.note ? { note: record.note } : {}),
   };
 }
@@ -190,20 +253,43 @@ export class ConclusionService {
     assertAuditor(actor, "record");
     const parsed = parseConclusionInput(input);
 
-    // The subject must exist in the catalog. A verdict about nothing is not
-    // evidence, and `catalog.get` applies the same visibility rule as every
-    // other read so a conclusion cannot name a surface the actor cannot see.
-    const subject = await this.catalog.get(actor, parsed.id);
-    assertIndependent(actor, subject);
+    const boundary = findBoundary(parsed.id);
+    let gate: string | undefined;
+    if (boundary) {
+      // A boundary contract is not a catalog record: there is no surface to
+      // read and no maintainer list to conflict with, so the same independence
+      // rule that guards a surface has nothing to check here. What is checked
+      // is that the verdict answers the question the contract declares.
+      if (parsed.scope !== boundary.scope) {
+        throw new CatalogError(
+          ErrorCode.INVALID_INPUT,
+          `'${boundary.id}' answers '${boundary.scope}', not '${parsed.scope}'`,
+        );
+      }
+      gate = boundary.gate;
+    } else {
+      // The subject must exist in the catalog. A verdict about nothing is not
+      // evidence, and `catalog.get` applies the same visibility rule as every
+      // other read so a conclusion cannot name a surface the actor cannot see.
+      const subject = await this.catalog.get(actor, parsed.id);
+      if (BOUNDARY_ONLY_SCOPES.has(parsed.scope)) {
+        throw new CatalogError(
+          ErrorCode.INVALID_INPUT,
+          `scope '${parsed.scope}' answers a repository boundary, not surface '${subject.id}'`,
+        );
+      }
+      assertIndependent(actor, subject);
+    }
 
     const at = new Date().toISOString();
     const record: AuditConclusion = {
-      id: conclusionId(subject.id, parsed.scope, at),
-      subjectId: subject.id,
+      id: conclusionId(parsed.id, parsed.scope, at),
+      subjectId: parsed.id,
       scope: parsed.scope,
       verdict: parsed.verdict,
       auditorId: actor.id,
       at,
+      ...(gate ? { gate } : {}),
       ...(parsed.note ? { note: parsed.note } : {}),
     };
     await this.store.append(record);

@@ -87,7 +87,7 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/
 ---
 
 ### 4b. 安全审计结论 (`GET /api/conclusions`)
-列出人类审计者对登记表面的追加式安全结论。与 CLI `audit conclusions`、MCP `portico_conclusions` 同一载荷，读同一个结论文件。
+列出人类审计者对登记表面的追加式安全结论。主体也可以是仓库级边界契约（`boundary:runtime-l0`、`boundary:public-redaction`），这类结论带 `gate` 字段指向回答它的门禁任务。与 CLI `audit conclusions`、MCP `portico_conclusions` 同一载荷，读同一个结论文件。
 
 ```bash
 # 全部结论

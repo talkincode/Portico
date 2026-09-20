@@ -9,6 +9,7 @@ export type { AuditQuery } from "./query.ts";
 export { AuditService } from "./service.ts";
 export {
   applyConclusionQuery,
+  BOUNDARY_SUBJECTS,
   CONCLUSION_NOTE_MAX,
   CONCLUSION_SCOPES,
   CONCLUSION_VERDICTS,
@@ -16,9 +17,11 @@ export {
   FileConclusionStore,
   MemoryConclusionStore,
   parseConclusionQuery,
+  SURFACE_SCOPES,
 } from "./conclusions.ts";
 export type {
   AuditConclusion,
+  BoundarySubject,
   ConclusionInput,
   ConclusionQuery,
   ConclusionScope,

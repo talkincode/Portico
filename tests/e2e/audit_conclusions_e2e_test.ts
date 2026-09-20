@@ -32,6 +32,7 @@ interface ConclusionRow {
   verdict: string;
   auditorId: string;
   at: string;
+  gate?: string;
   note?: string;
 }
 
@@ -507,6 +508,167 @@ Deno.test("E2E: auditor conclusions match across CLI, Portal and MCP; refusals s
       catalogBefore,
       "concluding and reading must not rewrite the catalog",
     );
+  } finally {
+    await portal.stop();
+    await mcp.stop();
+  }
+});
+
+/**
+ * Two of the auditor's questions are about the repository itself — the Deno L0
+ * runtime boundary and the public-surface redaction rule — and neither has a
+ * catalog record to attach a verdict to. They are concluded by id in their own
+ * namespace, and the verdict names the gate that answers it, so the sign-off
+ * stays tied to evidence that can be re-run at all three entrances.
+ */
+Deno.test("E2E: a repository boundary conclusion is the same verdict at every entrance", async () => {
+  const f = await fixture();
+  const catalogBefore = await Deno.readFile(f.catalog);
+
+  const portal = await bootEntrypoint<{ url: string }>(PORTAL, {
+    PORTICO_CATALOG_PATH: f.catalog,
+    PORTICO_IDENTITIES_PATH: f.identities,
+    PORTICO_SESSIONS_PATH: f.sessions,
+    PORTICO_CONCLUSIONS_PATH: f.conclusions,
+  }, PORTAL_PERMS);
+  const mcp = await bootEntrypoint<{ url: string }>(MCP, {
+    PORTICO_CATALOG_PATH: f.catalog,
+    PORTICO_IDENTITIES_PATH: f.identities,
+    PORTICO_SESSIONS_PATH: f.sessions,
+    PORTICO_CONCLUSIONS_PATH: f.conclusions,
+  }, MCP_PERMS);
+
+  try {
+    const portalUrl = portal.body.data.url;
+    const mcpUrl = mcp.body.data.url;
+
+    // ── refusals: a boundary is not a surface, in either direction ────────
+    for (
+      const [label, toWrite] of [
+        ["a surface question", ["--id", "boundary:runtime-l0", "--scope", "public_boundary"]],
+        ["a boundary question", ["--id", "docs-writer", "--scope", "runtime_l0"]],
+        ["another contract's question", [
+          "--id",
+          "boundary:public-redaction",
+          "--scope",
+          "runtime_l0",
+        ]],
+      ] as Array<[string, string[]]>
+    ) {
+      const refused = await conclude(f, f.auditorAuth, [
+        ...toWrite,
+        "--verdict",
+        "cleared",
+      ]);
+      assertEquals(refused.code, 1, label);
+      assertEquals(refused.body.error?.code, "INVALID_INPUT", label);
+    }
+
+    // An id that merely looks like a boundary is not one.
+    const ghost = await conclude(f, f.auditorAuth, [
+      "--id",
+      "boundary:ghost",
+      "--scope",
+      "runtime_l0",
+      "--verdict",
+      "cleared",
+    ]);
+    assertEquals(ghost.code, 1);
+    assertEquals(ghost.body.error?.code, "NOT_FOUND");
+
+    // The role split is unchanged: a maintainer cannot certify the tree.
+    const maintainer = await conclude(f, f.maintainerAuth, [
+      "--id",
+      "boundary:runtime-l0",
+      "--scope",
+      "runtime_l0",
+      "--verdict",
+      "cleared",
+    ]);
+    assertEquals(maintainer.code, 1);
+    assertEquals(maintainer.body.error?.code, "FORBIDDEN");
+
+    assertEquals(await conclusionsBytesOrNull(f.conclusions), null);
+    assertEquals(await Deno.readFile(f.catalog), catalogBefore);
+
+    // ── recording a verdict, and re-review appending instead of overwriting
+    const flagged = await conclude(f, f.auditorAuth, [
+      "--id",
+      "boundary:public-redaction",
+      "--scope",
+      "secret_leakage",
+      "--verdict",
+      "flagged",
+      "--note",
+      "one tracked file still names the deployment host",
+    ]);
+    assertEquals(flagged.code, 0, JSON.stringify(flagged.body));
+    assertEquals(flagged.body.data?.subjectId, "boundary:public-redaction");
+    assertEquals(flagged.body.data?.gate, "check:redaction");
+
+    const cleared = await conclude(f, f.auditorAuth, [
+      "--id",
+      "boundary:runtime-l0",
+      "--scope",
+      "runtime_l0",
+      "--verdict",
+      "cleared",
+    ]);
+    assertEquals(cleared.code, 0, JSON.stringify(cleared.body));
+    assertEquals(cleared.body.data?.gate, "check:runtime-boundary");
+    assertEquals(
+      cleared.body.data?.id === flagged.body.data?.id,
+      false,
+      "each contract keeps its own record",
+    );
+
+    // ── all three entrances answer the auditor identically ───────────────
+    const cli = await cliConclusions(
+      f.identities,
+      f.catalog,
+      f.conclusions,
+      [...f.auditorAuth, "--subject", "boundary:runtime-l0"],
+      f.env,
+    );
+    assertEquals(cli.code, 0, JSON.stringify(cli.body));
+    assertEquals((cli.body.data ?? []).length, 1);
+    assertEquals(
+      Object.keys(cli.body.data?.[0] ?? {}).sort(),
+      ["at", "auditorId", "gate", "id", "scope", "subjectId", "verdict"],
+    );
+
+    const portalResult = await portalConclusions(
+      portalUrl,
+      f.auditorSession,
+      "?scope=runtime_l0",
+    );
+    assertEquals(portalResult.status, 200);
+    assertEquals(portalResult.body.data, cli.body.data);
+
+    const mcpResult = await mcpConclusions(mcpUrl, f.auditorSession, { scope: "runtime_l0" });
+    assertEquals(mcpResult.ok, true, JSON.stringify(mcpResult));
+    assertEquals(mcpResult.data, cli.body.data);
+
+    // Both records stay readable, and the subject filter answers per contract.
+    const bothAtPortal = await portalConclusions(portalUrl, f.auditorSession);
+    assertEquals((bothAtPortal.body.data ?? []).length, 2);
+    const redactionOnly = await mcpConclusions(mcpUrl, f.auditorSession, {
+      subject: "boundary:public-redaction",
+    });
+    assertEquals(redactionOnly.data, [flagged.body.data]);
+
+    // A boundary id is not a catalog record: nothing new appears in the
+    // discovery plane, which is what makes it a contract and not an entry.
+    const catalogView = await fetch(`${portalUrl}/api/catalog`, {
+      headers: authHeaders(f.auditorSession),
+    });
+    const records = (await catalogView.json() as {
+      data?: Array<{ id: string }>;
+    }).data ?? [];
+    assertEquals(records.map((row) => row.id).sort(), ["auditor-owned-surface", "docs-writer"]);
+
+    // A boundary verdict is an opinion, not a governance event.
+    assertEquals(await Deno.readFile(f.catalog), catalogBefore);
   } finally {
     await portal.stop();
     await mcp.stop();

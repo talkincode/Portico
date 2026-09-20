@@ -139,6 +139,10 @@ portico audit list --catalog <path> --identities <path> --sessions <path> --sess
 portico audit conclude --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
   --id <subject> --scope public_boundary --verdict flagged --note "…"
 
+# 仓库级边界契约同样可签核（自带作用域与门禁任务）
+portico audit conclude --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
+  --id boundary:runtime-l0 --scope runtime_l0 --verdict cleared
+
 # 查询追加式安全结论（全部，或按主体 / 作用域 / 判定过滤）
 portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
 

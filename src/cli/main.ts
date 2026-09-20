@@ -8,6 +8,8 @@ import {
   applyAuditQuery,
   applyConclusionQuery,
   AuditService,
+  BOUNDARY_SUBJECTS,
+  CONCLUSION_SCOPES,
   type ConclusionInput,
   ConclusionService,
   FileConclusionStore,
@@ -32,6 +34,8 @@ import {
 } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
+
+const SCOPE_ARG = CONCLUSION_SCOPES.join("|");
 
 const USAGE = `portico <command>
 
@@ -69,8 +73,8 @@ Commands:
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
   audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
-  audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope public_boundary|entry_target|permission_change|secret_leakage|gateway_scope --verdict cleared|flagged [--note <text>]
-  audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope public_boundary|entry_target|permission_change|secret_leakage|gateway_scope] [--verdict cleared|flagged]
+  audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope ${SCOPE_ARG} --verdict cleared|flagged [--note <text>]
+  audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
   page get          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>]
 
@@ -89,6 +93,14 @@ The first credential issue is the one-time bootstrap and needs no session.
 An identity cannot revoke itself; the last human auditor cannot be revoked.
 Revoking credentials invalidates login tokens and sessions without removing the roster identity.
 The identity that submitted public cannot approve or reject the same request.
+A repository boundary contract has no catalog record; conclude on it by id with
+the scope it declares:
+${
+  BOUNDARY_SUBJECTS.map((item) =>
+    `  ${item.id} --scope ${item.scope} (gate: deno task ${item.gate})`
+  )
+    .join("\n")
+}
 Approve, reject and withdraw accept an optional --note (at most 500 characters,
 no control characters); it is stored on the approval record and returned by
 catalog approvals / GET /api/approvals / portico_approvals.
