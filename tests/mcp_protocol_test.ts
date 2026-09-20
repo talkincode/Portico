@@ -134,6 +134,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_dashboard",
     "portico_audit",
     "portico_audit_verify",
+    "portico_seal_anchors",
     "portico_approvals",
     "portico_identities",
     "portico_grants",

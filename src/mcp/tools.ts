@@ -1,4 +1,5 @@
 import {
+  type AnchorService,
   applyAuditQuery,
   applyConclusionQuery,
   AUDIT_ACTIONS,
@@ -67,6 +68,11 @@ export interface McpToolDeps {
   gateway?: GatewayService;
   /** Read-only: the MCP entrance never records a conclusion. */
   conclusions?: ConclusionService;
+  /**
+   * Read-only for the same reason: this entrance lists and compares seal
+   * checkpoints, and only an auditor with CLI access can pin a new one.
+   */
+  anchors: AnchorService;
 }
 
 export const TOOLS: readonly McpTool[] = [
@@ -175,6 +181,12 @@ export const TOOLS: readonly McpTool[] = [
     name: "portico_audit_verify",
     description:
       "重算安全审计的封条链，报告每个环节是否与写入时一致：哪条记录被改写、被删除或链条断开，也会列出没有任何环节覆盖的记录（未封存）。等价于 CLI `audit verify` 与 Portal `GET /api/audit-verify`。仅人类审计者可读；其他身份得到 FORBIDDEN。只读：不写审计文件，也不修改任何记录。返回的 tip 是该链当前末端摘要，可用于与外部留存的摘要比对。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "portico_seal_anchors",
+    description:
+      "列出外部方保留的封条检查点（谁在何时钉住了每条链的末端摘要与长度），用于判断整条链被重写或尾部被截断。等价于 CLI `audit anchors` 与 Portal `GET /api/seal-anchors`。仅人类审计者可读；其他身份得到 FORBIDDEN。只读：不写锚点文件，也不修改任何记录；钉新检查点是 CLI 的写操作，此处不可用。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -316,6 +328,8 @@ export async function callTool(
     }
     case "portico_audit_verify":
       return await deps.seal.report(actor);
+    case "portico_seal_anchors":
+      return await deps.anchors.list(actor);
     case "portico_approvals":
       return await deps.catalog.listApprovals(actor);
     case "portico_identities":

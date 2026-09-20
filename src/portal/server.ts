@@ -1,5 +1,10 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
-import { AuditService, ConclusionService, FileConclusionStore } from "../audit/mod.ts";
+import {
+  AuditService,
+  ConclusionService,
+  FileAnchorStore,
+  FileConclusionStore,
+} from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
@@ -23,6 +28,13 @@ export interface PortalListenOptions {
    * conclusion but never record one.
    */
   conclusionsPath?: string;
+  /**
+   * When set, `GET /api/audit-verify` reports each pillar against the seal
+   * checkpoints in this file, so a wholly rewritten chain or a truncated tail
+   * is visible here and not only through CLI `audit verify --anchors`. The
+   * Portal only reads the file.
+   */
+  sealAnchorsPath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -55,6 +67,9 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
   const conclusions = options.conclusionsPath
     ? new ConclusionService(new FileConclusionStore(options.conclusionsPath), catalog)
     : undefined;
+  const sealAnchors = options.sealAnchorsPath
+    ? new FileAnchorStore(options.sealAnchorsPath)
+    : undefined;
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
@@ -67,6 +82,7 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
       gateway,
       pages,
       conclusions,
+      sealAnchors,
       cfAccess: options.cfAccess,
       reviewEntry: options.reviewEntry,
     }));

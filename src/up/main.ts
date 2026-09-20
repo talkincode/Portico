@@ -51,6 +51,7 @@ interface Setup {
   gatewayAudit: string;
   page: string;
   conclusions: string;
+  sealAnchors: string;
   portalPort: number;
   gatewayPort: number;
   mcpPort: number;
@@ -79,6 +80,7 @@ function readSetup(env: Record<string, string | undefined>): Setup {
     gatewayAudit: env.PORTICO_GATEWAY_AUDIT_PATH ?? `${dataDir}/gateway-audit.json`,
     page: env.PORTICO_PAGE_PATH ?? `${dataDir}/page.json`,
     conclusions: env.PORTICO_CONCLUSIONS_PATH ?? `${dataDir}/conclusions.json`,
+    sealAnchors: env.PORTICO_SEAL_ANCHORS_PATH ?? `${dataDir}/seal-anchors.json`,
     portalPort: parseBindPort(env.PORTICO_PORT, 8788),
     gatewayPort: parseBindPort(env.PORTICO_GATEWAY_PORT, 8789),
     mcpPort: parseBindPort(env.PORTICO_MCP_PORT, 8790),
@@ -267,6 +269,10 @@ if (import.meta.main) {
         // Portal and MCP read the same conclusion file the auditor writes with
         // `audit conclude`, so all three entrances agree on the verdicts.
         PORTICO_CONCLUSIONS_PATH: setup.conclusions,
+        // Portal and MCP must get the same anchor file as the CLI, or they
+        // report every pillar as unanchored (count 0) while `audit verify`
+        // compares: a rewritten chain would look clean on the web surface.
+        PORTICO_SEAL_ANCHORS_PATH: setup.sealAnchors,
         // All three entrances read the same Gateway audit file, so the auditor
         // timeline is identical whichever one is asked.
         PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
@@ -294,6 +300,7 @@ if (import.meta.main) {
         PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
         PORTICO_PAGE_PATH: setup.page,
         PORTICO_CONCLUSIONS_PATH: setup.conclusions,
+        PORTICO_SEAL_ANCHORS_PATH: setup.sealAnchors,
         PORTICO_BIND: setup.hostname,
         PORTICO_PORT: String(setup.mcpPort),
       }),

@@ -6,9 +6,26 @@ export {
   parseAuditQuery,
 } from "./query.ts";
 export type { AuditQuery } from "./query.ts";
+export { AnchorService } from "./anchor_service.ts";
+export {
+  ANCHOR_STATES,
+  anchorId,
+  buildAnchor,
+  compareAnchor,
+  compareAnchors,
+  FileAnchorStore,
+  MemoryAnchorStore,
+} from "./anchors.ts";
+export type {
+  AnchorComparison,
+  AnchorState,
+  AnchorStore,
+  SealAnchor,
+  SealAnchorLink,
+} from "./anchors.ts";
 export { AuditService } from "./service.ts";
 export { SealService } from "./seal_service.ts";
-export type { SealReport } from "./seal_service.ts";
+export type { SealedPillar, SealReport } from "./seal_service.ts";
 export {
   canonicalJson,
   cloneSeal,

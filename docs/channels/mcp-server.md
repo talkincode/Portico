@@ -27,6 +27,7 @@ Portico MCP 服务端暴露了 18 个经过安全收敛的只读治理工具：
 | **`portico_dashboard`**| `{}` | 匿名或持会话 | 获取系统资产大盘统计（服务总数、渠道分布、公开数）。 |
 | **`portico_audit`** | `{ q?: string, kind?: string, action?: string, subject?: string }` | **仅限人类审计者** | 查询审计时间线流水。非审计者调用返回 `FORBIDDEN`。 |
 | **`portico_audit_verify`** | `{}` | **仅限人类审计者** | 重算安全审计的封条链，报告每个环节是否与写入时一致：哪条记录被改写、被删除或链条断开，也会列出没有任何环节覆盖的记录（未封存）。等价于 CLI `audit verify` 与 Portal `GET /api/audit-verify`。非审计者返回 `FORBIDDEN`。只读：不写审计文件，也不修改任何记录；返回的 `tip` 是该链当前末端摘要，可与外部留存的摘要比对。 |
+| **`portico_seal_anchors`** | `{}` | **仅限人类审计者** | 列出外部方保留的封条检查点：谁在何时钉住了每条链的末端摘要与长度。封条本身只能证明「链内部一致」；整条链被重写、尾部被截断时链仍然自洽，只有链外的检查点能把这两种情况区分出来。与 CLI `audit anchors`、Portal `GET /api/seal-anchors` 同一载荷，读同一个锚点文件。非审计者返回 `FORBIDDEN`。只读：钉新检查点只能经 CLI `audit anchor` 写入，Portal 与 MCP 无写权限。 |
 | **`portico_conclusions`** | `{ subject?: string, scope?: string, verdict?: string }` | **仅限人类审计者** | 列出人类审计者对登记表面的追加式安全结论。与 CLI `audit conclusions`、Portal `GET /api/conclusions` 同一载荷，读同一个结论文件。主体可以是目录记录 id，也可以是仓库级边界契约（`boundary:runtime-l0`、`boundary:public-redaction`），这类结论带 `gate` 字段指向回答它的门禁任务。维护者、只读与匿名返回 `FORBIDDEN`。非法枚举过滤器返回 `INVALID_INPUT`。只读：记录结论只能经 CLI `audit conclude` 写入，Portal 与 MCP 无写权限。 |
 | **`portico_approvals`** | `{}` | 已登录会话；匿名为空列表 | 列出公开边界审批记录（通过 / 拒绝 / 撤回，含可选 `note`）。与 CLI `catalog approvals`、Portal `GET /api/approvals` 同一载荷。 |
 | **`portico_identities`** | `{}` | **维护者与人类审计者** | 列出名册身份（id / kind / role，可选 email）。只读与匿名返回 `FORBIDDEN`。不返回凭证或会话。 |

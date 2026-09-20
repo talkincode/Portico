@@ -1,5 +1,10 @@
 import { AccessService, FileIdentityStore, FileSessionStore } from "../access/mod.ts";
-import { AuditService, ConclusionService, FileConclusionStore } from "../audit/mod.ts";
+import {
+  AuditService,
+  ConclusionService,
+  FileAnchorStore,
+  FileConclusionStore,
+} from "../audit/mod.ts";
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
@@ -26,6 +31,12 @@ export interface McpListenOptions {
    * a conclusion but never record one.
    */
   conclusionsPath?: string;
+  /**
+   * When set, `portico_audit_verify` compares the pillars against the seal
+   * checkpoints in this file and `portico_seal_anchors` lists them. Read-only:
+   * the MCP entrance never pins a checkpoint.
+   */
+  sealAnchorsPath?: string;
   hostname?: string;
   port?: number;
   signal?: AbortSignal;
@@ -51,12 +62,19 @@ export function listenMcp(options: McpListenOptions): Deno.HttpServer {
   const conclusions = options.conclusionsPath
     ? new ConclusionService(new FileConclusionStore(options.conclusionsPath), catalog)
     : undefined;
-  return Deno.serve({
-    hostname: options.hostname ?? "127.0.0.1",
-    port: options.port ?? 0,
-    signal: options.signal,
-    onListen: options.onListen ?? (() => {}),
-  }, (request) => handleMcpRequest(request, { catalog, access, gateway, pages, conclusions }));
+  const sealAnchors = options.sealAnchorsPath
+    ? new FileAnchorStore(options.sealAnchorsPath)
+    : undefined;
+  return Deno.serve(
+    {
+      hostname: options.hostname ?? "127.0.0.1",
+      port: options.port ?? 0,
+      signal: options.signal,
+      onListen: options.onListen ?? (() => {}),
+    },
+    (request) =>
+      handleMcpRequest(request, { catalog, access, gateway, pages, conclusions, sealAnchors }),
+  );
 }
 
 export function mcpUrl(server: Deno.HttpServer): string {
