@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
+import { reviewPerms } from "../src/perms.ts";
 
 /**
  * macOS (LaunchDaemon) deployment contract. The Linux docker/systemd scripts
@@ -24,6 +25,24 @@ Deno.test("deploy macos: supervisor holds only spawn rights", async () => {
   for (const banned of ["--allow-all", "-A", "--allow-write", "--allow-net"]) {
     assert(!flags.includes(banned), `supervisor must not hold ${banned}`);
   }
+});
+
+Deno.test("deploy macos: review scoped perms cover both tmp siblings for read and write", () => {
+  const flags = reviewPerms("127.0.0.1", {
+    catalog: "/app/data/catalog.json",
+    identities: "/app/data/identities.json",
+    sessions: "/app/data/sessions.json",
+  });
+  const read = flags.find((flag) => flag.startsWith("--allow-read=")) ?? "";
+  const write = flags.find((flag) => flag.startsWith("--allow-write=")) ?? "";
+  for (const path of ["/app/data/catalog.json", "/app/data/catalog.json.tmp", "/app/data/sessions.json", "/app/data/sessions.json.tmp"]) {
+    assert(read.includes(path), `review read grant must cover ${path}`);
+  }
+  for (const path of ["/app/data/catalog.json", "/app/data/catalog.json.tmp", "/app/data/sessions.json", "/app/data/sessions.json.tmp"]) {
+    assert(write.includes(path), `review write grant must cover ${path}`);
+  }
+  assert(!read.includes("/app/data/identities.json.tmp"), "review never writes identities");
+  assert(!write.includes("identities"), "review never writes identities");
 });
 
 Deno.test("deploy macos: template keeps the live host out of the repo", async () => {

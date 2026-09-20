@@ -47,7 +47,13 @@ export function reviewPerms(
   hostname: string = LOOPBACK_HOSTNAME,
   paths?: { catalog: string; identities: string; sessions: string },
 ): readonly string[] {
-  const read = paths ? `--allow-read=${paths.catalog},${paths.identities},${paths.sessions}` : "--allow-read";
+  // Deno write grants do not imply read: the atomic store touches `<file>.tmp`
+  // while writing, so both siblings need read access too. Missing one turns
+  // every submit/approve into a permission 500 (this exact shape once broke
+  // the Gateway audit append on the live host).
+  const read = paths
+    ? `--allow-read=${paths.catalog},${paths.catalog}.tmp,${paths.identities},${paths.sessions},${paths.sessions}.tmp`
+    : "--allow-read";
   const write = paths
     ? `--allow-write=${paths.catalog},${paths.catalog}.tmp,${paths.sessions},${paths.sessions}.tmp`
     : "--allow-write";
