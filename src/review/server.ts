@@ -21,6 +21,15 @@ export interface ReviewListenOptions {
 export interface ReviewCfAccess {
   verify(assertion: string): Promise<{ email: string } | null>;
 }
+/** URL of a listening review server; mirrors `portalUrl` / `mcpUrl`. */
+export function reviewUrl(server: Deno.HttpServer): string {
+  const addr = server.addr;
+  if (!("hostname" in addr) || !("port" in addr)) {
+    throw new Error("review server is not a TCP listener");
+  }
+  return `http://${addr.hostname}:${addr.port}`;
+}
+
 export function listenReview(options: ReviewListenOptions): Deno.HttpServer {
   const catalog = new CatalogService(new FileCatalogStore(options.catalogPath));
   const access = new AccessService(
