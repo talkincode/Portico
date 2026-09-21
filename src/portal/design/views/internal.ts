@@ -15,7 +15,16 @@ import type {
   GovernanceState,
   PublicDecision,
 } from "../../../catalog/types.ts";
-import { AUDIT_KINDS, type AuditQuery } from "../../../audit/mod.ts";
+import {
+  type AnchorState,
+  AUDIT_KINDS,
+  type AuditQuery,
+  SEAL_PILLARS,
+  type SealBreak,
+  type SealedPillar,
+  type SealPillar,
+  type SealReport,
+} from "../../../audit/mod.ts";
 import type { AuditEvent } from "../../../audit/types.ts";
 import {
   boundaryNote,
@@ -31,6 +40,7 @@ import {
   maintainerChain,
   readingMinutes,
   relativeAge,
+  stat,
   stateChip,
 } from "../components.ts";
 import { renderShell, themeSwitch } from "../page.ts";
@@ -715,10 +725,174 @@ function renderCatalogRow(surface: AgentSurface): string {
 
 /* ── screen 3: 审计 (audit timeline, auditors only) ─────────────────────── */
 
+const PILLAR_LABEL: Record<SealPillar, string> = {
+  catalog: "目录",
+  identity: "身份",
+  gateway: "网关",
+  conclusions: "审计结论",
+};
+
+const ANCHOR_LABEL: Record<AnchorState, string> = {
+  intact: "检查点仍完好",
+  moved: "该支柱的 tip 换了位置",
+  truncated: "链条短于检查点，疑似截断",
+  rewritten: "同一位置的内容被换过，疑似重写",
+};
+
+/** The same four readings, short enough for a chip. */
+const ANCHOR_SHORT: Record<AnchorState, string> = {
+  intact: "检查点相合",
+  moved: "检查点漂移",
+  truncated: "尾部被截断",
+  rewritten: "内容被替换",
+};
+
+const BREAK_LABEL: Record<SealBreak["reason"], string> = {
+  digest: "记录被改写",
+  missing: "记录被删除",
+  chain: "环节被剪断",
+};
+
+/**
+ * What the seal proved, rendered next to the records it covers.
+ *
+ * The page below this panel asserts that the trail is append-only and cannot be
+ * rewritten. That sentence is a claim about bytes, and until now nothing on the
+ * page carried its evidence — an edited `catalog.json` rendered as an ordinary
+ * timeline. This panel states the verdict and, when there is one, names the
+ * record that broke it, using the same numbers the CLI and MCP entrances report.
+ *
+ * Three honest silences it keeps, all of them inherited from the seal itself: a
+ * record no link covers is counted as `未封` rather than blessed; a pillar whose
+ * tip no checkpoint pins is reported as having no way to be compared; and a
+ * pillar this deployment does not configure is reported as not checked, because
+ * showing it as verified would be the same silence in a new place.
+ */
+function renderIntegrityPanel(report: SealReport): string {
+  const checked = new Map(report.pillars.map((verdict) => [verdict.pillar, verdict]));
+  const unchecked = SEAL_PILLARS.filter((pillar) => !checked.has(pillar));
+  const sealed = report.pillars.reduce((total, verdict) => total + verdict.sealed, 0);
+  const unanchored = report.pillars.length - report.anchored;
+
+  // `report.ok` folds two different findings together: a link chain that no
+  // longer matches its records, and a checkpoint that no longer matches the
+  // chain. They are named separately, because "the records were edited" and
+  // "the tail is gone" call for different reactions.
+  const broken = report.pillars.filter((verdict) => !verdict.ok);
+  const moved = report.pillars.filter(
+    (verdict) => verdict.anchor !== undefined && verdict.anchor.state !== "intact",
+  );
+  const facts: string[] = [];
+  if (report.ok) {
+    facts.push("封条完整：已覆盖的记录与写入时对得上");
+  } else if (broken.length > 0 && moved.length > 0) {
+    facts.push("封条校验失败：链条与检查点都与写入时对不上");
+  } else if (broken.length > 0) {
+    facts.push("封条校验失败：已覆盖的记录与写入时对不上");
+  } else {
+    facts.push("封条校验失败：检查点显示链条已被替换或截断");
+  }
+  if (report.unsealed > 0) facts.push(`${report.unsealed} 条记录没有任何环节覆盖`);
+  if (unanchored > 0) facts.push(`${unanchored} 个支柱的 tip 没有检查点可比对`);
+  if (unchecked.length > 0) {
+    facts.push(`${unchecked.length} 个支柱未纳入本次校验`);
+  }
+
+  const pillars = SEAL_PILLARS.map((pillar) => {
+    const verdict = checked.get(pillar);
+    const anchor = verdict?.anchor;
+    const meta = verdict
+      ? [
+        `${verdict.sealed} 条已封`,
+        verdict.unsealed.length > 0 ? `${verdict.unsealed.length} 条未封` : undefined,
+        anchor ? ANCHOR_LABEL[anchor.state] : "无检查点",
+        anchor ? `检查点取自 ${relativeAge(anchor.at)}` : undefined,
+      ].filter((part): part is string => part !== undefined).join(" · ")
+      : "本次部署未读取这一支柱";
+
+    return `            <li class="int-integrity__pillar" data-pillar="${
+      esc(pillar)
+    }" data-verdict="${verdict ? (verdict.ok ? "ok" : "broken") : "unchecked"}"${
+      verdict ? ` data-sealed="${verdict.sealed}" data-unsealed="${verdict.unsealed.length}"` : ""
+    }${anchor ? ` data-anchor="${esc(anchor.state)}"` : verdict ? ` data-anchor="none"` : ""}>
+              <p class="int-integrity__pillar-head">
+                <span class="int-integrity__pillar-name">${esc(PILLAR_LABEL[pillar])}</span>
+                <span class="tk-chip tk-chip--plain">${
+      verdict === undefined
+        ? "未校验"
+        : !verdict.ok
+        ? "已断"
+        : anchor && anchor.state !== "intact"
+        ? ANCHOR_SHORT[anchor.state]
+        : "封条完整"
+    }</span>
+              </p>
+              <p class="int-integrity__pillar-meta">${esc(meta)}</p>${
+      renderIntegrityFaults(verdict)
+    }
+            </li>`;
+  }).join("\n");
+
+  return `<section class="int-integrity" data-integrity="${
+    report.ok ? "ok" : "broken"
+  }" data-sealed="${sealed}" data-unsealed="${report.unsealed}" data-anchored="${report.anchored}" data-pillars="${SEAL_PILLARS.length}">
+          <div class="int-integrity__head">
+            <h2 class="int-integrity__title">封条校验</h2>
+            <p class="int-integrity__verdict">${esc(facts.join("；"))}</p>
+          </div>
+          <div class="int-integrity__stats">
+            ${stat(sealed, "已封记录")}
+            ${stat(report.unsealed, "未封记录")}
+            ${stat(`${report.anchored}/${SEAL_PILLARS.length}`, "已锚定支柱")}
+          </div>
+          ${
+    boundaryNote(
+      "校验只读：只报告事实，不改写记录。封条只证明相邻环节自洽，整链重写与尾部截断要靠检查点发现。",
+    )
+  }
+          <ol class="int-integrity__pillars">
+${pillars}
+          </ol>
+        </section>`;
+}
+
+/** The named record and the uncovered records, if the pillar has either. */
+function renderIntegrityFaults(verdict: SealedPillar | undefined): string {
+  if (!verdict) return "";
+  const lines: string[] = [];
+  const broken = verdict.break;
+  if (broken) {
+    lines.push(
+      `<p class="int-integrity__break" data-break-seq="${broken.seq}" data-break-kind="${
+        esc(broken.kind)
+      }" data-break-id="${esc(broken.id)}" data-break-reason="${
+        esc(broken.reason)
+      }">第 ${broken.seq} 条${esc(BREAK_LABEL[broken.reason])}：${esc(broken.kind)} · ${
+        esc(broken.id)
+      }</p>`,
+    );
+  }
+  if (verdict.unsealed.length > 0) {
+    lines.push(
+      `<p class="int-integrity__unsealed">没有环节覆盖：${
+        verdict.unsealed.map((id) => esc(id)).join("、")
+      }</p>`,
+    );
+  }
+  if (lines.length === 0) return "";
+  return `\n              ${lines.join("\n              ")}`;
+}
+
 export interface AuditViewInput {
   ctx: ViewContext;
   events: AuditEvent[];
   query?: AuditQuery;
+  /**
+   * The seal verdict for the trail being rendered. Required, not optional: this
+   * page asserts the trail cannot be rewritten, and an assertion without its
+   * evidence is exactly the silence the seal exists to remove.
+   */
+  integrity: SealReport;
 }
 
 export function renderAuditView(input: AuditViewInput): string {
@@ -739,6 +913,7 @@ export function renderAuditView(input: AuditViewInput): string {
           <h1 class="int-page__title">审计时间线</h1>
           <p class="int-page__sub">目录变更、身份授权与撤回、凭证作废、公开审批与网关访问。只读，可追加，不可改写。</p>
         </div>
+        ${renderIntegrityPanel(input.integrity)}
         <div class="int-filters">
           ${boundaryNote("审计结论与维护轨迹分开存储；维护者身份不能覆盖或删除。")}
           <form method="get" action="/internal/audit" role="search">

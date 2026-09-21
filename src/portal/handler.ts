@@ -444,7 +444,12 @@ async function internalPage(
     if (!isAuditor(actor)) return htmlNotFound(request, context.reviewEntry);
     const query = auditQueryFrom(url);
     const events = applyAuditQuery(await auditTrail(actor, context), query);
-    return html(renderAuditView({ ctx: base, events, query }));
+    // This page tells the auditor that the trail cannot be rewritten, so it has
+    // to show the evidence for that claim. The verdict comes from the same
+    // service CLI `audit verify` and MCP `portico_audit_verify` read, and it is
+    // rendered beside the events it covers rather than only on demand.
+    const integrity = await sealService(context).report(actor);
+    return html(renderAuditView({ ctx: base, events, query, integrity }));
   }
 
   const surfaceMatch = url.pathname.match(/^\/internal\/s\/([a-z][a-z0-9-]{1,62})$/);
