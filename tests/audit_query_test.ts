@@ -160,3 +160,77 @@ Deno.test("applyAuditQuery intersects kind, action and subject without reorderin
     [],
   );
 });
+
+Deno.test("parseAuditQuery accepts a cutoff and refuses anything that is not an instant", () => {
+  assertEquals(
+    parseAuditQuery({ asOf: "2026-09-21T20:00:00+08:00", kind: "catalog" }),
+    { kind: "catalog", asOf: "2026-09-21T12:00:00.000Z" },
+  );
+  // An empty value is no filter, the way it is for every other field.
+  assertEquals(parseAuditQuery({ asOf: "" }), {});
+  assertEquals(parseError({ asOf: "2026-09-21" }).code, "INVALID_INPUT");
+  assertEquals(parseError({ asOf: "2026-09-21T12:00:00" }).code, "INVALID_INPUT");
+  assertEquals(parseError({ asOf: "yesterday" }).code, "INVALID_INPUT");
+  assertEquals(parseError({ asOf: 1_789_000_000_000 }).code, "INVALID_INPUT");
+});
+
+Deno.test("applyAuditQuery shows the trail as it stood, without reordering it", () => {
+  const records = [
+    event("chg-1", { at: "2026-09-21T00:00:00.000Z", summary: "register docs-writer internal" }),
+    event("chg-2", {
+      at: "2026-09-21T02:00:00.000Z",
+      action: "update",
+      summary: "update docs-writer",
+    }),
+    event("apr-1", {
+      kind: "approval",
+      action: "approved",
+      subjectId: "docs-web",
+      at: "2026-09-21T04:00:00.000Z",
+      summary: "approved docs-web",
+    }),
+  ];
+
+  assertEquals(
+    applyAuditQuery(records, parseAuditQuery({ asOf: "2026-09-21T01:00:00Z" })).map((item) =>
+      item.id
+    ),
+    ["chg-1"],
+  );
+  assertEquals(
+    applyAuditQuery(records, parseAuditQuery({ asOf: "2026-09-21T02:00:00.000Z" })).map((item) =>
+      item.id
+    ),
+    ["chg-1", "chg-2"],
+  );
+  assertEquals(applyAuditQuery(records, parseAuditQuery({ asOf: "2026-09-20T00:00:00Z" })), []);
+  assertEquals(
+    applyAuditQuery(records, parseAuditQuery({ asOf: "2030-01-01T00:00:00Z" })).map((item) =>
+      item.id
+    ),
+    ["chg-1", "chg-2", "apr-1"],
+  );
+  // The cutoff is a filter like the others: it intersects, it does not replace.
+  assertEquals(
+    applyAuditQuery(records, parseAuditQuery({ asOf: "2026-09-21T03:00:00Z", kind: "approval" }))
+      .map((item) => item.id),
+    [],
+  );
+});
+
+Deno.test("an event with no readable timestamp is outside every window", () => {
+  const records = [
+    event("chg-1", { at: "2026-09-21T00:00:00.000Z" }),
+    event("chg-2", { at: "whenever" }),
+  ];
+  assertEquals(applyAuditQuery(records, parseAuditQuery({})).map((item) => item.id), [
+    "chg-1",
+    "chg-2",
+  ]);
+  assertEquals(
+    applyAuditQuery(records, parseAuditQuery({ asOf: "2030-01-01T00:00:00Z" })).map((item) =>
+      item.id
+    ),
+    ["chg-1"],
+  );
+});

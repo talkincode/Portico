@@ -6,6 +6,7 @@ export {
   parseAuditQuery,
 } from "./query.ts";
 export type { AuditQuery } from "./query.ts";
+export { AS_OF_MAX_LENGTH, parseAsOf, withinAsOf } from "./instant.ts";
 export { AnchorService } from "./anchor_service.ts";
 export {
   ANCHOR_STATES,

@@ -80,10 +80,10 @@ Commands:
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
   audit verify      --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>] [--anchors <path>]
-  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
+  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>] [--as-of <instant>]
   audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope ${SCOPE_ARG} --verdict cleared|flagged [--note <text>]
-  audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
-  audit standings   --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
+  audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged] [--as-of <instant>]
+  audit standings   --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged] [--as-of <instant>]
   audit anchor      --anchors <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>]
   audit anchors     --anchors <path> --catalog <path> --identities <path> --session <token> --sessions <path>
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
@@ -423,6 +423,7 @@ async function runAudit(
           subject: flags.subject,
           scope: flags.scope,
           verdict: flags.verdict,
+          asOf: flags["as-of"],
         }),
       );
     }
@@ -433,6 +434,7 @@ async function runAudit(
         subject: flags.subject,
         scope: flags.scope,
         verdict: flags.verdict,
+        asOf: flags["as-of"],
       });
       return ok(applyConclusionQuery(records, query));
     }
@@ -488,6 +490,7 @@ async function runAudit(
     kind: flags.kind,
     action: flags.action,
     subject: flags.subject,
+    asOf: flags["as-of"],
   });
   return ok(applyAuditQuery(events, query));
 }

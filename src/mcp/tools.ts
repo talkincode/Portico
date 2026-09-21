@@ -198,6 +198,11 @@ export const TOOLS: readonly McpTool[] = [
           type: "string",
           description: "只返回该 subjectId 的事件（精确匹配）",
         },
+        asOf: {
+          type: "string",
+          description:
+            "读取窗口的截止时刻，必须是带时区的真实瞬时（如 2026-09-21T12:00:00Z）。给出后只返回该时刻及之前的审计事件，用于重建当时的时间线；留空读到现在。不接受只有日期或没有时区的写法，也不接受 2026-02-30 这类不存在的日期——错误的窗口会被拒绝，而不是被猜成另一个时刻。",
+        },
       },
       additionalProperties: false,
     },
@@ -273,7 +278,7 @@ export const TOOLS: readonly McpTool[] = [
     description:
       `列出人类审计者记录的追加式安全审计结论（主体 / 审计范围 / 判定 / 审计者 / 时间 / 可选说明）。等价于 CLI \`audit conclusions\` 与 Portal \`GET /api/conclusions\`。审计范围是公开边界、入口指向、权限变化、密钥泄漏、运行时边界（L0）或网关越权之一。主体可以是目录记录 id，也可以是仓库级边界契约（${
         BOUNDARY_SUBJECTS.map((item) => item.id).join(" / ")
-      }，这类结论带 \`gate\` 字段，指向回答它的门禁任务）。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写结论文件或目录。这不是记录入口：结论由 CLI \`audit conclude\` 写入，Portal 与 MCP 只读。`,
+      }，这类结论带 \`gate\` 字段，指向回答它的门禁任务）。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。读操作不写结论文件或目录。这不是记录入口：结论由 CLI \`audit conclude\` 写入，Portal 与 MCP 只读。给出 \`asOf\` 时读的是截至该时刻的轨迹（时间切片），用于重建当时留下了哪些结论。`,
     inputSchema: {
       type: "object",
       properties: {
@@ -291,6 +296,11 @@ export const TOOLS: readonly McpTool[] = [
           enum: [...CONCLUSION_VERDICTS],
           description: "只返回该判定的结论",
         },
+        asOf: {
+          type: "string",
+          description:
+            "读取窗口的截止时刻，必须是带时区的真实瞬时（如 2026-09-21T12:00:00Z）。给出后只返回该时刻及之前记录的结论，用于重建当时的轨迹；留空读到现在。与 `portico_conclusion_standings` 的 `asOf` 取同一时刻时，两者讲的是同一件事。不接受只有日期或没有时区的写法——错误窗口会被拒绝，而不是被猜成现在。",
+        },
       },
       additionalProperties: false,
     },
@@ -298,7 +308,7 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_conclusion_standings",
     description:
-      `给出人类审计对每个主体与审计范围当前的判定（standing verdict），从追加式结论轨迹推导：当前 verdict、它来自哪条结论（\`conclusionId\` / \`auditorId\` / \`at\`）、上一条判定（\`previousVerdict\`，用于区分「曾被标记后已清除」与「从未被标记」）、该主体与范围下结论总数与 cleared/flagged 计数、以及可选 \`gate\` 与 \`note\`。等价于 CLI \`audit standings\` 与 Portal \`GET /api/conclusions/standings\`。注意过滤语义：\`verdict: "flagged"\` 返回**当前仍被标记**的主体，而不是轨迹里出现过 flagged 的主体。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。只读：不写结论文件、目录或审计轨迹，也不改变任何判定。`,
+      `给出人类审计对每个主体与审计范围当前的判定（standing verdict），从追加式结论轨迹推导：当前 verdict、它来自哪条结论（\`conclusionId\` / \`auditorId\` / \`at\`）、上一条判定（\`previousVerdict\`，用于区分「曾被标记后已清除」与「从未被标记」）、该主体与范围下结论总数与 cleared/flagged 计数、以及可选 \`gate\` 与 \`note\`。等价于 CLI \`audit standings\` 与 Portal \`GET /api/conclusions/standings\`。注意过滤语义：\`verdict: "flagged"\` 返回**当前仍被标记**的主体，而不是轨迹里出现过 flagged 的主体。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。只读：不写结论文件、目录或审计轨迹，也不改变任何判定。给出 \`asOf\` 时返回的是**当时**的判定，而不是今天的判定：从该时刻及之前的结论推导，用于回答「那时它是被标记的吗」。没有任何第二条存储保存历史判定，历史状态与当前状态都由同一条追加式轨迹派生，因此两者不可能互相矛盾。`,
     inputSchema: {
       type: "object",
       properties: {
@@ -315,6 +325,11 @@ export const TOOLS: readonly McpTool[] = [
           type: "string",
           enum: [...CONCLUSION_VERDICTS],
           description: "只返回当前判定为该值的主体（已有清除记录不再算作 flagged）",
+        },
+        asOf: {
+          type: "string",
+          description:
+            "给出后返回的是**截至该时刻**的判定，而不是今天的判定：取该时刻及之前记录的结论推导，窗口内的最新一条即当时判定，`previousVerdict` 与计数同样只算窗口内的结论。必须是带时区的真实瞬时（如 2026-09-21T12:00:00Z）；留空读到当前。该时刻之前没有任何结论就是空列表——空列表表示「那时还没有判定」，不是「全部通过」。不接受只有日期或没有时区的写法。",
         },
       },
       additionalProperties: false,
