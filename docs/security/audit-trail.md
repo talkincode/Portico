@@ -156,7 +156,9 @@ deno task cli -- audit verify \
   --conclusions ./data/conclusions.json
 ```
 
-同一答案的三处入口：CLI `audit verify`、Portal `GET /api/audit-verify`、MCP `portico_audit_verify`，返回同一个 `{ok, unsealed, anchored, pillars:[...]}` 载荷。`anchored` 是"已被检查点覆盖的支柱数"，每个支柱在被钉过之后多一个 `anchor` 字段（`state` / `seq` / `tip` / `links` / `foundAt`）。CLI 的退出码只表示命令是否执行成功，**结论看载荷里的 `ok`、每个支柱的 `break`，以及 `anchor.state`**；门禁脚本也是这么读它的。
+同一答案的三处入口：CLI `audit verify`、Portal `GET /api/audit-verify`、MCP `portico_audit_verify`，返回同一个 `{window, ok, unsealed, anchored, pillars:[...]}` 载荷。`anchored` 是"已被检查点覆盖的支柱数"，每个支柱在被钉过之后多一个 `anchor` 字段（`state` / `seq` / `tip` / `links` / `foundAt`）。CLI 的退出码只表示命令是否执行成功，**结论看载荷里的 `ok`、每个支柱的 `break`，以及 `anchor.state`**；门禁脚本也是这么读它的。
+
+`window` 恒为 `"current"`：封条是重算此刻磁盘上的文件得出的，没有「截至某时刻的封条」——过去的状态没有留存副本，链也不保存在轨迹里。因此三处入口都不接受截止时刻：CLI `--as-of`、Portal `?asOf=`、MCP `asOf` 一律得到 `INVALID_INPUT`，而不是被忽略。宁可拒绝也不静默丢弃：被丢掉的截止时刻和一个没有作用的截止时刻，从调用方看一模一样，而后者会让人以为读到的是历史。要读历史用时间线切片、历史结论与历史判定，它们在同一页上各自标明读取窗口；封条面板则标明自己不参与切片。
 
 ---
 

@@ -289,6 +289,25 @@ function integrityPanel(html: string): string {
   return match![0];
 }
 
+/** The standing-verdict panel, likewise one section. */
+function standingsPanel(html: string): string {
+  const match = html.match(/<section[^>]*data-standings="[^"]*"[\s\S]*?<\/section>/);
+  assert(match !== null, "the audit page must render a standing-verdict panel");
+  return match![0];
+}
+
+/** The `<ol>` that lists the trail events. */
+function timeline(html: string): string {
+  const match = html.match(/<ol[^>]*class="tk-timeline"[^>]*>/);
+  assert(match !== null, "the audit page must render the trail");
+  return match![0];
+}
+
+/** The opening tag of a rendered panel, so its attributes can be read. */
+function openingTag(panel: string): string {
+  return panel.slice(0, panel.indexOf(">") + 1);
+}
+
 Deno.test("the audit page reports the seal verdict behind its claim that the trail cannot be rewritten", async () => {
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
@@ -330,6 +349,59 @@ Deno.test("the audit page reports the seal verdict behind its claim that the tra
     assert(
       tag.includes(`data-anchor="${pillar.anchor?.state ?? "none"}"`),
       `the ${pillar.pillar} pillar must report its own checkpoint reading`,
+    );
+  }
+});
+
+Deno.test("the audit page says which window each panel answers, and the seal says it is not windowed", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+
+  const current = await get(context, "/internal/audit", auditor);
+  assertEquals(current.status, 200);
+  // Nothing was sliced here, so every panel is reading the present — but the
+  // page still says which rule each one answers under, so a reader (or a
+  // scraper) never has to infer it from the absence of a window line.
+  assert(
+    openingTag(integrityPanel(current.html)).includes('data-window="current"'),
+    openingTag(integrityPanel(current.html)),
+  );
+  assert(!integrityPanel(current.html).includes("int-integrity__scope"), "no window, no note");
+  assert(
+    openingTag(standingsPanel(current.html)).includes('data-window="as-of"'),
+    openingTag(standingsPanel(current.html)),
+  );
+  assert(
+    timeline(current.html).includes('data-window="as-of"'),
+    timeline(current.html),
+  );
+  assert(!timeline(current.html).includes("data-asof"), "no cutoff was asked for");
+
+  const cutoff = new Date(Date.now() + 3_600_000).toISOString();
+  const sliced = await get(context, `/internal/audit?asOf=${encodeURIComponent(cutoff)}`, auditor);
+  assertEquals(sliced.status, 200);
+  const panel = integrityPanel(sliced.html);
+  // The cutoff reaches the verdicts and the trail; the seal re-reads the files
+  // and has no historical mode, so it keeps its declaration and says out loud
+  // that the window did not apply to it.
+  assert(openingTag(panel).includes('data-window="current"'), openingTag(panel));
+  assert(panel.includes("int-integrity__scope"), panel);
+  assert(panel.includes(`<time datetime="${cutoff}">`), panel);
+  assert(
+    openingTag(standingsPanel(sliced.html)).includes(`data-asof="${cutoff}"`),
+    openingTag(standingsPanel(sliced.html)),
+  );
+  assert(timeline(sliced.html).includes(`data-asof="${cutoff}"`), timeline(sliced.html));
+
+  // Same verdict, same numbers: the window moved the reader, not the seal.
+  const attribute = (html: string, name: string): string | undefined =>
+    integrityPanel(html).match(new RegExp(`data-${name}="[^"]*"`))?.[0];
+  for (const name of ["integrity", "sealed", "unsealed", "anchored"]) {
+    assertEquals(
+      attribute(sliced.html, name),
+      attribute(current.html, name),
+      `the ${name} reading must not depend on the read window`,
     );
   }
 });

@@ -769,8 +769,16 @@ const BREAK_LABEL: Record<SealBreak["reason"], string> = {
  * tip no checkpoint pins is reported as having no way to be compared; and a
  * pillar this deployment does not configure is reported as not checked, because
  * showing it as verified would be the same silence in a new place.
+ *
+ * The page can also be read through a cutoff, which the verdicts and the trail
+ * follow. This panel does not and cannot: a check re-reads the files as they
+ * stand, and nothing stored holds their past. So it declares its own window
+ * (`data-window="current"`, the same declaration the machine payload carries)
+ * and, on a page that is sliced, says out loud that the cutoff did not reach
+ * it — an `ok` read beside a historical trail would otherwise pass for the
+ * verdict of that instant.
  */
-function renderIntegrityPanel(report: SealReport): string {
+function renderIntegrityPanel(report: SealReport, asOf?: string): string {
   const checked = new Map(report.pillars.map((verdict) => [verdict.pillar, verdict]));
   const unchecked = SEAL_PILLARS.filter((pillar) => !checked.has(pillar));
   const sealed = report.pillars.reduce((total, verdict) => total + verdict.sealed, 0);
@@ -837,11 +845,22 @@ function renderIntegrityPanel(report: SealReport): string {
 
   return `<section class="int-integrity" data-integrity="${
     report.ok ? "ok" : "broken"
-  }" data-sealed="${sealed}" data-unsealed="${report.unsealed}" data-anchored="${report.anchored}" data-pillars="${SEAL_PILLARS.length}">
+  }" data-window="current" data-sealed="${sealed}" data-unsealed="${report.unsealed}" data-anchored="${report.anchored}" data-pillars="${SEAL_PILLARS.length}">
           <div class="int-integrity__head">
             <h2 class="int-integrity__title">封条校验</h2>
             <p class="int-integrity__verdict">${esc(facts.join("；"))}</p>
           </div>
+          ${
+    asOf
+      ? `<p class="int-integrity__scope">读取窗口不作用于这一面板：封条校验没有历史模式，它读的始终是当前文件。截至 <time datetime="${
+        esc(
+          asOf,
+        )
+      }">${
+        esc(asOf)
+      }</time> 的窗口只作用于「当时判定」与下方时间线，不能把这个判决读成那一刻的封条状态。</p>`
+      : ""
+  }
           <div class="int-integrity__stats">
             ${stat(sealed, "已封记录")}
             ${stat(report.unsealed, "未封记录")}
@@ -955,7 +974,7 @@ function renderStandingsPanel(
             </li>`;
   }).join("\n");
 
-  return `<section class="int-standings" data-standings="${standings.length}" data-flagged="${flagged.length}"${
+  return `<section class="int-standings" data-standings="${standings.length}" data-window="as-of" data-flagged="${flagged.length}"${
     asOf ? ` data-asof="${esc(asOf)}"` : ""
   }>
           <div class="int-standings__intro">
@@ -1044,7 +1063,7 @@ export function renderAuditView(input: AuditViewInput): string {
           <h1 class="int-page__title">审计时间线</h1>
           <p class="int-page__sub">目录变更、身份授权与撤回、凭证作废、公开审批与网关访问。只读，可追加，不可改写。</p>
         </div>
-        ${renderIntegrityPanel(input.integrity)}
+        ${renderIntegrityPanel(input.integrity, query.asOf)}
         ${renderStandingsPanel(input.standings, query.asOf)}
         <div class="int-filters">
           ${boundaryNote("审计结论与维护轨迹分开存储；维护者身份不能覆盖或删除。")}
@@ -1073,7 +1092,9 @@ export function renderAuditView(input: AuditViewInput): string {
           `截至 ${query.asOf} 还没有发生可追溯的治理动作。`,
         )
         : emptyState("没有审计事件。", "尚未发生可追溯的治理动作。")
-      : `<ol class="tk-timeline">
+      : `<ol class="tk-timeline" data-window="as-of"${
+        query.asOf ? ` data-asof="${esc(query.asOf)}"` : ""
+      }>
 ${grouped.map(renderAuditEvent).join("\n")}
         </ol>`
   }

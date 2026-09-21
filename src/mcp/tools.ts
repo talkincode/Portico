@@ -210,7 +210,7 @@ export const TOOLS: readonly McpTool[] = [
   {
     name: "portico_audit_verify",
     description:
-      "重算安全审计的封条链，报告每个环节是否与写入时一致：哪条记录被改写、被删除或链条断开，也会列出没有任何环节覆盖的记录（未封存）。等价于 CLI `audit verify` 与 Portal `GET /api/audit-verify`。仅人类审计者可读；其他身份得到 FORBIDDEN。只读：不写审计文件，也不修改任何记录。返回的 tip 是该链当前末端摘要，可用于与外部留存的摘要比对。",
+      "重算安全审计的封条链，报告每个环节是否与写入时一致：哪条记录被改写、被删除或链条断开，也会列出没有任何环节覆盖的记录（未封存）。等价于 CLI `audit verify` 与 Portal `GET /api/audit-verify`。仅人类审计者可读；其他身份得到 FORBIDDEN。只读：不写审计文件，也不修改任何记录。返回的 tip 是该链当前末端摘要，可用于与外部留存的摘要比对。没有历史模式：返回的 `window` 恒为 `current`，传入 `asOf` 会被拒绝（INVALID_INPUT）而不是被忽略——封条校验读的是当前文件，时间切片只属于 `portico_audit` / `portico_conclusions` / `portico_conclusion_standings`。",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -401,7 +401,7 @@ export async function callTool(
       return applyAuditQuery(events, parseAuditQuery(input));
     }
     case "portico_audit_verify":
-      return await deps.seal.report(actor);
+      return await deps.seal.report(actor, { asOf: input.asOf });
     case "portico_seal_anchors":
       return await deps.anchors.list(actor);
     case "portico_approvals":
