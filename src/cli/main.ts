@@ -99,6 +99,9 @@ Without an anchor path, audit verify reports every pillar as unanchored
 (count 0), because nothing outside the pillar files then agrees on the tips;
 a rewrite of a whole chain and a truncation of its tail are invisible to the
 seal alone, and the anchors are what make them visible.
+The seal has no historical mode: its report always carries window "current",
+and passing --as-of to audit verify is refused (INVALID_INPUT) instead of
+being ignored. Time slicing belongs to audit list, conclusions and standings.
 Page path may also be set with PORTICO_PAGE_PATH.
 A non-anonymous command proves its identity with --session; --actor-* alone is
 refused (USAGE). With no identity flags at all a command runs as anonymous.
@@ -470,8 +473,10 @@ async function runAudit(
 
   if (action === "verify") {
     // Role check first: the seal report names records, so only an auditor may
-    // ask for it — same gate as `audit list`.
-    return ok(await seals.report(actor));
+    // ask for it — same gate as `audit list`. A cutoff is handed to the service
+    // so it can refuse it rather than drop it: the seal reads today's files and
+    // reports `window: "current"`, so there is no historical reading to give.
+    return ok(await seals.report(actor, { asOf: flags["as-of"] }));
   }
 
   if (action === "anchor" || action === "anchors") {

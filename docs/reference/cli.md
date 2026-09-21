@@ -171,6 +171,9 @@ portico audit anchors --anchors <path> --catalog <path> --identities <path> --se
 portico audit verify --anchors <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
   [--audit <path>] [--conclusions <path>]
 
+# 封条没有历史模式：载荷带 window="current"，传 --as-of 得到 INVALID_INPUT 而不是被忽略
+# （被丢弃的截止时刻与没有作用的截止时刻从外面看一样，所以宁拒不猜；要读历史用 --as-of 的只读查询）
+
 # 设置自定义门户卡片配置
 portico page set --page <path> --catalog <path> --identities <path> --sessions <path> --session <token> --input <page.json>
 

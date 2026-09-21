@@ -346,6 +346,17 @@ export const INTERNAL_CSS = `
 }
 .int-standings__note { font-size: 0.84rem; margin-top: var(--tk-s2); }
 
+/* Both window declarations read alike: they state a fact about the reader's
+   window, and are not part of the verdict they sit beside. */
+.int-integrity__scope {
+  margin-top: var(--tk-s2);
+  padding: var(--tk-s2) var(--tk-s3);
+  border-left: 2px solid var(--tk-border-strong);
+  background: var(--tk-sunken);
+  font-size: 0.8rem;
+  color: var(--tk-muted);
+}
+
 .int-filters__hint {
   flex-basis: 100%;
   font-size: 0.72rem;

@@ -132,7 +132,17 @@ export async function handlePortalRequest(
     if (url.pathname === "/api/audit-verify") {
       // Read-only, like the rest of the Portal: it re-derives the seal from the
       // files and reports. A non-auditor gets FORBIDDEN from the service.
-      return jsonOk(await sealService(context).report(actor));
+      //
+      // A cutoff is passed through so the service can refuse it: the check
+      // re-reads the files as they stand, so there is no window to honour and
+      // the report says so itself (`window: "current"`). Dropping the value
+      // here would answer a question the caller did not ask, in a shape the
+      // caller could not tell apart from the one it did.
+      return jsonOk(
+        await sealService(context).report(actor, {
+          asOf: url.searchParams.get("asOf") ?? undefined,
+        }),
+      );
     }
     if (url.pathname === "/api/seal-anchors") {
       // The checkpoints themselves, newest last: who pinned which tips, when.
