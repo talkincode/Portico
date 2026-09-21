@@ -29,5 +29,5 @@ Portico 的 Web 门户（Web Portal）运行于 `8788` 端口，它是一个专�
 | **`/public`** | 外部公众 | 完全匿名 | 公开发布目录：仅展示经过独立人类审计批准的 `approved_public` 服务。 |
 | **`/internal/pending`** | 组织内部人员 | 持有会话 (Reader+) | 待审公开队列：当前身份可见的 `pending_public` 候选。可按 `?channel=`（cli / mcp / web）只读筛选；筛选 tab 显示该渠道待审计数。入口标明种类（url / package / mcp_endpoint），引用为转义文本、不可点击。无脚本、无表单，不能批准或驳回。匿名 HTML 404。 |
 | **`/internal/approvals`** | 组织内部人员 | 持有会话 (Reader+) | 公开边界审批轨迹：通过 / 驳回 / 撤回记录与可选备注；与 CLI / API / MCP 同一批。待审候选不出现。匿名 HTML 404。 |
-| **`/internal/audit`** | 人类审计者 | **仅限 Auditor** | 安全审计台：按时间线聚合目录变更、授权撤回与网关流水。 |
+| **`/internal/audit`** | 人类审计者 | **仅限 Auditor** | 安全审计台：按时间线聚合目录变更、授权撤回与网关流水；顶部只读展示封条校验与「当前判定」（从审计结论轨迹推导，含「曾被标记后已清除」）。 |
 | **`/api/*`** | 开发者/脚本 | 按接口鉴权 | 供自动化脚本消费的只读 REST API。 |

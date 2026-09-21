@@ -204,3 +204,5 @@ interface AuditConclusion {
 - **受封条覆盖。** 结论文件与另外三个支柱一样带链，改写一条判定同样会被 `audit verify` 指名。
 
 只读查询有三处同一答案：CLI `audit conclusions`、Portal `GET /api/conclusions`、MCP `portico_conclusions`。Portal 与 MCP 没有写权限，记录结论只能经 CLI `audit conclude`。
+
+「此刻的判定」是同一批记录的派生视图，同样三入口一致：CLI `audit standings`、Portal `GET /api/conclusions/standings`、MCP `portico_conclusion_standings` 取每个「主体 + 作用域」的最新结论作为当前判定，并带回上一条判定与计数，因此「曾被标记、后已清除」和「从未被标记」不会读成同一件事。过滤作用于当前判定而不是轨迹：已清除的旧标记不会命中 `verdict: flagged`，但它仍留在轨迹里作为证据。`/internal/audit` 顶部渲染的就是这同一批结果（只读面板，无表单）。

@@ -45,6 +45,7 @@ export {
   FileConclusionStore,
   MemoryConclusionStore,
   parseConclusionQuery,
+  standingConclusions,
   SURFACE_SCOPES,
 } from "./conclusions.ts";
 export type {
@@ -55,5 +56,6 @@ export type {
   ConclusionScope,
   ConclusionStore,
   ConclusionVerdict,
+  StandingConclusion,
 } from "./conclusions.ts";
 export type { AuditActor, AuditEvent, AuditKind } from "./types.ts";

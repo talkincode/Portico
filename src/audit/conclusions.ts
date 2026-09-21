@@ -329,6 +329,18 @@ export class ConclusionService {
     const parsed = parseConclusionQuery(query);
     return applyConclusionQuery(await this.store.list(), parsed);
   }
+
+  /**
+   * The standing verdict per subject and scope, derived from the trail. Takes
+   * the query raw for the same reason `list` does, and in the same order: the
+   * role gate runs before any filter is parsed, so a caller who may not read
+   * conclusions is never told that its filter was malformed.
+   */
+  async standings(actor: Actor, query: unknown = {}): Promise<StandingConclusion[]> {
+    assertActor(actor);
+    assertAuditor(actor, "read");
+    return standingConclusions(await this.store.list(), query);
+  }
 }
 
 export function parseConclusionQuery(raw: unknown): ConclusionQuery {
@@ -384,6 +396,94 @@ export function applyConclusionQuery(
     .filter((record) => (parsed.scope ? record.scope === parsed.scope : true))
     .filter((record) => (parsed.verdict ? record.verdict === parsed.verdict : true))
     .map(cloneConclusion);
+}
+
+/**
+ * What the human audit says *now* about one subject and one scope.
+ *
+ * The trail is append-only and that is the evidence; but "is this still
+ * flagged?" has no answer in any single record, and deriving it by hand is how
+ * two readers end up disagreeing about the current verdict. The standing view
+ * is computed from the trail and never stored beside it, so there is no second
+ * copy that can drift from the records: drop the trail and the standing view
+ * is gone with it.
+ */
+export interface StandingConclusion {
+  subjectId: string;
+  scope: ConclusionScope;
+  /** The verdict that stands: the subject+scope's latest conclusion. */
+  verdict: ConclusionVerdict;
+  /** The conclusion record the standing verdict comes from. */
+  conclusionId: string;
+  auditorId: string;
+  at: string;
+  /**
+   * What the review before this one said, when the subject was reviewed more
+   * than once. A cleared subject carrying `previousVerdict: "flagged"` was
+   * found and then fixed, which must not read the same as one never flagged.
+   */
+  previousVerdict?: ConclusionVerdict;
+  /** How many conclusions this subject+scope carries, and how they split. */
+  count: number;
+  cleared: number;
+  flagged: number;
+  /** Present when the verdict answers a repository boundary contract. */
+  gate?: string;
+  note?: string;
+}
+
+/**
+ * The standing verdict per subject and scope. `query` filters the *standing*
+ * state (what is true now), not the trail: `verdict: "flagged"` answers "which
+ * subjects stand flagged", so a flag that was later cleared does not match even
+ * though the trail still carries it.
+ */
+export function standingConclusions(
+  records: AuditConclusion[],
+  query: unknown = {},
+): StandingConclusion[] {
+  const parsed = parseConclusionQuery(query);
+  const groups = new Map<string, AuditConclusion[]>();
+  for (const record of records) {
+    const key = `${record.subjectId}\u0000${record.scope}`;
+    const group = groups.get(key);
+    if (group) group.push(record);
+    else groups.set(key, [record]);
+  }
+
+  const standings: StandingConclusion[] = [];
+  for (const group of groups.values()) {
+    // Stable sort over a copy: records sharing one timestamp keep their append
+    // order, the only order that distinguishes two reviews inside a single
+    // millisecond. The caller's trail is left untouched.
+    const ordered = [...group].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    const latest = ordered[ordered.length - 1];
+    const previous = ordered.length > 1 ? ordered[ordered.length - 2] : undefined;
+    standings.push({
+      subjectId: latest.subjectId,
+      scope: latest.scope,
+      verdict: latest.verdict,
+      conclusionId: latest.id,
+      auditorId: latest.auditorId,
+      at: latest.at,
+      ...(previous ? { previousVerdict: previous.verdict } : {}),
+      count: ordered.length,
+      cleared: ordered.filter((record) => record.verdict === "cleared").length,
+      flagged: ordered.filter((record) => record.verdict === "flagged").length,
+      ...(latest.gate ? { gate: latest.gate } : {}),
+      ...(latest.note ? { note: latest.note } : {}),
+    });
+  }
+
+  return standings
+    .filter((item) => (parsed.subject ? item.subjectId === parsed.subject : true))
+    .filter((item) => (parsed.scope ? item.scope === parsed.scope : true))
+    .filter((item) => (parsed.verdict ? item.verdict === parsed.verdict : true))
+    .sort((a, b) =>
+      a.subjectId === b.subjectId
+        ? (a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : 0)
+        : (a.subjectId < b.subjectId ? -1 : 1)
+    );
 }
 
 function assertAuditor(actor: Actor, verb: string): void {

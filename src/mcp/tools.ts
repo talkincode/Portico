@@ -12,6 +12,7 @@ import {
   parseAuditQuery,
   parseConclusionQuery,
   type SealService,
+  standingConclusions,
 } from "../audit/mod.ts";
 import type { AccessService } from "../access/mod.ts";
 import {
@@ -295,6 +296,31 @@ export const TOOLS: readonly McpTool[] = [
     },
   },
   {
+    name: "portico_conclusion_standings",
+    description:
+      `给出人类审计对每个主体与审计范围当前的判定（standing verdict），从追加式结论轨迹推导：当前 verdict、它来自哪条结论（\`conclusionId\` / \`auditorId\` / \`at\`）、上一条判定（\`previousVerdict\`，用于区分「曾被标记后已清除」与「从未被标记」）、该主体与范围下结论总数与 cleared/flagged 计数、以及可选 \`gate\` 与 \`note\`。等价于 CLI \`audit standings\` 与 Portal \`GET /api/conclusions/standings\`。注意过滤语义：\`verdict: "flagged"\` 返回**当前仍被标记**的主体，而不是轨迹里出现过 flagged 的主体。仅人类审计者可读；维护者、只读与匿名得到 FORBIDDEN。只读：不写结论文件、目录或审计轨迹，也不改变任何判定。`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        subject: {
+          type: "string",
+          description: "只返回该主体当前的判定（目录记录 id 或边界契约 id）",
+        },
+        scope: {
+          type: "string",
+          enum: [...CONCLUSION_SCOPES],
+          description: "只返回该审计范围当前的判定",
+        },
+        verdict: {
+          type: "string",
+          enum: [...CONCLUSION_VERDICTS],
+          description: "只返回当前判定为该值的主体（已有清除记录不再算作 flagged）",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "portico_page",
     description:
       "读取维护者排布的门户组件盒（当前身份可见的卡片与提示）。等价于 CLI `page get` 与 Portal `GET /api/page`。匿名看不到内部卡片；读操作不写 page 或目录。Portico 不是 CMS，不能通过此工具改页面。",
@@ -387,6 +413,14 @@ export async function callTool(
       // non-auditor cannot probe the filter grammar.
       const records = await deps.conclusions.list(actor);
       return applyConclusionQuery(records, parseConclusionQuery(input));
+    }
+    case "portico_conclusion_standings": {
+      if (!deps.conclusions) return [];
+      // Same split as `portico_conclusions`: read (role-gated) first, parse the
+      // filter second. The standing view answers "what stands now", not "what
+      // the trail contains".
+      const records = await deps.conclusions.list(actor);
+      return standingConclusions(records, input);
     }
     case "portico_page":
       if (!deps.pages) return { components: [] };

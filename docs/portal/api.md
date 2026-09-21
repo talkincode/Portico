@@ -102,7 +102,23 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" "http://127.0.0.1:8788
 
 ---
 
-### 4c. 审计封条校验 (`GET /api/audit-verify`)
+### 4c. 审计判定现状 (`GET /api/conclusions/standings`)
+人类审计对每个「主体 + 作用域」**当前**的判定，从 4b 的追加式结论轨迹推导，不是第二份存储：当前 `verdict` 与它来自的结论（`conclusionId` / `auditorId` / `at`）、上一条判定 `previousVerdict`（区分「曾被标记、后已清除」与「从未被标记」）、该主体该作用域下结论总数与 `cleared` / `flagged` 计数、边界契约的 `gate` 与可选 `note`。与 CLI `audit standings`、MCP `portico_conclusion_standings` 同一载荷。
+
+```bash
+# 当前仍被标记的主体
+curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions/standings?verdict=flagged"
+
+# 某个边界契约的当前判定
+curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions/standings?subject=boundary:runtime-l0"
+```
+
+> [!NOTE]
+> 仅人类审计者可读，权限与 4b 相同（维护者、只读者与匿名 `403`，且角色检查先于过滤器解析）。过滤的是**当前判定**而不是轨迹：`verdict=flagged` 只返回现在仍被标记的主体，即使轨迹里还留着已清除的旧标记。空列表表示还没有审计者作出判定，不是「全部通过」。只读面：`POST` 返回 `405`，读操作不创建结论文件。
+
+---
+
+### 4d. 审计封条校验 (`GET /api/audit-verify`)
 重算四个支柱（目录、身份名册、Gateway 访问审计、安全结论）的封条链，回答“这些记录是否还是写入时的样子”。与 CLI `audit verify`、MCP `portico_audit_verify` 同一载荷。
 
 ```bash

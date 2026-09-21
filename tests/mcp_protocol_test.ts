@@ -147,6 +147,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_credential_revokes",
     "portico_gateway_audit",
     "portico_conclusions",
+    "portico_conclusion_standings",
     "portico_page",
   ]);
 });
