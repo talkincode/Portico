@@ -27,6 +27,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **公开发布撤回** | 高 | `tests/catalog_withdraw_test.ts`；`tests/e2e/cli_withdrawal_e2e_test.ts` |
 | **公开可达性以审批轨迹为准** | 高 | `tests/catalog_public_grant_test.ts`；`tests/e2e/public_grant_e2e_test.ts` |
 | **公开边界与受众只读报告** | 高 | `tests/catalog_audience_test.ts`；`tests/e2e/catalog_audience_e2e_test.ts` |
+| **公开边界整库巡检** | 高 | `tests/catalog_boundary_sweep_test.ts`；`tests/e2e/catalog_boundary_e2e_test.ts` |
 | **Review 独立人类审核入口** | 高 | `tests/review_handler_test.ts`；`tests/e2e/review_http_e2e_test.ts`；`tests/e2e/system_up_e2e_test.ts` |
 | **Portal 发现与仪表盘** | 中 | `tests/portal_handler_test.ts`；`tests/portal_magazine_test.ts`；`tests/portal_ui_test.ts`；`tests/catalog_dashboard_test.ts`；`tests/e2e/portal_discovery_e2e_test.ts`；`tests/e2e/portal_magazine_e2e_test.ts`；`tests/e2e/catalog_dashboard_e2e_test.ts` |
 | **目录过滤查询** | 中 | `tests/catalog_query_test.ts`；`tests/portal_handler_test.ts`；`tests/portal_magazine_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/cli_catalog_e2e_test.ts`；`tests/e2e/catalog_query_e2e_test.ts`；`tests/e2e/portal_magazine_e2e_test.ts` |

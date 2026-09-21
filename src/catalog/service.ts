@@ -10,7 +10,9 @@ import type {
   ApprovalDecisionInput,
   ApprovalRecord,
   AudienceReport,
+  BoundaryDisagreement,
   BoundaryMismatch,
+  BoundarySweepView,
   CatalogChangeAction,
   CatalogChangeRecord,
   Channel,
@@ -21,6 +23,7 @@ import type {
   MaintainerRef,
   McpConnectionInfo,
   PublicDecision,
+  PublicFaceEntry,
   PublishInput,
   RegisterInput,
   UpdateInput,
@@ -646,6 +649,80 @@ export class CatalogService {
           reachable: canSee(subject, served),
         }))
         .sort((left, right) => left.id.localeCompare(right.id)),
+    };
+  }
+
+  /**
+   * The whole public boundary in one read.
+   *
+   * A per-record report still leaves an auditor walking the catalog to find the
+   * record that disagrees with its trail. This answers for every record the
+   * actor may read at once: the live public face with the approval each entry
+   * rests on, and every disagreement in either direction. Visibility is the same
+   * rule `list` applies, so the sweep can never widen what the actor reads, and
+   * it writes nothing.
+   */
+  async boundarySweep(actor: Actor): Promise<BoundarySweepView> {
+    assertActor(actor);
+    const [records, approvals] = await Promise.all([
+      this.store.list(),
+      this.store.listApprovals(),
+    ]);
+    const granted = publicGrant(approvals);
+    const visible = records
+      .map((stored) => ({ stored, served: underPublicGrant(stored, granted) }))
+      .filter((entry) => canSee(actor, entry.served))
+      .sort((left, right) => left.stored.id.localeCompare(right.stored.id));
+
+    const publicFace: PublicFaceEntry[] = [];
+    const mismatches: BoundaryDisagreement[] = [];
+    let claimedPublic = 0;
+    let approved = 0;
+
+    for (const { stored, served } of visible) {
+      const latest = latestDecision(approvals, stored.id);
+      const trailApproved = latest?.decision === "approved";
+      if (isPubliclyReachable(stored)) claimedPublic += 1;
+      if (trailApproved) approved += 1;
+
+      const mismatch = boundaryMismatch(stored, trailApproved, served);
+      if (mismatch) {
+        mismatches.push({
+          id: stored.id,
+          name: stored.name,
+          claimed: surfaceStanding(stored),
+          served: surfaceStanding(served),
+          reachable: isPubliclyReachable(served),
+          decision: latest?.decision ?? null,
+          mismatch,
+        });
+      }
+      // Reachability is granted by the trail, so an exposed record always has
+      // the decision it rests on; a record the trail does not grant is served as
+      // internal and cannot reach this list.
+      if (isPubliclyReachable(served) && latest) {
+        publicFace.push({
+          id: served.id,
+          name: served.name,
+          version: served.version,
+          channels: [...served.channels],
+          entry: structuredClone(served.entry),
+          approvedBy: structuredClone(latest.reviewedBy),
+          approvedAt: latest.reviewedAt,
+        });
+      }
+    }
+
+    return {
+      counts: {
+        visible: visible.length,
+        public_face: publicFace.length,
+        claimed_public: claimedPublic,
+        approved,
+        mismatched: mismatches.length,
+      },
+      publicFace,
+      mismatches,
     };
   }
 

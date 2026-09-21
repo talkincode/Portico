@@ -101,6 +101,9 @@ portico catalog approvals --catalog <path> --identities <path> --sessions <path>
 # 单条记录在公开边界上的状态与名册受众（仅维护者与人类审计者；只读，不改可见性）
 portico catalog audience --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
 
+# 整库巡检公开边界：当前暴露清单（含所依据的审批）与全部不一致（仅维护者与人类审计者；只读）
+portico catalog boundary --catalog <path> --identities <path> --sessions <path> --session <token>
+
 # 列表查询可见服务
 portico catalog list --catalog <path> [--identities <path> --sessions <path> --session <token>]
 

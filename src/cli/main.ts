@@ -26,6 +26,7 @@ import {
   applyCatalogQuery,
   type ApprovalDecisionInput,
   audienceReport,
+  boundarySweep,
   CatalogError,
   CatalogService,
   dashboardFrom,
@@ -67,6 +68,7 @@ Commands:
   catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog dashboard --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog audience  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog boundary  --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected]
   catalog get       --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   mcp list          --catalog <path> --identities <path> --session <token> --sessions <path>
@@ -253,6 +255,13 @@ export async function runCli(
         new FileIdentityStore(readIdentitiesPath(flags, env)),
       );
       return ok(await audienceReport(service, access, actor, flags.id));
+    }
+
+    if (action === "boundary") {
+      const access = new AccessService(
+        new FileIdentityStore(readIdentitiesPath(flags, env)),
+      );
+      return ok(await boundarySweep(service, access, actor));
     }
 
     if (action === "list") {
