@@ -2,6 +2,7 @@ export { CatalogError, ErrorCode } from "./errors.ts";
 export { dashboardFrom } from "./dashboard.ts";
 export type { DashboardView } from "./dashboard.ts";
 export { audienceReport } from "./audience.ts";
+export { boundarySweep } from "./boundary.ts";
 export {
   applyCatalogQuery,
   CATALOG_CHANNELS,
@@ -24,7 +25,9 @@ export type {
   ApprovalRecord,
   AudienceReport,
   AudienceSubject,
+  BoundaryDisagreement,
   BoundaryMismatch,
+  BoundarySweepView,
   CatalogChangeAction,
   CatalogChangeRecord,
   Channel,
@@ -35,6 +38,7 @@ export type {
   MaintainerRef,
   McpConnectionInfo,
   PublicDecision,
+  PublicFaceEntry,
   PublicSubmission,
   PublishInput,
   RegisterInput,

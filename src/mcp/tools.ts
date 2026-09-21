@@ -18,6 +18,7 @@ import {
   type Actor,
   applyCatalogQuery,
   audienceReport,
+  boundarySweep,
   CATALOG_CHANNELS,
   CATALOG_GOVERNANCE_STATES,
   CatalogError,
@@ -163,6 +164,12 @@ export const TOOLS: readonly McpTool[] = [
       required: ["id"],
       additionalProperties: false,
     },
+  },
+  {
+    name: "portico_boundary",
+    description:
+      "整条公开边界的一次巡检：现在真正公开可达的入口清单（含每条入口指向何处、以及它依据的那次审批是谁在何时做出），加上所有与审批轨迹不一致的可见记录（claimed_public_without_approval / approved_without_public_record）与计数。等价于 CLI `catalog boundary` 与 Portal `GET /api/boundary`。仅维护者与人类审计者可读，只读与匿名得到 FORBIDDEN；可见记录集合与调用者自己的目录读取完全一致，草稿不会因巡检而对审计者可见。只读：不写目录、不写审批轨迹，也不能用它批准或修复任何记录。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
     name: "portico_audit",
@@ -346,6 +353,8 @@ export async function callTool(
         actor,
         requireId(input.id),
       );
+    case "portico_boundary":
+      return await boundarySweep(deps.catalog, deps.access, actor);
     case "portico_audit": {
       const events = await deps.audit.list(actor);
       return applyAuditQuery(events, parseAuditQuery(input));

@@ -195,3 +195,52 @@ export interface AudienceReport extends SurfaceBoundary {
   /** The roster, ordered by identity id. */
   subjects: AudienceSubject[];
 }
+
+/**
+ * One surface standing on the live public face, with the approval it rests on.
+ *
+ * A record reaches this list only through the trail's authority, so the decision
+ * named by `approvedBy` / `approvedAt` always exists: naming it is what turns
+ * "this is public" from a claim into an answerable question about who let it
+ * out and where the entry points.
+ */
+export interface PublicFaceEntry {
+  id: string;
+  name: string;
+  version: string;
+  channels: Channel[];
+  entry: EntryRef;
+  approvedBy: MaintainerRef;
+  approvedAt: string;
+}
+
+/**
+ * One surface whose own bytes and trail disagree. `mismatch` is never null here:
+ * a disagreement is the only reason an entry appears in this list.
+ */
+export interface BoundaryDisagreement extends SurfaceBoundary {
+  mismatch: BoundaryMismatch;
+}
+
+/**
+ * The whole public boundary as one read: what is exposed right now, and every
+ * record the actor may see that disagrees with its approval trail.
+ */
+export interface BoundarySweepView {
+  counts: {
+    /** Records this actor may read — the population the sweep judged. */
+    visible: number;
+    /** Records the read path serves on the public face right now. */
+    public_face: number;
+    /** Records whose own bytes claim a public standing. */
+    claimed_public: number;
+    /** Records whose newest trail entry is `approved`. */
+    approved: number;
+    /** Records whose bytes and trail disagree. */
+    mismatched: number;
+  };
+  /** The live public face, ordered by id. */
+  publicFace: PublicFaceEntry[];
+  /** Every disagreement, ordered by id. */
+  mismatches: BoundaryDisagreement[];
+}

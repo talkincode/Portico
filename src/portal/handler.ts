@@ -45,6 +45,7 @@ import { parseChannel, parseTheme, renderMagazinePage, renderNotFoundPage } from
 import type { ReviewEntry } from "./review-entry.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
 import { audienceReport } from "../catalog/audience.ts";
+import { boundarySweep } from "../catalog/boundary.ts";
 
 export interface PortalCfAccess {
   verify(assertion: string): Promise<{ email: string } | null>;
@@ -149,6 +150,11 @@ export async function handlePortalRequest(
       return jsonOk(
         await audienceReport(context.catalog, context.access, actor, audience[1]),
       );
+    }
+    if (url.pathname === "/api/boundary") {
+      // The whole boundary at once: what is exposed right now and every record
+      // that disagrees with its trail. Same gate as the per-record report.
+      return jsonOk(await boundarySweep(context.catalog, context.access, actor));
     }
     if (url.pathname === "/api/identities") {
       return jsonOk(await context.access.list(actor));

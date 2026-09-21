@@ -222,3 +222,14 @@ curl -s -H "Authorization: Bearer $AUDITOR_SESSION" http://127.0.0.1:8788/api/au
 
 > [!NOTE]
 > 仅维护者与人类审计者可读；只读与匿名返回 `403 FORBIDDEN`，草稿对审计者返回 `404`（门禁先于取值，被拒身份对存在与不存在的 id 得到同一拒绝码）。`claimed` 与轨迹不一致时给出 `mismatch`：`claimed_public_without_approval`（字节自称公开而轨迹没有授予）或 `approved_without_public_record`（轨迹仍授予而字节已被写回 `internal`）；两种情况下 `reachable` 都是 `false`。每个主体的 `reachable` 与其自身 `GET /api/catalog/<id>` 的结果一致。只读：不改可见性、不追加审批记录，也不是批准入口。
+
+### 9b. 公开边界整库巡检 (`GET /api/boundary`)
+
+一次给出整条公开边界：`counts`（`visible` / `public_face` / `claimed_public` / `approved` / `mismatched`）、按 id 排序的 `publicFace`——每条暴露入口的 `id` / `name` / `version` / `channels` / `entry`，加上它依据的那次审批的 `approvedBy` / `approvedAt`——以及 `mismatches`（与 9a 同形的 `claimed` / `served` / `decision` / `reachable` 加 `mismatch`）。与 CLI `catalog boundary`、MCP `portico_boundary` 同一载荷。
+
+```bash
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/boundary
+```
+
+> [!NOTE]
+> 仅维护者与人类审计者可读；只读与匿名返回 `403 FORBIDDEN`。`counts.visible` 与调用者自己的 `GET /api/catalog` 条数相等——巡检只是把已有的可见性与审批轨迹并排摆出来，不是新的读权限；草稿对审计者不可见，也不进任何角色的 `publicFace`。一条记录只有同时被轨迹授予且字节暴露才进 `publicFace`，所以清单里的每条入口都带着它所依据的决定。只读：不改可见性、不追加审批记录，也不能用它消除不一致（修复仍必须走审批路径）。
