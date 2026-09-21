@@ -24,6 +24,7 @@ import {
   type SealedPillar,
   type SealPillar,
   type SealReport,
+  type StandingConclusion,
 } from "../../../audit/mod.ts";
 import type { AuditEvent } from "../../../audit/types.ts";
 import {
@@ -883,6 +884,87 @@ function renderIntegrityFaults(verdict: SealedPillar | undefined): string {
   return `\n              ${lines.join("\n              ")}`;
 }
 
+/** The human auditor's question, short enough for one row. */
+const SCOPE_LABEL: Record<string, string> = {
+  public_boundary: "公开边界",
+  entry_target: "入口指向",
+  permission_change: "权限变化",
+  secret_leakage: "密钥泄漏",
+  gateway_scope: "网关越权",
+  runtime_l0: "运行时边界",
+};
+
+/**
+ * What the human audit says *now* about each subject it has reviewed.
+ *
+ * The timeline below is append-only, which is the right shape for evidence and
+ * the wrong shape for an answer: "is this still flagged?" is the last line of a
+ * list that keeps growing. This panel computes that answer from the same trail
+ * the CLI `audit standings` and the MCP tool return, so the portal cannot hold a
+ * second opinion. It adds no way to write one.
+ *
+ * Three silences it keeps. Only reviewed subjects appear, so an empty panel
+ * means no verdict was recorded, never "everything passed". A cleared subject
+ * that was flagged before keeps its flag count, so "found and fixed" does not
+ * read like "never flagged". And a cleared subject without an audit note is
+ * still shown as having no note, because the note is the auditor's, not ours.
+ */
+function renderStandingsPanel(standings: readonly StandingConclusion[]): string {
+  const flagged = standings.filter((item) => item.verdict === "flagged");
+  const rows = standings.map((item) => {
+    const cleared = item.verdict === "cleared";
+    const meta = [
+      `本次判定 ${relativeAge(item.at)}`,
+      item.count > 1 ? `共 ${item.count} 条结论` : "仅有这一条结论",
+      item.flagged > 0 ? `其中 ${item.flagged} 次标记` : undefined,
+      item.previousVerdict === "flagged" ? `上一条判定为标记，后来被清除` : undefined,
+    ].filter((part): part is string => part !== undefined).join(" · ");
+    return `            <li class="int-standings__row" data-subject="${
+      esc(item.subjectId)
+    }" data-scope="${esc(item.scope)}" data-verdict="${
+      esc(item.verdict)
+    }" data-count="${item.count}" data-flagged="${item.flagged}"${
+      item.gate ? ` data-gate="${esc(item.gate)}"` : ""
+    }>
+              <p class="int-standings__head">
+                <span class="int-standings__subject">${esc(item.subjectId)}</span>
+                <span class="tk-chip tk-chip--plain">${
+      esc(SCOPE_LABEL[item.scope] ?? item.scope)
+    }</span>
+                <span class="tk-chip tk-chip--${cleared ? "plain" : "accent"}">${
+      cleared ? "已清除" : "仍标记"
+    }</span>
+              </p>
+              <p class="int-standings__meta">${esc(meta)}</p>
+              <p class="int-standings__note">${
+      item.note ? esc(item.note) : "这一条结论没有留下说明"
+    }</p>
+              <p class="int-standings__source">${esc(item.conclusionId)} · 由 ${
+      esc(item.auditorId)
+    } 判定</p>
+            </li>`;
+  }).join("\n");
+
+  return `<section class="int-standings" data-standings="${standings.length}" data-flagged="${flagged.length}">
+          <div class="int-standings__intro">
+            <h2 class="int-standings__title">当前判定</h2>
+            <p class="int-standings__sub">人类安全审计对每个已审主体留下的最新结论。只列出审过的对象；列表为空表示还没有留下判定，不是「全部通过」。</p>
+          </div>
+          ${
+    boundaryNote(
+      "只读视图：判定由审计结论派生，门户不能替人类写下或改写任何一条结论。",
+    )
+  }
+          ${
+    standings.length === 0
+      ? emptyState("没有审计结论。", "还没有人类审计者对本部署的任何主体作出判定。")
+      : `<ol class="int-standings__rows">
+${rows}
+          </ol>`
+  }
+        </section>`;
+}
+
 export interface AuditViewInput {
   ctx: ViewContext;
   events: AuditEvent[];
@@ -893,6 +975,13 @@ export interface AuditViewInput {
    * evidence is exactly the silence the seal exists to remove.
    */
   integrity: SealReport;
+  /**
+   * The standing verdict for every subject this deployment's auditor has
+   * concluded on. Required for the same reason as `integrity`: a page whose
+   * subject is the human audit must say what the human audit currently finds,
+   * and an omitted panel would read as "nothing is flagged".
+   */
+  standings: readonly StandingConclusion[];
 }
 
 export function renderAuditView(input: AuditViewInput): string {
@@ -914,6 +1003,7 @@ export function renderAuditView(input: AuditViewInput): string {
           <p class="int-page__sub">目录变更、身份授权与撤回、凭证作废、公开审批与网关访问。只读，可追加，不可改写。</p>
         </div>
         ${renderIntegrityPanel(input.integrity)}
+        ${renderStandingsPanel(input.standings)}
         <div class="int-filters">
           ${boundaryNote("审计结论与维护轨迹分开存储；维护者身份不能覆盖或删除。")}
           <form method="get" action="/internal/audit" role="search">

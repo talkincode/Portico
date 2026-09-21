@@ -11,6 +11,7 @@ import {
   parseAuditQuery,
   parseConclusionQuery,
   SealService,
+  standingConclusions,
 } from "../audit/mod.ts";
 import {
   type Actor,
@@ -189,6 +190,19 @@ export async function handlePortalRequest(
         verdict: url.searchParams.get("verdict") ?? undefined,
       });
       return jsonOk(applyConclusionQuery(records, query));
+    }
+    if (url.pathname === "/api/conclusions/standings") {
+      if (!context.conclusions) return jsonOk([]);
+      // Same order as `/api/conclusions`: the role check lives in the service,
+      // and a caller who may not read conclusions must not be told that its
+      // filter was malformed.
+      const records = await context.conclusions.list(actor);
+      const query = parseConclusionQuery({
+        subject: url.searchParams.get("subject") ?? undefined,
+        scope: url.searchParams.get("scope") ?? undefined,
+        verdict: url.searchParams.get("verdict") ?? undefined,
+      });
+      return jsonOk(standingConclusions(records, query));
     }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));
@@ -449,7 +463,14 @@ async function internalPage(
     // service CLI `audit verify` and MCP `portico_audit_verify` read, and it is
     // rendered beside the events it covers rather than only on demand.
     const integrity = await sealService(context).report(actor);
-    return html(renderAuditView({ ctx: base, events, query, integrity }));
+    // The audit page is where the auditor reads the trail, so it is also where
+    // the derived answer belongs: what the audit currently finds, per subject.
+    const conclusions = standingConclusions(
+      context.conclusions ? await context.conclusions.list(actor) : [],
+    );
+    return html(
+      renderAuditView({ ctx: base, events, query, integrity, standings: conclusions }),
+    );
   }
 
   const surfaceMatch = url.pathname.match(/^\/internal\/s\/([a-z][a-z0-9-]{1,62})$/);

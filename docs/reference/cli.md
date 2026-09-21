@@ -152,6 +152,9 @@ portico audit conclude --conclusions <path> --catalog <path> --identities <path>
 # 查询追加式安全结论（全部，或按主体 / 作用域 / 判定过滤）
 portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
 
+# 查询每个主体与作用域此刻的判定（从结论轨迹推导；过滤当前判定，不匹配已清除的旧标记）
+portico audit standings --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
+
 # 钉一个封条检查点：钉住四个支柱的 (pillar, seq, tip)（写操作，仅人类审计者）
 portico audit anchor --anchors <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
   [--audit <path>] [--conclusions <path>]

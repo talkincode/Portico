@@ -8,11 +8,13 @@ import {
 } from "../src/catalog/mod.ts";
 import {
   applyConclusionQuery,
+  type AuditConclusion,
   BOUNDARY_SUBJECTS,
   ConclusionService,
   FileConclusionStore,
   MemoryConclusionStore,
   parseConclusionQuery,
+  standingConclusions,
 } from "../src/audit/mod.ts";
 
 const auditor: Actor = { id: "human:security-auditor", kind: "human", role: "auditor" };
@@ -543,4 +545,219 @@ Deno.test("boundary conclusions are append-only and filterable like any other", 
 
   assertEquals((await service.list(auditor, { scope: "runtime_l0" })).length, 2);
   assertEquals((await service.list(auditor, { subject: REDACTION_BOUNDARY })).length, 0);
+});
+
+// --- the standing verdict ---------------------------------------------------
+//
+// Append-only is the right shape for a verdict trail, but it left the reader
+// with a question no single record answers: for one subject and scope, what
+// does the human audit say *now*? Re-deriving that from the trail by hand is
+// exactly how two readers end up disagreeing about the current verdict. The
+// standing view is computed from the trail, never stored beside it: the trail
+// stays the only evidence, and a flag that was later cleared keeps its place
+// in the counts so "reviewed and cleared" cannot be confused with "never
+// flagged".
+
+function trailRecord(
+  overrides: Partial<AuditConclusion> & { id: string },
+): AuditConclusion {
+  return {
+    subjectId: "docs-writer",
+    scope: "public_boundary",
+    verdict: "cleared",
+    auditorId: "human:security-auditor",
+    at: "2026-09-21T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+Deno.test("the standing verdict is the last appended conclusion and an earlier flag is not erased", () => {
+  const trail = [
+    trailRecord({
+      id: "ccl-1",
+      at: "2026-09-21T00:00:00.000Z",
+      verdict: "flagged",
+      note: "entry served before the approval",
+    }),
+    trailRecord({
+      id: "ccl-2",
+      at: "2026-09-21T01:00:00.000Z",
+      verdict: "cleared",
+      note: "withdrawn and re-approved",
+    }),
+  ];
+
+  const [standing] = standingConclusions(trail);
+  assertEquals(standing.subjectId, "docs-writer");
+  assertEquals(standing.scope, "public_boundary");
+  assertEquals(standing.verdict, "cleared");
+  assertEquals(standing.conclusionId, "ccl-2");
+  assertEquals(standing.auditorId, "human:security-auditor");
+  assertEquals(standing.at, "2026-09-21T01:00:00.000Z");
+  assertEquals(standing.previousVerdict, "flagged");
+  assertEquals(standing.count, 2);
+  assertEquals(standing.cleared, 1);
+  assertEquals(standing.flagged, 1);
+  assertEquals(standing.note, "withdrawn and re-approved");
+
+  // A subject reviewed once has no earlier verdict to report, and an empty
+  // trail has no standing verdict at all: the view never invents a baseline.
+  const [single] = standingConclusions([trail[0]]);
+  assertEquals(single.previousVerdict, undefined);
+  assertEquals(single.verdict, "flagged");
+  assertEquals(single.count, 1);
+  assertEquals(standingConclusions([]), []);
+});
+
+Deno.test("standings group by subject and scope and order deterministically", () => {
+  const trail = [
+    trailRecord({ id: "ccl-1", subjectId: "zeta", scope: "secret_leakage" }),
+    trailRecord({ id: "ccl-2", subjectId: "alpha", scope: "public_boundary" }),
+    trailRecord({ id: "ccl-3", subjectId: "alpha", scope: "entry_target" }),
+    trailRecord({
+      id: "ccl-4",
+      subjectId: "alpha",
+      scope: "public_boundary",
+      verdict: "flagged",
+      note: "again",
+    }),
+  ];
+
+  assertEquals(
+    standingConclusions(trail).map((item) => `${item.subjectId}/${item.scope}/${item.verdict}`),
+    ["alpha/entry_target/cleared", "alpha/public_boundary/flagged", "zeta/secret_leakage/cleared"],
+  );
+  const grouped = standingConclusions(trail).find((item) =>
+    item.subjectId === "alpha" && item.scope === "public_boundary"
+  )!;
+  assertEquals(grouped.count, 2);
+  assertEquals(grouped.flagged, 1);
+  assertEquals(grouped.previousVerdict, "cleared");
+});
+
+Deno.test("standings filter by subject, scope and standing verdict, and reject unknown values", () => {
+  const trail = [
+    trailRecord({
+      id: "ccl-1",
+      at: "2026-09-21T00:00:00.000Z",
+      verdict: "flagged",
+      note: "token in description",
+    }),
+    trailRecord({ id: "ccl-2", at: "2026-09-21T01:00:00.000Z", verdict: "cleared" }),
+  ];
+
+  assertEquals(standingConclusions(trail, { subject: "docs-writer" }).length, 1);
+  assertEquals(standingConclusions(trail, { subject: "ghost" }), []);
+  assertEquals(standingConclusions(trail, { scope: "public_boundary" }).length, 1);
+  assertEquals(standingConclusions(trail, { scope: "secret_leakage" }), []);
+  // The verdict filter answers "what stands now", not "what appears in the
+  // trail": the flag above was cleared, so it is not a standing flag.
+  assertEquals(standingConclusions(trail, { verdict: "flagged" }), []);
+  assertEquals(standingConclusions(trail, { verdict: "cleared" }).length, 1);
+
+  for (
+    const bad of [
+      { scope: "vibes" },
+      { verdict: "maybe" },
+      { subject: "" },
+      { nope: "1" },
+    ]
+  ) {
+    let code: string | undefined;
+    try {
+      standingConclusions(trail, parseConclusionQuery(bad));
+    } catch (error) {
+      code = (error as { code?: string }).code;
+    }
+    assertEquals(code, "INVALID_INPUT");
+  }
+});
+
+Deno.test("a tie on the timestamp is broken by trail order, not by id string", () => {
+  const at = "2026-09-21T00:00:00.000Z";
+  const trail = [
+    trailRecord({
+      id: "ccl-docs-writer-public_boundary-20260921000000000-a",
+      at,
+      verdict: "flagged",
+      note: "flag",
+    }),
+    trailRecord({
+      id: "ccl-docs-writer-public_boundary-20260921000000000-9",
+      at,
+      verdict: "cleared",
+    }),
+  ];
+  const [standing] = standingConclusions(trail);
+  // Milliseconds are not fine enough to order two reviews of the same subject;
+  // the append trail is, so the last appended record wins even when its id
+  // sorts lower than the record before it.
+  assertEquals(standing.verdict, "cleared");
+  assertEquals(standing.conclusionId, "ccl-docs-writer-public_boundary-20260921000000000-9");
+});
+
+Deno.test("only a human auditor may read standings; the role gate runs before the filter", async () => {
+  const { service, store } = await bootstrapped();
+  await service.record(auditor, {
+    id: "docs-writer",
+    scope: "public_boundary",
+    verdict: "flagged",
+    note: "entry served before the approval",
+  });
+  const before = await store.list();
+
+  for (
+    const actor of [maintainer, reader, anonymous, { ...maintainer, role: "auditor" as const }]
+  ) {
+    await assertRejectsCode(
+      () =>
+        service.standings(actor as never, {
+          subject: "docs-writer",
+          scope: "vibes" as never,
+        }),
+      "FORBIDDEN",
+    );
+  }
+
+  assertEquals(await service.standings(auditor), [{
+    subjectId: "docs-writer",
+    scope: "public_boundary",
+    verdict: "flagged",
+    conclusionId: (before[0] as AuditConclusion).id,
+    auditorId: "human:security-auditor",
+    at: (before[0] as AuditConclusion).at,
+    count: 1,
+    cleared: 0,
+    flagged: 1,
+    note: "entry served before the approval",
+  }]);
+  // Reading the standing view is a read: the trail is not touched.
+  assertEquals(await store.list(), before);
+});
+
+Deno.test("a standing verdict about a boundary contract carries the gate that answers it", async () => {
+  const { service, store } = await bootstrapped();
+  await service.record(auditor, {
+    id: RUNTIME_BOUNDARY,
+    scope: "runtime_l0",
+    verdict: "flagged",
+    note: "package.json appeared in the tree",
+  });
+  await service.record(auditor, {
+    id: RUNTIME_BOUNDARY,
+    scope: "runtime_l0",
+    verdict: "cleared",
+    note: "removed again; gate green",
+  });
+
+  const [standing] = await service.standings(auditor);
+  assertEquals(standing.subjectId, RUNTIME_BOUNDARY);
+  assertEquals(standing.scope, "runtime_l0");
+  assertEquals(standing.verdict, "cleared");
+  assertEquals(standing.previousVerdict, "flagged");
+  assertEquals(standing.gate, "check:runtime-boundary");
+  assertEquals(standing.count, 2);
+  // The link to the evidence stays re-runnable: `deno task` names a task that
+  // exists in the tree the verdict was recorded against.
+  assertEquals((await store.list()).length, 2);
 });

@@ -44,3 +44,5 @@
 仅向拥有 `auditor` 角色的人类展示：
 - 聚合显示全量操作流水（登记、更新、注销、凭证作废、网关放行）。
 - 支持按服务 ID 或执行者快速回溯历史安全事件。
+- 顶部两块只读面板：**封条校验**（四支柱的 `ok` / 已封条数 / 检查点状态）与**当前判定**（每个主体与作用域的最新审计结论、是否「曾被标记后已清除」、边界契约的 `gate`），分别与 CLI `audit verify` / `audit standings`、`GET /api/audit-verify` / `GET /api/conclusions/standings`、MCP `portico_audit_verify` / `portico_conclusion_standings` 同一载荷。
+- 两块面板都无脚本、无表单：门户不能替人类写下或改写任何结论，也不能替审计者下判定。`当前判定` 面板为空表示还没有留下判定，不是「全部通过」。

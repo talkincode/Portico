@@ -83,6 +83,7 @@ Commands:
   audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|approved|rejected|withdrawn|allowed|denied] [--subject <id>]
   audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope ${SCOPE_ARG} --verdict cleared|flagged [--note <text>]
   audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
+  audit standings   --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged]
   audit anchor      --anchors <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>]
   audit anchors     --anchors <path> --catalog <path> --identities <path> --session <token> --sessions <path>
   page set          --page <path> --catalog <path> --identities <path> --session <token> --sessions <path> --input <file>
@@ -393,7 +394,8 @@ async function runAudit(
 ): Promise<CliResult> {
   if (
     action !== "list" && action !== "verify" && action !== "conclude" &&
-    action !== "conclusions" && action !== "anchor" && action !== "anchors"
+    action !== "conclusions" && action !== "standings" && action !== "anchor" &&
+    action !== "anchors"
   ) {
     throw new UsageError(action ? `unknown audit action '${action}'` : "missing audit action");
   }
@@ -404,7 +406,7 @@ async function runAudit(
   const actor = await resolveFlagsActor(flags, env);
   const catalog = new CatalogService(new FileCatalogStore(catalogPath));
 
-  if (action === "conclude" || action === "conclusions") {
+  if (action === "conclude" || action === "conclusions" || action === "standings") {
     const conclusionsPath = flags.conclusions ?? env.PORTICO_CONCLUSIONS_PATH;
     if (!conclusionsPath) {
       throw new UsageError("missing --conclusions or PORTICO_CONCLUSIONS_PATH");
@@ -413,6 +415,17 @@ async function runAudit(
       new FileConclusionStore(conclusionsPath),
       catalog,
     );
+    if (action === "standings") {
+      // Role check first, filter second — the service gates the read before it
+      // parses, so a refused caller is never told that its filter was bad.
+      return ok(
+        await conclusions.standings(actor, {
+          subject: flags.subject,
+          scope: flags.scope,
+          verdict: flags.verdict,
+        }),
+      );
+    }
     if (action === "conclusions") {
       // Role check first, filter second — same order as `audit list`.
       const records = await conclusions.list(actor);

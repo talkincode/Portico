@@ -30,6 +30,17 @@
 
 ---
 
+## 复评：查看当前判定（是否仍被标记）
+
+审计结论是追加式的，所以「现在到底是什么状态」要靠派生视图，而不是翻最旧的一条：
+
+- CLI `audit standings`、Portal `GET /api/conclusions/standings`、MCP `portico_conclusion_standings` 三入口同一载荷：每个「主体 + 作用域」的最新判定、它来自哪条结论、上一条判定、以及该主体该作用域下 `cleared` / `flagged` 的计数。
+- Portal `/internal/audit` 顶部把同一批结果渲染成只读面板（无表单、无脚本）：门户不能替人类写下或改写任何一条结论。
+- 过滤作用于**当前判定**而不是轨迹：`--verdict flagged` 只返回现在仍被标记的主体。已清除的旧标记仍留在轨迹里（那是证据），但不会出现在「仍被标记」的结果中。
+- 列表为空表示还没有审计者留下判定，不是「全部通过」。边界契约（`boundary:runtime-l0`、`boundary:public-redaction`）的判定带 `gate`，指向可重跑的门禁任务。
+
+---
+
 ## 异常处置响应指引
 
 - **立即撤回公开**：一旦发现已上线的公开服务出现安全漏洞，立刻执行 `catalog withdraw --id <id>`，瞬间切断外网流量。
