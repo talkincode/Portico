@@ -11,11 +11,16 @@ import { assert, assertEquals } from "./assert.ts";
 import { type RosterFixture, signedInRoster } from "./fixtures.ts";
 import {
   type Actor,
+  type AgentSurface,
+  type ApprovalRecord,
+  type CatalogChangeRecord,
   CatalogService,
+  type CatalogStore,
   MemoryCatalogStore,
   type RegisterInput,
 } from "../src/catalog/mod.ts";
-import { handlePortalRequest } from "../src/portal/mod.ts";
+import { AnchorService, MemoryAnchorStore, SEAL_PILLARS, SealService } from "../src/audit/mod.ts";
+import { handlePortalRequest, type PortalContext } from "../src/portal/mod.ts";
 
 const maintainer: Actor = { id: "agent:docs-bot", kind: "agent", role: "maintainer" };
 const reader: Actor = { id: "human:reader", kind: "human", role: "reader" };
@@ -49,7 +54,7 @@ function headers(actor: Actor): HeadersInit {
 }
 
 async function get(
-  context: Awaited<ReturnType<typeof seeded>>,
+  context: PortalContext,
   path: string,
   actor?: Actor,
 ): Promise<{ status: number; html: string }> {
@@ -62,7 +67,7 @@ async function get(
 
 /** Register, publish internally, submit publicly, then approve. */
 async function publishPublic(
-  context: Awaited<ReturnType<typeof seeded>>,
+  context: PortalContext,
   input: RegisterInput,
 ): Promise<void> {
   await context.catalog.register(maintainer, input);
@@ -224,6 +229,206 @@ Deno.test("the audit route is 404 for anyone but a human auditor", async () => {
     assert(!page.html.includes("审计时间线"), `${actor.role} must not get the audit screen`);
     assert(!page.html.includes("register"), `${actor.role} must not receive audit events`);
   }
+});
+
+/**
+ * A store whose change trail disagrees with the chain sealed over it: the
+ * signature of someone editing `catalog.json` with an editor or a shell, which
+ * the seal exists to turn into a named finding instead of a silent rewrite.
+ */
+class EditedTrailStore implements CatalogStore {
+  constructor(private readonly inner: CatalogStore) {}
+
+  list(): Promise<AgentSurface[]> {
+    return this.inner.list();
+  }
+
+  get(id: string): Promise<AgentSurface | undefined> {
+    return this.inner.get(id);
+  }
+
+  put(record: AgentSurface): Promise<void> {
+    return this.inner.put(record);
+  }
+
+  listApprovals(): Promise<ApprovalRecord[]> {
+    return this.inner.listApprovals();
+  }
+
+  listSeal() {
+    return this.inner.listSeal();
+  }
+
+  commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitChange(record, change);
+  }
+
+  commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
+    return this.inner.commitApproval(record, approval);
+  }
+
+  async listChanges(): Promise<CatalogChangeRecord[]> {
+    const changes = await this.inner.listChanges();
+    return changes.map((change, index) =>
+      index === 0 ? { ...change, name: "Renamed Behind The Store" } : change
+    );
+  }
+}
+
+/** The `<li>` that reports one pillar, however its attributes are ordered. */
+function pillarTag(html: string, pillar: string): string {
+  const match = html.match(new RegExp(`<li[^>]*data-pillar="${pillar}"[^>]*>`));
+  assert(match !== null, `the audit page must report the ${pillar} pillar`);
+  return match![0];
+}
+
+/** The integrity panel, which is one section with no nested sections. */
+function integrityPanel(html: string): string {
+  const match = html.match(/<section[^>]*data-integrity="[^"]*"[\s\S]*?<\/section>/);
+  assert(match !== null, "the audit page must render an integrity panel");
+  return match![0];
+}
+
+Deno.test("the audit page reports the seal verdict behind its claim that the trail cannot be rewritten", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+
+  const report = await new SealService(context.catalog, context.access).report(auditor);
+  assertEquals(report.ok, true, "the seeded trail must be intact");
+  const sealed = report.pillars.reduce((total, pillar) => total + pillar.sealed, 0);
+
+  const { status, html } = await get(context, "/internal/audit", auditor);
+  assertEquals(status, 200);
+  assert(html.includes('data-integrity="ok"'), "an intact trail must be reported intact");
+  assert(
+    !html.includes('data-integrity="broken"'),
+    "an intact trail must not be called broken",
+  );
+  assert(
+    html.includes(`data-sealed="${sealed}"`),
+    "the page must report how many records the chain covers",
+  );
+  assert(html.includes("审计时间线"), "the timeline must still render");
+
+  // Every pillar is accounted for, including the ones this deployment does not
+  // configure: a pillar that was not read is reported as unchecked, never as
+  // verified.
+  for (const pillar of SEAL_PILLARS) {
+    const checked = report.pillars.find((item) => item.pillar === pillar);
+    assert(
+      pillarTag(html, pillar).includes(`data-verdict="${checked ? "ok" : "unchecked"}"`),
+      `the ${pillar} pillar must say whether it was checked`,
+    );
+  }
+  for (const pillar of report.pillars) {
+    const tag = pillarTag(html, pillar.pillar);
+    assert(
+      tag.includes(`data-sealed="${pillar.sealed}"`),
+      `the ${pillar.pillar} pillar must report its own sealed count`,
+    );
+    assert(
+      tag.includes(`data-anchor="${pillar.anchor?.state ?? "none"}"`),
+      `the ${pillar.pillar} pillar must report its own checkpoint reading`,
+    );
+  }
+});
+
+Deno.test("an edited record is named on the audit page, not folded into a generic failure", async () => {
+  roster = await signedInRoster();
+  const inner = new MemoryCatalogStore();
+  const writing = new CatalogService(inner);
+  await writing.register(maintainer, surface());
+  await writing.publish(maintainer, { id: "docs-writer", visibility: "internal" });
+
+  const context = {
+    catalog: new CatalogService(new EditedTrailStore(inner)),
+    access: roster.access,
+    roster,
+  };
+  const report = await new SealService(context.catalog, context.access).report(auditor);
+  assertEquals(report.ok, false, "an edited trail must fail the seal");
+  const broken = report.pillars.find((item) => item.pillar === "catalog");
+  assert(broken?.break, "the catalog pillar must report a break");
+
+  const { status, html } = await get(context, "/internal/audit", auditor);
+  assertEquals(status, 200);
+  assert(html.includes('data-integrity="broken"'), "the page must not call an edited trail intact");
+  assert(pillarTag(html, "catalog").includes('data-verdict="broken"'), "the broken pillar");
+
+  // The page names the record and the reason, so a finding can be acted on
+  // rather than merely noticed.
+  const at = broken!.break!;
+  for (
+    const attribute of [
+      `data-break-seq="${at.seq}"`,
+      `data-break-kind="${at.kind}"`,
+      `data-break-id="${at.id}"`,
+      `data-break-reason="${at.reason}"`,
+    ]
+  ) {
+    assert(html.includes(attribute), `the break must be reported as ${attribute}`);
+  }
+});
+
+Deno.test("a pillar with no checkpoint is reported as unanchored, never as verified", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  const anchors = new MemoryAnchorStore();
+  const withAnchors = { ...context, sealAnchors: anchors };
+  const report = await new SealService(
+    context.catalog,
+    context.access,
+    undefined,
+    undefined,
+    anchors,
+  ).report(auditor);
+  assertEquals(report.anchored, 0, "no checkpoint has been taken yet");
+
+  const { html } = await get(withAnchors, "/internal/audit", auditor);
+  assert(html.includes('data-anchored="0"'), "zero anchored pillars must be reported as such");
+  assert(
+    pillarTag(html, "catalog").includes('data-anchor="none"'),
+    "an unanchored pillar carries no checkpoint reading",
+  );
+  assert(html.includes("无检查点"), "an unanchored pillar must say so in words");
+});
+
+Deno.test("a checkpoint that still holds is reported as anchored", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  const anchors = new MemoryAnchorStore();
+  const seals = new SealService(context.catalog, context.access, undefined, undefined, anchors);
+  await new AnchorService(anchors, seals).anchor(auditor);
+  const report = await seals.report(auditor);
+  assertEquals(report.anchored, 2, "this deployment reads the catalog and identity pillars");
+
+  const { html } = await get({ ...context, sealAnchors: anchors }, "/internal/audit", auditor);
+  assert(
+    html.includes(`data-anchored="${report.anchored}"`),
+    "the page must report how many pillars a checkpoint covers",
+  );
+  assert(
+    pillarTag(html, "catalog").includes('data-anchor="intact"'),
+    "a checkpoint that still holds is intact, not merely present",
+  );
+});
+
+Deno.test("the integrity panel offers no control that could mutate or script the trail", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  const { html } = await get(context, "/internal/audit", auditor);
+  const panel = integrityPanel(html);
+  assert(!/<form/i.test(panel), "the panel must not offer a write form");
+  assert(!/<button/i.test(panel), "the panel must not offer a button");
+  assert(!/<script/i.test(panel), "the panel must not ship script");
+  assert(!/javascript:/i.test(panel), "the panel must not ship a javascript: URL");
+  assert(!/\son\w+\s*=/i.test(panel), "the panel must not ship an inline event handler");
+  // The read-only filter that already lives on the page is not part of the panel.
+  assert(/<form/i.test(html), "the timeline filter must survive the new panel");
 });
 
 Deno.test("the approvals page shows signed-in identities the same decision records including notes", async () => {

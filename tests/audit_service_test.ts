@@ -3,7 +3,11 @@ import { AccessService, MemoryIdentityStore, MemorySessionStore } from "../src/a
 import { AuditService } from "../src/audit/mod.ts";
 import {
   type Actor,
+  type AgentSurface,
+  type ApprovalRecord,
+  type CatalogChangeRecord,
   CatalogService,
+  type CatalogStore,
   FileCatalogStore,
   MemoryCatalogStore,
   type RegisterInput,
@@ -245,4 +249,74 @@ Deno.test("auditor timeline includes credential revoke; identity stays and faile
   );
   const again = await audit.list(auditor);
   assertEquals(again.filter((item) => item.kind === "credential").length, 1);
+});
+
+/** A store whose approvals were edited on disk until their refs no longer read. */
+class DamagedApprovalStore implements CatalogStore {
+  constructor(private readonly inner: CatalogStore) {}
+
+  list(): Promise<AgentSurface[]> {
+    return this.inner.list();
+  }
+
+  get(id: string): Promise<AgentSurface | undefined> {
+    return this.inner.get(id);
+  }
+
+  put(record: AgentSurface): Promise<void> {
+    return this.inner.put(record);
+  }
+
+  listSeal() {
+    return this.inner.listSeal();
+  }
+
+  listChanges(): Promise<CatalogChangeRecord[]> {
+    return this.inner.listChanges();
+  }
+
+  commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitChange(record, change);
+  }
+
+  commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
+    return this.inner.commitApproval(record, approval);
+  }
+
+  async listApprovals(): Promise<ApprovalRecord[]> {
+    const records = await this.inner.listApprovals();
+    // An approval that lost its reviewer, its subject and its timestamp: the
+    // shape a file edit leaves behind, not a shape any writer produces.
+    return records.map(() => ({ id: "apr-damaged", decision: "approved" }) as ApprovalRecord);
+  }
+}
+
+Deno.test("a record damaged on disk still appears, credited to nobody, instead of failing the read", async () => {
+  const access = new AccessService(new MemoryIdentityStore());
+  await access.grant(null, { id: auditor.id, kind: "human", role: "auditor" });
+  await access.grant(auditor, { id: maintainer.id, kind: "agent", role: "maintainer" });
+  const inner = new MemoryCatalogStore();
+  const catalog = new CatalogService(inner);
+  await catalog.register(maintainer, surface());
+  await catalog.publish(maintainer, { id: "docs-writer", visibility: "public" });
+  await catalog.approve(auditor, { id: "docs-writer" });
+
+  const damaged = new CatalogService(new DamagedApprovalStore(inner));
+  const audit = new AuditService(damaged, access);
+
+  // The whole timeline is one read: a single unreadable record must not decide
+  // whether the audit page renders at all, and it must not be silently dropped
+  // either — an auditor has to be able to see that something is there and wrong.
+  const events = await audit.list(auditor);
+  const approval = events.find((item) => item.kind === "approval");
+  assertEquals(approval?.id, "apr-damaged");
+  assertEquals(approval?.action, "approved");
+  assertEquals(approval?.actor.id, "anonymous", "an unreadable ref credits nobody");
+  assertEquals(approval?.actor.role, "anonymous");
+  assertEquals(approval?.subjectId, "unknown", "a missing field is reported as missing");
+  assertEquals(approval?.at, "unknown");
+
+  // The damaged record names no entry, so the timeline carries none rather than
+  // inventing a coordinate from whatever was left in the file.
+  assertEquals(approval?.entry, undefined);
 });

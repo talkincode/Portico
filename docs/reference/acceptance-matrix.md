@@ -54,10 +54,10 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **MCP Gateway 鉴权与路由** | 高 | `tests/gateway_service_test.ts`；`tests/gateway_handler_test.ts`；`tests/e2e/cli_gateway_e2e_test.ts`；`tests/e2e/gateway_http_e2e_test.ts` |
 | **Gateway 访问审计只读查询** | 高 | `tests/gateway_service_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/gateway_audit_e2e_test.ts` |
 | **UI Components 门户页维护** | 中 | `tests/ui_page_test.ts`；`tests/portal_page_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/cli_page_e2e_test.ts`；`tests/e2e/portal_page_e2e_test.ts`；`tests/e2e/page_get_e2e_test.ts` |
-| **Agent 维护与人类安全审计** | 高 | `tests/catalog_change_test.ts`；`tests/audit_service_test.ts`；`tests/portal_handler_test.ts`；`tests/e2e/cli_audit_e2e_test.ts`；`tests/e2e/portal_audit_e2e_test.ts` |
+| **Agent 维护与人类安全审计** | 高 | `tests/catalog_change_test.ts`；`tests/audit_service_test.ts`；`tests/portal_handler_test.ts`；`tests/e2e/cli_audit_e2e_test.ts`；`tests/e2e/portal_audit_e2e_test.ts`；`tests/e2e/portal_integrity_e2e_test.ts` |
 | **安全审计结论（维护权 ≠ 审计权）** | 高 | `tests/audit_conclusions_test.ts`；`tests/e2e/audit_conclusions_e2e_test.ts` |
 | **审计时间线过滤查询** | 高 | `tests/audit_query_test.ts`；`tests/portal_handler_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/audit_query_e2e_test.ts` |
-| **审计封条校验（篡改可指名）** | 高 | `tests/audit_seal_test.ts`；`tests/e2e/audit_seal_e2e_test.ts` |
+| **审计封条校验（篡改可指名）** | 高 | `tests/audit_seal_test.ts`；`tests/portal_ui_test.ts`；`tests/e2e/audit_seal_e2e_test.ts`；`tests/e2e/portal_integrity_e2e_test.ts` |
 | 审计封条外部锚定（整体重写与尾部截断可发现） | 高 | ✅ 人类审计者经 CLI `audit anchor` 钉住四支柱的 (pillar, seq, tip)；此后 CLI `audit verify --anchors`、Portal `GET /api/audit-verify` 与 MCP `portico_audit_verify` 报出同一份锚定结论（`anchored` 计数与每支柱 `anchor.state`），Portal `GET /api/seal-anchors` 与 MCP `portico_seal_anchors` 列出同一批检查点；未钉检查点时如实报 `anchored: 0`，不把未锚定的支柱冒充成已校验 | ✅ 记录与链条被整体重写（摘要全部重算、封条自洽、`ok:true`）被指名 `rewritten`；从尾部截断被指名 `truncated`；锚定过的 tip 出现在链上别处被指名 `moved`；链条正常增长不算篡改（仍 `intact`） | ✅ 人类审计者 vs 维护者/只读/匿名（后三者对 `audit anchor` / `audit anchors` 均 FORBIDDEN，且被拒的钉点不产生锚点文件）；Portal 与 MCP 只读，`POST /api/seal-anchors` 405 | ✅ 比对与列举全程只读：锚点文件与四支柱文件字节不变；把改动过的记录与链条还原后同一检查点重新 `intact`；第二个检查点追加在第一个之后，不覆盖既有证据 | `tests/audit_anchor_test.ts`；`tests/e2e/audit_anchor_e2e_test.ts` |
 | **公开面脱敏（开源公开合同）** | 高 | `tests/public_surface_redaction_test.ts`；`tests/redaction.ts` |
 | **运行时边界（L0 公开合同）** | 高 | `tests/runtime_boundary_test.ts`；`tests/runtime_boundary.ts` |
