@@ -17,6 +17,7 @@ import type {
 } from "../../../catalog/types.ts";
 import {
   type AnchorState,
+  AS_OF_MAX_LENGTH,
   AUDIT_KINDS,
   type AuditQuery,
   SEAL_PILLARS,
@@ -908,8 +909,17 @@ const SCOPE_LABEL: Record<string, string> = {
  * that was flagged before keeps its flag count, so "found and fixed" does not
  * read like "never flagged". And a cleared subject without an audit note is
  * still shown as having no note, because the note is the auditor's, not ours.
+ *
+ * With a cutoff the same panel answers the same question about another instant,
+ * and says so: a historical verdict that does not announce its window reads
+ * exactly like the current one, which is how a reconstruction gets mistaken for
+ * a status. The window is printed above the rows and carried on the section, so
+ * it survives being copied out of the page.
  */
-function renderStandingsPanel(standings: readonly StandingConclusion[]): string {
+function renderStandingsPanel(
+  standings: readonly StandingConclusion[],
+  asOf?: string,
+): string {
   const flagged = standings.filter((item) => item.verdict === "flagged");
   const rows = standings.map((item) => {
     const cleared = item.verdict === "cleared";
@@ -945,19 +955,36 @@ function renderStandingsPanel(standings: readonly StandingConclusion[]): string 
             </li>`;
   }).join("\n");
 
-  return `<section class="int-standings" data-standings="${standings.length}" data-flagged="${flagged.length}">
+  return `<section class="int-standings" data-standings="${standings.length}" data-flagged="${flagged.length}"${
+    asOf ? ` data-asof="${esc(asOf)}"` : ""
+  }>
           <div class="int-standings__intro">
-            <h2 class="int-standings__title">当前判定</h2>
-            <p class="int-standings__sub">人类安全审计对每个已审主体留下的最新结论。只列出审过的对象；列表为空表示还没有留下判定，不是「全部通过」。</p>
+            <h2 class="int-standings__title">${asOf ? "当时判定" : "当前判定"}</h2>
+            <p class="int-standings__sub">${
+    asOf
+      ? "人类安全审计对每个已审主体留下的最新结论，只算窗口内的结论。只列出审过的对象；列表为空表示该时刻还没有任何判定，不是「全部通过」。"
+      : "人类安全审计对每个已审主体留下的最新结论。只列出审过的对象；列表为空表示还没有留下判定，不是「全部通过」。"
+  }</p>
+            ${
+    asOf
+      ? `<p class="int-standings__window">读取窗口：截至 <time datetime="${esc(asOf)}">${
+        esc(asOf)
+      }</time>。这是按当时的结论重建的判定，之后发生的结论不在窗口内，也不代表今天的判定。</p>`
+      : ""
+  }
           </div>
           ${
     boundaryNote(
-      "只读视图：判定由审计结论派生，门户不能替人类写下或改写任何一条结论。",
+      asOf
+        ? "只读回溯：窗口内的判定由审计结论派生，门户不能替人类写下、改写或删除任何一条结论。"
+        : "只读视图：判定由审计结论派生，门户不能替人类写下或改写任何一条结论。",
     )
   }
           ${
     standings.length === 0
-      ? emptyState("没有审计结论。", "还没有人类审计者对本部署的任何主体作出判定。")
+      ? asOf
+        ? emptyState("该时刻没有审计结论。", `截至 ${asOf} 还没有人类审计者对任何主体作出判定。`)
+        : emptyState("没有审计结论。", "还没有人类审计者对本部署的任何主体作出判定。")
       : `<ol class="int-standings__rows">
 ${rows}
           </ol>`
@@ -984,6 +1011,21 @@ export interface AuditViewInput {
   standings: readonly StandingConclusion[];
 }
 
+/**
+ * The audit page carries the trail filter in its query string, so dropping the
+ * cutoff here is what "read the same thing without the window" means: the link
+ * back to the present must not quietly drop the reader's other filters too.
+ */
+function currentWindowHref(query: AuditQuery): string {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.kind) params.set("kind", query.kind);
+  if (query.action) params.set("action", query.action);
+  if (query.subject) params.set("subject", query.subject);
+  const rest = params.toString();
+  return rest ? `/internal/audit?${rest}` : "/internal/audit";
+}
+
 export function renderAuditView(input: AuditViewInput): string {
   const { ctx, events } = input;
   const query = input.query ?? {};
@@ -1003,7 +1045,7 @@ export function renderAuditView(input: AuditViewInput): string {
           <p class="int-page__sub">目录变更、身份授权与撤回、凭证作废、公开审批与网关访问。只读，可追加，不可改写。</p>
         </div>
         ${renderIntegrityPanel(input.integrity)}
-        ${renderStandingsPanel(input.standings)}
+        ${renderStandingsPanel(input.standings, query.asOf)}
         <div class="int-filters">
           ${boundaryNote("审计结论与维护轨迹分开存储；维护者身份不能覆盖或删除。")}
           <form method="get" action="/internal/audit" role="search">
@@ -1011,12 +1053,26 @@ export function renderAuditView(input: AuditViewInput): string {
     esc(query.q ?? "")
   }" maxlength="120" placeholder="按摘要、主体或动作过滤" aria-label="过滤审计时间线">
             <select name="kind" aria-label="事件种类">${kindOptions}</select>
+            <input type="text" name="asOf" value="${
+    esc(query.asOf ?? "")
+  }" maxlength="${AS_OF_MAX_LENGTH}" placeholder="2026-09-21T12:00:00Z" aria-label="读取窗口的截止时刻，必须带时区">
             <button type="submit">过滤</button>
+            ${
+    query.asOf
+      ? `<a class="int-filters__reset" href="${esc(currentWindowHref(query))}">回到当前窗口</a>`
+      : ""
+  }
           </form>
+          <p class="int-filters__hint">截止时刻必须带时区（例如 2026-09-21T12:00:00Z）；留空表示读到当前。只接受真实存在的时刻，「2026-02-30」这类日期会被拒绝，而不是被挪到另一天。</p>
         </div>
         ${
     grouped.length === 0
-      ? emptyState("没有审计事件。", "尚未发生可追溯的治理动作。")
+      ? query.asOf
+        ? emptyState(
+          "该时刻没有审计事件。",
+          `截至 ${query.asOf} 还没有发生可追溯的治理动作。`,
+        )
+        : emptyState("没有审计事件。", "尚未发生可追溯的治理动作。")
       : `<ol class="tk-timeline">
 ${grouped.map(renderAuditEvent).join("\n")}
         </ol>`

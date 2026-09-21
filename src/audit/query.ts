@@ -1,4 +1,5 @@
 import { CatalogError, ErrorCode } from "../catalog/errors.ts";
+import { parseAsOf, withinAsOf } from "./instant.ts";
 import type { AuditEvent, AuditKind } from "./types.ts";
 
 /** Longest `q` or `subject` a caller may send. The timeline is a filter, not a dump. */
@@ -34,6 +35,8 @@ export interface AuditQuery {
   kind?: AuditKind;
   action?: string;
   subject?: string;
+  /** Canonical instant; the timeline ends here. See `parseAsOf`. */
+  asOf?: string;
 }
 
 /**
@@ -48,6 +51,7 @@ export function parseAuditQuery(input: {
   kind?: unknown;
   action?: unknown;
   subject?: unknown;
+  asOf?: unknown;
 }): AuditQuery {
   const query: AuditQuery = {};
   const q = optionalString(input.q, "q");
@@ -58,6 +62,8 @@ export function parseAuditQuery(input: {
   if (action !== undefined) query.action = action;
   const subject = optionalString(input.subject, "subject");
   if (subject !== undefined) query.subject = subject;
+  const asOf = parseAsOf(input.asOf);
+  if (asOf !== undefined) query.asOf = asOf;
   return query;
 }
 
@@ -67,6 +73,7 @@ export function applyAuditQuery(
 ): AuditEvent[] {
   const needle = query.q?.toLowerCase();
   return events.filter((event) => {
+    if (!withinAsOf(event.at, query.asOf)) return false;
     if (query.kind && event.kind !== query.kind) return false;
     if (query.action && event.action !== query.action) return false;
     if (query.subject && event.subjectId !== query.subject) return false;

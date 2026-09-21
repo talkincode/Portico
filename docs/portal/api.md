@@ -70,7 +70,9 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/
 ```
 
 > [!NOTE]
-> 仅限具备 `auditor` 角色的人类会话可成功调用。维护者、普通只读者或匿名调用将收到 `403 Forbidden`。
+> 仅限具备 `auditor` 角色的人类会话可成功调用。维护者、普通只读者或匿名调用将收到 `403 Forbidden`（即使带上非法 `asOf` 也是 `403`：角色检查先于过滤器解析，被拒调用不探测过滤器文法）。
+>
+> `?asOf=` 是**时间切片**而不是快照：它只读这条追加式轨迹里截至该时刻已经存在的记录，所以「当时怎么样」由读得少一点的同一条轨迹得到，不需要第二份可能撒谎的副本，也没有改写入口。语法是带时区的真实瞬时（`2026-09-21T12:00:00Z`、`2026-09-21T20:00:00+08:00`，秒与毫秒可选）；裸日期、无时区墙钟、`now` 之类的自然语言、不存在的日期、`T24:00` 与越界偏移得到 `400 INVALID_INPUT`——猜出来的窗口和正确的窗口看起来一样，所以宁拒不猜。窗口含边界（写成某条记录的写入时刻时该条仍在窗口内），空窗口返回空列表而不是「全部通过」。同一语义贯通 Portal `GET /api/conclusions?asOf=`、`GET /api/conclusions/standings?asOf=`、`/internal/audit?asOf=`、CLI `--as-of` 与 MCP 的 `asOf` 参数。
 
 ---
 
@@ -95,10 +97,13 @@ curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" http://127.0.0.1:8788/
 
 # 按主体 / 作用域 / 判定过滤
 curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" "http://127.0.0.1:8788/api/conclusions?subject=<id>&scope=public_boundary&verdict=flagged"
+
+# 时间切片：这条主体当时是什么判定（该时刻之前写下的结论才算数）
+curl -s -H "Authorization: Bearer $HUMAN_AUDITOR_SESSION" "http://127.0.0.1:8788/api/conclusions?asOf=2026-09-21T12:00:00Z"
 ```
 
 > [!NOTE]
-> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`；非法枚举过滤器（`scope` / `verdict`）与未知过滤键得到 `INVALID_INPUT`。这是只读面：记录结论必须经 CLI `audit conclude`，`POST` 返回 `405`。结论与维护轨迹分开存储，维护者身份不能覆盖。读操作不创建结论文件。
+> 仅人类审计者可读。维护者、只读者与匿名得到 `403 Forbidden`；非法枚举过滤器（`scope` / `verdict`）、未知过滤键与非法 `asOf`（语法见 4）得到 `INVALID_INPUT`；角色检查先于过滤器解析。这是只读面：记录结论必须经 CLI `audit conclude`，`POST` 返回 `405`。结论与维护轨迹分开存储，维护者身份不能覆盖。读操作不创建结论文件。
 
 ---
 
@@ -111,10 +116,13 @@ curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions/standi
 
 # 某个边界契约的当前判定
 curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions/standings?subject=boundary:runtime-l0"
+
+# 时间切片：那一刻的判定（当时判 flagged 就是 flagged，不受此后清除影响）
+curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions/standings?asOf=2026-09-21T12:00:00Z"
 ```
 
 > [!NOTE]
-> 仅人类审计者可读，权限与 4b 相同（维护者、只读者与匿名 `403`，且角色检查先于过滤器解析）。过滤的是**当前判定**而不是轨迹：`verdict=flagged` 只返回现在仍被标记的主体，即使轨迹里还留着已清除的旧标记。空列表表示还没有审计者作出判定，不是「全部通过」。只读面：`POST` 返回 `405`，读操作不创建结论文件。
+> 仅人类审计者可读，权限与 4b 相同（维护者、只读者与匿名 `403`，且角色检查先于过滤器解析）。过滤的是**当前判定**而不是轨迹：`verdict=flagged` 只返回现在仍被标记的主体，即使轨迹里还留着已清除的旧标记。空列表表示还没有审计者作出判定，不是「全部通过」。`?asOf=` 给的是**那一刻**的判定：该时刻之前写下的结论才算数，当时判 `flagged` 就是 `flagged`，即使后来被清除；晚于全部记录的截止时刻与不切片同载荷，窗口内没有结论时返回空列表。只读面：`POST` 返回 `405`，读操作不创建结论文件。
 
 ---
 
@@ -122,7 +130,10 @@ curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/conclusions/standi
 重算四个支柱（目录、身份名册、Gateway 访问审计、安全结论）的封条链，回答“这些记录是否还是写入时的样子”。与 CLI `audit verify`、MCP `portico_audit_verify` 同一载荷。
 
 ```bash
-curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/audit-verify
+curl -s -H "Authorization: ******" http://127.0.0.1:8788/api/audit
+
+# 时间切片：只读「截至该时刻已经在轨迹里」的记录，用来重建过去的状态
+curl -s -H "Authorization: ******" "http://127.0.0.1:8788/api/audit?asOf=2026-09-21T12:00:00Z"-verify
 ```
 
 返回每支柱的 `ok`、已封条数、`unsealed`（没有任何环节覆盖的记录数），以及被改写的第一条记录（`seq` / `kind` / `id` / 原因：`digest` 摘要不符、`missing` 记录被删、`chain` 链条断开）和链末摘要 `tip`。

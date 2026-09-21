@@ -139,7 +139,7 @@ portico gateway audit --identities <path> --sessions <path> --audit <audit.json>
 ### 4. 审计与门户组件盒命令
 ```bash
 # 查询系统全局聚合审计时间线
-portico audit list --catalog <path> --identities <path> --sessions <path> --session <token> [--limit <n>]
+portico audit list --catalog <path> --identities <path> --sessions <path> --session <token> [--limit <n>] [--as-of <instant>]
 
 # 写下一条安全审计结论（仅人类审计者；审计者不能审自己维护的主体）
 portico audit conclude --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> \
@@ -150,10 +150,15 @@ portico audit conclude --conclusions <path> --catalog <path> --identities <path>
   --id boundary:runtime-l0 --scope runtime_l0 --verdict cleared
 
 # 查询追加式安全结论（全部，或按主体 / 作用域 / 判定过滤）
-portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
+portico audit conclusions --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>] [--as-of <instant>]
 
 # 查询每个主体与作用域此刻的判定（从结论轨迹推导；过滤当前判定，不匹配已清除的旧标记）
-portico audit standings --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>]
+portico audit standings --conclusions <path> --catalog <path> --identities <path> --sessions <path> --session <token> [--subject <id>] [--scope <scope>] [--verdict <verdict>] [--as-of <instant>]
+
+# 时间切片：--as-of 只读「截至该时刻已经在轨迹里」的记录，用来重建过去的状态（不是快照，也没有改写入口）。
+# 语法是带时区的真实瞬时，如 2026-09-21T12:00:00Z / 2026-09-21T20:00:00+08:00；
+# 裸日期、无时区墙钟、now 之类的自然语言与不存在的日期一律 INVALID_INPUT（宁拒不猜）。
+# 窗口含边界：--as-of 写成某条记录的写入时刻时，该条仍在窗口内。窗口内没有记录时返回空列表，不是「全部通过」。
 
 # 钉一个封条检查点：钉住四个支柱的 (pillar, seq, tip)（写操作，仅人类审计者）
 portico audit anchor --anchors <path> --catalog <path> --identities <path> --sessions <path> --session <token> \

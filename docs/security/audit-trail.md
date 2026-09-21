@@ -172,6 +172,8 @@ deno task cli -- audit list \
   --session $HUMAN_AUDITOR_SESSION
 ```
 
+同一个读入口还能把「读取」收窄到一个过去时刻：`--as-of <instant>`（Portal `GET /api/audit?asOf=`、MCP `portico_audit` 的 `asOf`）只返回截至该时刻已经在轨迹里的记录，用来重建过去的状态。切片不是第二份存储、不是快照，也没有改写入口——它是读得少一点的同一条追加式轨迹，所以「当时怎么样」无法被伪造。语法是带时区的真实瞬时（`2026-09-21T12:00:00Z`、`2026-09-21T20:00:00+08:00`，秒与毫秒可选）；裸日期、无时区墙钟、`now` 之类的自然语言、不存在的日期、`T24:00` 与越界偏移得到 `INVALID_INPUT`（宁拒不猜），窗口含边界，空窗口返回空列表而不是「全部通过」，时间戳无法解析的记录不进任何窗口。角色检查先于过滤器解析：非审计者带上非法 `asOf` 仍得到 `FORBIDDEN`，不探测过滤器文法。
+
 维护者（Maintainer）即使拥有写 Catalog 的权限，也没有任何"清空审计记录"或"修改审计时间戳"的命令可调；试图通过 CLI、API 或 MCP 篡改审计日志的请求不会被重新解释为一次合法写入。
 
 ---
@@ -203,6 +205,6 @@ interface AuditConclusion {
 - **密钥只引用，不落明文。** note 走与目录同一套明文密钥扫描器，命中即 `INVALID_INPUT`。
 - **受封条覆盖。** 结论文件与另外三个支柱一样带链，改写一条判定同样会被 `audit verify` 指名。
 
-只读查询有三处同一答案：CLI `audit conclusions`、Portal `GET /api/conclusions`、MCP `portico_conclusions`。Portal 与 MCP 没有写权限，记录结论只能经 CLI `audit conclude`。
+只读查询有三处同一答案：CLI `audit conclusions`、Portal `GET /api/conclusions`、MCP `portico_conclusions`。Portal 与 MCP 没有写权限，记录结论只能经 CLI `audit conclude`。三者都接受同一个 `asOf`（`--as-of` / `?asOf=`）：窗口只包含该时刻之前写下的结论，语法与时间线切片相同。
 
-「此刻的判定」是同一批记录的派生视图，同样三入口一致：CLI `audit standings`、Portal `GET /api/conclusions/standings`、MCP `portico_conclusion_standings` 取每个「主体 + 作用域」的最新结论作为当前判定，并带回上一条判定与计数，因此「曾被标记、后已清除」和「从未被标记」不会读成同一件事。过滤作用于当前判定而不是轨迹：已清除的旧标记不会命中 `verdict: flagged`，但它仍留在轨迹里作为证据。`/internal/audit` 顶部渲染的就是这同一批结果（只读面板，无表单）。
+「此刻的判定」是同一批记录的派生视图，同样三入口一致：CLI `audit standings`、Portal `GET /api/conclusions/standings`、MCP `portico_conclusion_standings` 取每个「主体 + 作用域」的最新结论作为当前判定，并带回上一条判定与计数，因此「曾被标记、后已清除」和「从未被标记」不会读成同一件事。过滤作用于当前判定而不是轨迹：已清除的旧标记不会命中 `verdict: flagged`，但它仍留在轨迹里作为证据。`/internal/audit` 顶部渲染的就是这同一批结果（只读面板，无表单）。`asOf` 同样可以给判定面板：给一条结论的写入时刻就得到那一刻的判定，面板会标明「当时判定」与它的读取窗口，并提供「回到当前窗口」的链接；晚于全部记录的截止时刻与不切片同载荷。

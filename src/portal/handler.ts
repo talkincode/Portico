@@ -184,12 +184,7 @@ export async function handlePortalRequest(
       // caller who may not read conclusions must not be told that its filter
       // was malformed. `/api/audit` reads the same way.
       const records = await context.conclusions.list(actor);
-      const query = parseConclusionQuery({
-        subject: url.searchParams.get("subject") ?? undefined,
-        scope: url.searchParams.get("scope") ?? undefined,
-        verdict: url.searchParams.get("verdict") ?? undefined,
-      });
-      return jsonOk(applyConclusionQuery(records, query));
+      return jsonOk(applyConclusionQuery(records, conclusionQueryFrom(url)));
     }
     if (url.pathname === "/api/conclusions/standings") {
       if (!context.conclusions) return jsonOk([]);
@@ -197,12 +192,7 @@ export async function handlePortalRequest(
       // and a caller who may not read conclusions must not be told that its
       // filter was malformed.
       const records = await context.conclusions.list(actor);
-      const query = parseConclusionQuery({
-        subject: url.searchParams.get("subject") ?? undefined,
-        scope: url.searchParams.get("scope") ?? undefined,
-        verdict: url.searchParams.get("verdict") ?? undefined,
-      });
-      return jsonOk(standingConclusions(records, query));
+      return jsonOk(standingConclusions(records, conclusionQueryFrom(url)));
     }
     if (url.pathname === "/api/whoami") {
       return jsonOk(await context.access.whoami(actor));
@@ -386,6 +376,22 @@ function auditQueryFrom(url: URL) {
     kind: url.searchParams.get("kind"),
     action: url.searchParams.get("action"),
     subject: url.searchParams.get("subject"),
+    asOf: url.searchParams.get("asOf"),
+  });
+}
+
+/**
+ * The conclusions filter, read the way the trail filter is: the same parameter
+ * names in JSON, in the internal form and on the CLI. A cutoff given to one is
+ * honoured by the other, so one page cannot show a trail as of March beside a
+ * standing verdict as of today.
+ */
+function conclusionQueryFrom(url: URL) {
+  return parseConclusionQuery({
+    subject: url.searchParams.get("subject") ?? undefined,
+    scope: url.searchParams.get("scope") ?? undefined,
+    verdict: url.searchParams.get("verdict") ?? undefined,
+    asOf: url.searchParams.get("asOf") ?? undefined,
   });
 }
 
@@ -465,8 +471,13 @@ async function internalPage(
     const integrity = await sealService(context).report(actor);
     // The audit page is where the auditor reads the trail, so it is also where
     // the derived answer belongs: what the audit currently finds, per subject.
+    // Only the cutoff crosses over from the trail filter — the panel answers
+    // "what stands" for the window the trail is read through, while kind,
+    // action and text narrow the trail itself and must not silently hide a
+    // subject that stands flagged.
     const conclusions = standingConclusions(
       context.conclusions ? await context.conclusions.list(actor) : [],
+      query.asOf ? { asOf: query.asOf } : {},
     );
     return html(
       renderAuditView({ ctx: base, events, query, integrity, standings: conclusions }),

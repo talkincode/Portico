@@ -42,6 +42,7 @@ import {
   SECRET_KEYS,
 } from "../catalog/mod.ts";
 import { serialize, writeJsonFile } from "../fs.ts";
+import { parseAsOf, withinAsOf } from "./instant.ts";
 import { cloneSeal, type SealEntry, sealRecord } from "./seal.ts";
 
 /**
@@ -124,7 +125,7 @@ const BOUNDARY_BY_ID = new Map<string, BoundarySubject>(
 );
 const VERDICTS = new Set<string>(CONCLUSION_VERDICTS);
 const ALLOWED_INPUT_KEYS = new Set(["id", "scope", "verdict", "note"]);
-const ALLOWED_QUERY_KEYS = new Set(["subject", "scope", "verdict"]);
+const ALLOWED_QUERY_KEYS = new Set(["subject", "scope", "verdict", "asOf"]);
 
 function findBoundary(id: string): BoundarySubject | undefined {
   return BOUNDARY_BY_ID.get(id);
@@ -159,6 +160,11 @@ export interface ConclusionQuery {
   subject?: string;
   scope?: ConclusionScope;
   verdict?: ConclusionVerdict;
+  /**
+   * Read the trail as it stood at this instant, instead of as it stands now.
+   * Canonical form; see `parseAsOf`.
+   */
+  asOf?: string;
 }
 
 export interface ConclusionStore {
@@ -383,6 +389,8 @@ export function parseConclusionQuery(raw: unknown): ConclusionQuery {
     }
     parsed.verdict = verdict as ConclusionVerdict;
   }
+  const asOf = parseAsOf(query.asOf);
+  if (asOf !== undefined) parsed.asOf = asOf;
   return parsed;
 }
 
@@ -392,6 +400,7 @@ export function applyConclusionQuery(
 ): AuditConclusion[] {
   const parsed = parseConclusionQuery(query);
   return records
+    .filter((record) => withinAsOf(record.at, parsed.asOf))
     .filter((record) => (parsed.subject ? record.subjectId === parsed.subject : true))
     .filter((record) => (parsed.scope ? record.scope === parsed.scope : true))
     .filter((record) => (parsed.verdict ? record.verdict === parsed.verdict : true))
@@ -437,6 +446,13 @@ export interface StandingConclusion {
  * state (what is true now), not the trail: `verdict: "flagged"` answers "which
  * subjects stand flagged", so a flag that was later cleared does not match even
  * though the trail still carries it.
+ *
+ * With `asOf` the whole answer moves to that instant: the frontier is the
+ * records up to the cutoff, so the standing verdict, the previous verdict and
+ * the counts are all the ones that were true then. Nothing is stored: the past
+ * state is derived from the same append-only trail by reading less of it, which
+ * is the only way a historical answer cannot disagree with the sealed evidence
+ * it is read from.
  */
 export function standingConclusions(
   records: AuditConclusion[],
@@ -445,6 +461,7 @@ export function standingConclusions(
   const parsed = parseConclusionQuery(query);
   const groups = new Map<string, AuditConclusion[]>();
   for (const record of records) {
+    if (!withinAsOf(record.at, parsed.asOf)) continue;
     const key = `${record.subjectId}\u0000${record.scope}`;
     const group = groups.get(key);
     if (group) group.push(record);

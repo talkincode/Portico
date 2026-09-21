@@ -761,3 +761,149 @@ Deno.test("a standing verdict about a boundary contract carries the gate that an
   // exists in the tree the verdict was recorded against.
   assertEquals((await store.list()).length, 2);
 });
+
+Deno.test("a cutoff reconstructs the verdict that stood then, not the one that stands now", () => {
+  const trail = [
+    trailRecord({
+      id: "ccl-1",
+      at: "2026-09-21T00:00:00.000Z",
+      verdict: "flagged",
+      note: "entry served before the approval",
+    }),
+    trailRecord({
+      id: "ccl-2",
+      at: "2026-09-21T02:00:00.000Z",
+      verdict: "cleared",
+      note: "withdrawn and re-approved",
+    }),
+  ];
+
+  // Before the first review nothing stood. The answer is an empty list, not
+  // today's verdict read backwards.
+  assertEquals(standingConclusions(trail, { asOf: "2026-09-20T23:59:59.999Z" }), []);
+
+  const [then] = standingConclusions(trail, { asOf: "2026-09-21T01:00:00Z" });
+  assertEquals(then.verdict, "flagged");
+  assertEquals(then.conclusionId, "ccl-1");
+  assertEquals(then.count, 1);
+  assertEquals(then.flagged, 1);
+  assertEquals(then.cleared, 0);
+  // The later review had not happened yet, so there is no review before this
+  // one to report.
+  assertEquals(then.previousVerdict, undefined);
+
+  const [now] = standingConclusions(trail, { asOf: "2026-09-21T02:00:00.000Z" });
+  assertEquals(now.verdict, "cleared");
+  assertEquals(now.previousVerdict, "flagged");
+  assertEquals(now.count, 2);
+
+  // The cutoff is inclusive, and slicing at the newest record is the unsliced
+  // view: one derivation read two ways, not two derivations.
+  assertEquals(
+    standingConclusions(trail, { asOf: "2026-09-21T02:00:00.000Z" }),
+    standingConclusions(trail),
+  );
+  assertEquals(
+    standingConclusions(trail, { asOf: "2030-01-01T00:00:00Z" }),
+    standingConclusions(trail),
+  );
+});
+
+Deno.test("a cutoff moves the verdict filter with it", () => {
+  const trail = [
+    trailRecord({
+      id: "ccl-1",
+      at: "2026-09-21T00:00:00.000Z",
+      verdict: "flagged",
+      note: "found",
+    }),
+    trailRecord({ id: "ccl-2", at: "2026-09-21T02:00:00.000Z", verdict: "cleared" }),
+  ];
+
+  // What stood flagged in the morning is found even though it stands cleared
+  // today; what stands flagged in the afternoon is not.
+  assertEquals(
+    standingConclusions(trail, { asOf: "2026-09-21T01:00:00Z", verdict: "flagged" })
+      .map((item) => item.conclusionId),
+    ["ccl-1"],
+  );
+  assertEquals(
+    standingConclusions(trail, { asOf: "2026-09-21T03:00:00Z", verdict: "flagged" }),
+    [],
+  );
+  assertEquals(
+    standingConclusions(trail, { asOf: "2026-09-21T03:00:00Z", verdict: "cleared" })
+      .map((item) => item.conclusionId),
+    ["ccl-2"],
+  );
+});
+
+Deno.test("a cutoff slices the trail as well, so the list and the panel answer one question", () => {
+  const trail = [
+    trailRecord({
+      id: "ccl-1",
+      at: "2026-09-21T00:00:00.000Z",
+      verdict: "flagged",
+      note: "found",
+    }),
+    trailRecord({ id: "ccl-2", at: "2026-09-21T02:00:00.000Z", verdict: "cleared" }),
+  ];
+
+  const sliced = (input: Record<string, unknown>) =>
+    applyConclusionQuery(trail, parseConclusionQuery(input)).map((record) => record.id);
+
+  assertEquals(sliced({ asOf: "2026-09-21T01:00:00Z" }), ["ccl-1"]);
+  assertEquals(sliced({ asOf: "2026-09-21T00:00:00.000Z" }), ["ccl-1"]);
+  assertEquals(sliced({ asOf: "2026-09-20T00:00:00Z" }), []);
+  assertEquals(sliced({}), ["ccl-1", "ccl-2"]);
+  assertEquals(sliced({ asOf: "2026-09-21T01:00:00Z", verdict: "cleared" }), []);
+  // An empty cutoff is no cutoff, the way every other empty filter value is.
+  assertEquals(sliced({ asOf: "" }), ["ccl-1", "ccl-2"]);
+});
+
+Deno.test("a cutoff that is not an instant is refused, never read as now", () => {
+  const trail = [trailRecord({ id: "ccl-1" })];
+  for (
+    const bad of ["2026-09-21", "2026-09-21T00:00:00", "yesterday", 1_789_000_000_000]
+  ) {
+    let code: string | undefined;
+    try {
+      standingConclusions(trail, { asOf: bad });
+    } catch (error) {
+      code = (error as { code?: string }).code;
+    }
+    assertEquals(code, "INVALID_INPUT", `asOf ${JSON.stringify(bad)} must be refused`);
+  }
+});
+
+Deno.test("a record with no readable timestamp is in no window, and still on the trail", () => {
+  const trail = [
+    trailRecord({ id: "ccl-1", at: "2026-09-21T00:00:00.000Z", verdict: "cleared" }),
+    trailRecord({ id: "ccl-2", at: "not-a-time", verdict: "flagged", note: "tampered with" }),
+  ];
+
+  // The unsliced view still reports on the subject: a file someone wrote by
+  // hand does not make the audit disappear from the audit view.
+  assertEquals(standingConclusions(trail)[0].count, 2);
+  // A window can only hold records that can be placed in it. Guessing a place
+  // for an unreadable timestamp is the silent substitution a cutoff refuses;
+  // tampering with the file is what the seal verdict beside it is for.
+  const [sliced] = standingConclusions(trail, { asOf: "2030-01-01T00:00:00Z" });
+  assertEquals(sliced.count, 1);
+  assertEquals(sliced.verdict, "cleared");
+  assertEquals(sliced.conclusionId, "ccl-1");
+});
+
+Deno.test("the role gate runs before the cutoff is parsed too", async () => {
+  const { service, store } = await bootstrapped();
+  const before = await store.list();
+  for (const actor of [maintainer, reader, anonymous]) {
+    await assertRejectsCode(
+      () => service.standings(actor as never, { asOf: "yesterday" }),
+      "FORBIDDEN",
+    );
+    await assertRejectsCode(() => service.list(actor, { asOf: "yesterday" }), "FORBIDDEN");
+  }
+  // A refused read writes nothing, malformed cutoff included.
+  assertEquals(await store.list(), before);
+});
