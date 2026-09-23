@@ -32,6 +32,7 @@ export type {
   CatalogChangeRecord,
   Channel,
   CliPackageInfo,
+  ContentCategory,
   EntryKind,
   EntryRef,
   GovernanceState,

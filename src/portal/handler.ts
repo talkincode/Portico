@@ -44,7 +44,15 @@ import {
   type Tone,
   type ViewContext,
 } from "./design/mod.ts";
-import { parseChannel, parseTheme, renderMagazinePage, renderNotFoundPage } from "./html.ts";
+import {
+  type CategoryFilter,
+  parseCategory,
+  parseChannel,
+  parseTheme,
+  renderMagazinePage,
+  renderNotFoundPage,
+} from "./html.ts";
+import type { ContentCategory } from "../catalog/mod.ts";
 import type { ReviewEntry } from "./review-entry.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
 import { audienceReport } from "../catalog/audience.ts";
@@ -261,12 +269,14 @@ export async function handlePortalRequest(
 
     const theme = parseTheme(url.searchParams.get("theme"));
     const channel = parseChannel(url.searchParams.get("channel"));
+    const category = parseCategory(url.searchParams.get("category"));
     const surfacePage = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/);
     if (url.pathname === "/" || surfacePage) {
       const query = parseCatalogQuery({ q: url.searchParams.get("q") });
       if (channel) query.channel = channel;
       const visible = await context.catalog.list(actor);
-      const surfaces = applyCatalogQuery(visible, query);
+      const filtered = applyCatalogQuery(visible, query);
+      const surfaces = filterByCategory(filtered, category);
       const dash = dashboardFrom(surfaces);
       const pendingPublic = actor.role === "anonymous"
         ? undefined
@@ -286,7 +296,7 @@ export async function handlePortalRequest(
       if (surfacePage) {
         try {
           const selected = await context.catalog.get(actor, surfacePage[1]);
-          const canonical = canonicalMagazineReadingUrl(url, selected);
+          const canonical = canonicalMagazineReadingUrl(url, selected, category);
           if (canonical) {
             return new Response(null, {
               status: 302,
@@ -296,6 +306,7 @@ export async function handlePortalRequest(
           return html(renderMagazinePage({
             theme,
             channel,
+            category,
             q: query.q,
             view: dash,
             selected,
@@ -316,6 +327,7 @@ export async function handlePortalRequest(
       return html(renderMagazinePage({
         theme,
         channel,
+        category,
         q: query.q,
         view: dash,
         picks,
@@ -333,29 +345,69 @@ export async function handlePortalRequest(
 }
 
 /**
- * `/s/:id` may be opened with a `channel` / `q` that does not include the
- * selected record. That is a stale navigation state, not a permission miss:
- * rewrite the query so the filtered list contains the record the caller can
- * already see. Unknown or unauthorized ids still 404 before this runs.
+ * `/s/:id` may be opened with a `channel` / `category` / `q` that does not
+ * include the selected record. That is a stale navigation state, not a
+ * permission miss: rewrite the query so the filtered list contains the record
+ * the caller can already see. Unknown or unauthorized ids still 404 before
+ * this runs.
  */
-function canonicalMagazineReadingUrl(url: URL, selected: AgentSurface): URL | null {
+function canonicalMagazineReadingUrl(
+  url: URL,
+  selected: AgentSurface,
+  category: CategoryFilter,
+): URL | null {
   const channel = parseChannel(url.searchParams.get("channel"));
   const query = parseCatalogQuery({ q: url.searchParams.get("q") });
   if (channel) query.channel = channel;
-  if (applyCatalogQuery([selected], query).length > 0) return null;
+
+  const matchesChannel = applyCatalogQuery([selected], query).length > 0;
+  const matchesCategory = categoryMatches(selected, category);
+
+  if (matchesChannel && matchesCategory) return null;
 
   const next = new URL(url);
+
+  if (!matchesCategory && category !== null) {
+    const effectiveCategory = selected.category ?? "uncategorized";
+    next.searchParams.set("category", effectiveCategory);
+  }
+
   if (query.channel && !selected.channels.includes(query.channel)) {
     const own = selected.channels[0];
     if (own) next.searchParams.set("channel", own);
     else next.searchParams.delete("channel");
   }
+
   const remainingQ = parseCatalogQuery({ q: next.searchParams.get("q") }).q;
   if (remainingQ && applyCatalogQuery([selected], { q: remainingQ }).length === 0) {
     next.searchParams.delete("q");
   }
+
   if (next.search === url.search) return null;
   return next;
+}
+
+/**
+ * Filter surfaces by content category. When category is null, all surfaces
+ * pass. Otherwise, a surface matches if its effective category (defaulting
+ * to "uncategorized" when undefined) equals the filter.
+ */
+function filterByCategory(
+  surfaces: AgentSurface[],
+  category: CategoryFilter,
+): AgentSurface[] {
+  if (category === null) return surfaces;
+  return surfaces.filter((surface) => categoryMatches(surface, category));
+}
+
+/**
+ * Check if a surface matches a category filter. A null filter matches all.
+ * Effective category = surface.category ?? "uncategorized".
+ */
+function categoryMatches(surface: AgentSurface, category: CategoryFilter): boolean {
+  if (category === null) return true;
+  const effective: ContentCategory = surface.category ?? "uncategorized";
+  return effective === category;
 }
 
 /**
@@ -660,7 +712,8 @@ function securityHeaders(contentType: string): HeadersInit {
     "content-type": contentType,
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
-    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    "content-security-policy":
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; media-src https: http:",
   };
 }
 
