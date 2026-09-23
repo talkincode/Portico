@@ -169,7 +169,7 @@ function headRevisionSync(): string {
  */
 const PRODUCT_PAGE = '<!DOCTYPE html><html lang="zh-CN"><head>' +
   "<title>Portico · Portico</title></head><body>" +
-  '<div class="frame home"><nav class="filter-tabs"></nav>' +
+  '<nav class="nav"><a href="/">全部</a></nav>' +
   '<section class="hero"><h1 class="hero-title">受控接入与安全治理</h1></section>' +
   "</div></body></html>";
 
