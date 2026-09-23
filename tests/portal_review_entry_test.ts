@@ -98,7 +98,7 @@ Deno.test("the same-origin default keeps the one-click Review entry", async () =
   const context = await portalContext();
   const home = await page("/", context);
   assert(home.includes('href="/review"'), "a signed-in caller jumps to the queue");
-  assert(home.includes("去审核"), "the label matches the entry");
+  assert(home.includes(">审核<") || home.includes("审核 ("), "the label matches the entry");
   const public_ = await page("/public", context);
   assert(public_.includes('href="/review"'), "the public plane offers the same entrance");
 });

@@ -1130,23 +1130,22 @@ function renderChrome(input: {
   const infoAssassinActive = category === "info-assassin" ? " active" : "";
   const miraRadioActive = category === "mira-radio" ? " active" : "";
   const uncategorizedActive = category === "uncategorized" ? " active" : "";
-  const internalLink = input.showInternal === true
-    ? `\n        <a class="" href="/internal">内部笔记</a>`
-    : "";
-  const pendingLink = input.showInternal === true && input.pendingPublic !== undefined
-    ? `\n        <a class="" href="/internal/pending">待审 ${input.pendingPublic}</a>`
-    : "";
+
   const review = reviewHref(input.reviewEntry, input.showInternal === true);
+  const reviewLabel = input.showInternal === true
+    ? (input.pendingPublic !== undefined && input.pendingPublic > 0
+      ? `审核 (${input.pendingPublic})`
+      : "审核")
+    : "审核登录";
   const reviewLink = review
-    ? `\n        <a class="" href="${escapeHtml(review)}">${
-      input.showInternal === true ? "去审核" : "审核登录"
-    }</a>`
+    ? `<a class="auth-review" href="${escapeHtml(review)}">${escapeHtml(reviewLabel)}</a>`
     : "";
+
   const authChrome = input.signedInId
-    ? `<span class="auth-user">${
+    ? `${reviewLink}<span class="auth-user">${
       escapeHtml(input.signedInId)
     }</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
-    : `<a class="auth-login" href="/login">登录</a>`;
+    : `${reviewLink}<a class="auth-login" href="/login">登录</a>`;
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>
@@ -1177,10 +1176,8 @@ function renderChrome(input: {
         <a class="${uncategorizedActive.trim()}" href="${escapeHtml(uncategorizedHref)}">${
     escapeHtml(CATEGORY_LABEL.uncategorized)
   }</a>
-        <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}
       </nav>
       <div class="topbar-right">
-        ${reviewLink ? `<span class="review-entry">${reviewLink.trim()}</span>` : ""}
         <form class="search-box" method="get" action="/" role="search">
           ${
     input.theme === "system"
@@ -1200,7 +1197,6 @@ function renderChrome(input: {
   }" placeholder="搜索已授权入口" maxlength="120" aria-label="搜索已授权入口">
           <button type="submit">搜索</button>
         </form>
-        <div class="motto">受控治理与发现<br>独立审批 · 客户端直连</div>
         <p class="themes">
           <a href="${escapeHtml(withQuery(input.path, "light", input.channel, q))}">日</a>
           <a href="${escapeHtml(withQuery(input.path, "dark", input.channel, q))}">夜</a>
@@ -1221,47 +1217,18 @@ function renderHome(
   theme: ThemeMode,
   channel: ChannelFilter,
   category: CategoryFilter,
-  q?: string,
+  _q?: string,
 ): string {
   const empty = surfaces.length === 0 ? `<p class="empty">没有可见的 Agent 表面。</p>` : "";
   const heroHtml = hero ? renderHero(hero, theme, channel, category) : "";
-  const channelFilterTabs = renderChannelFilterTabs(theme, channel, category, "/", q);
   const cards = surfaces.map((surface, idx) =>
     renderCard(surface, theme, channel, category, { index: idx })
   )
     .join("");
   return `<main>
       ${heroHtml}
-      ${channelFilterTabs}
       <section class="stream">${empty}${cards}</section>
     </main>`;
-}
-
-function renderChannelFilterTabs(
-  theme: ThemeMode,
-  channel: ChannelFilter,
-  category: CategoryFilter,
-  path: string,
-  q?: string,
-): string {
-  const items: Array<{ id: ChannelFilter; label: string }> = [
-    { id: null, label: "全部渠道" },
-    { id: "web", label: "Web" },
-    { id: "cli", label: "CLI" },
-    { id: "mcp", label: "MCP" },
-  ];
-  const links = items.map((item) => {
-    const href = withCategoryQuery(
-      path.startsWith("/s/") ? path : "/",
-      theme,
-      category,
-      item.id,
-      q,
-    );
-    const active = channel === item.id ? " active" : "";
-    return `<a class="badge-chip${active}" href="${escapeHtml(href)}">${item.label}</a>`;
-  }).join("");
-  return `<nav class="filter-tabs" aria-label="渠道过滤">${links}</nav>`;
 }
 
 function renderReading(
@@ -1554,44 +1521,7 @@ function renderSidebar(
   }).join("");
 
   return `<aside class="sidebar">
-      <!-- Section 1: 接入渠道 -->
-      <section class="side-section">
-        <div class="side-header">
-          <h3 class="kicker">接入渠道</h3>
-          <a class="more-link" href="${escapeHtml(withQuery("/", theme, null))}">全部服务 →</a>
-        </div>
-        <div class="topic-list">
-          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "web"))}">
-            <div class="topic-icon-wrap">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            </div>
-            <div class="topic-info">
-              <h4>${escapeHtml(CHANNEL_LABEL.web)}</h4>
-              <p>直连网页端点，不代理流量</p>
-            </div>
-          </a>
-          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "cli"))}">
-            <div class="topic-icon-wrap">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-            </div>
-            <div class="topic-info">
-              <h4>${escapeHtml(CHANNEL_LABEL.cli)}</h4>
-              <p>受控包坐标 (jsr/npm)，本地运行</p>
-            </div>
-          </a>
-          <a class="topic-card" href="${escapeHtml(withQuery("/", theme, "mcp"))}">
-            <div class="topic-icon-wrap">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#4A9EFF" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            </div>
-            <div class="topic-info">
-              <h4>${escapeHtml(CHANNEL_LABEL.mcp)}</h4>
-              <p>Model Context Protocol 发现与端点</p>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      <!-- Section 2: 推荐入口 -->
+      <!-- Section 1: 推荐入口 -->
       <section class="side-section picks">
         <div class="side-header">
           <h3 class="kicker">推荐入口</h3>
@@ -1600,16 +1530,6 @@ function renderSidebar(
           ${pickHtml || `<p class="empty">暂无推荐。</p>`}
         </div>
       </section>
-
-      <!-- Section 3: 治理原则 -->
-      <div class="slogan-card">
-        <svg viewBox="0 0 200 120" fill="none">
-          <path d="M0 120L60 40L110 85L160 20L220 120Z" fill="#1C2430"/>
-        </svg>
-        <h4>Agent 门户与治理层</h4>
-        <p style="margin: 0 0 0.75rem; font-size: 0.8rem; color: #8A9099; position: relative; z-index: 2;">只做登记、发布、发现、授权与审计。公开须经独立审批，不代跑 Agent，不代理流量。</p>
-        <span class="brand-mark">PORTICO</span>
-      </div>
     </aside>`;
 }
 

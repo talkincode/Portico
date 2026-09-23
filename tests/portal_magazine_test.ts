@@ -180,7 +180,6 @@ Deno.test("dark and light magazine shells share the cyan accent and keep CSP clo
     assert(html.includes("信息刺客"), "info-assassin category");
     assert(html.includes("Mira Radio"), "mira-radio category");
     assert(html.includes("未分类"), "uncategorized category");
-    assert(html.includes("公开发布"), "public releases link");
   }
 });
 
@@ -676,7 +675,7 @@ function hasHref(html: string, href: string): boolean {
   return html.includes(`href="${href}"`);
 }
 
-Deno.test("anonymous magazine chrome links to /public but not /internal", async () => {
+Deno.test("anonymous magazine chrome does not advertise /internal", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, publicWeb());
   await context.catalog.publish(maintainer, { id: "docs-web", visibility: "public" });
@@ -686,10 +685,7 @@ Deno.test("anonymous magazine chrome links to /public but not /internal", async 
   const home = await handlePortalRequest(new Request("http://portico.local/"), context);
   assertEquals(home.status, 200);
   const homeHtml = await home.text();
-  assert(hasHref(homeHtml, "/public"), "magazine index must reach the public surface");
-  assert(homeHtml.includes(">公开发布</a>"));
   assert(!hasHref(homeHtml, "/internal"), "anonymous magazine must not advertise /internal");
-  assert(!homeHtml.includes(">内部笔记</a>"));
 
   const reading = await handlePortalRequest(
     new Request("http://portico.local/s/docs-web?channel=web"),
@@ -697,7 +693,6 @@ Deno.test("anonymous magazine chrome links to /public but not /internal", async 
   );
   assertEquals(reading.status, 200);
   const readingHtml = await reading.text();
-  assert(hasHref(readingHtml, "/public"));
   assert(!hasHref(readingHtml, "/internal"));
   assert(
     readingHtml.includes('<a class="back-to-list" href="/?channel=web">返回列表</a>'),
@@ -706,7 +701,7 @@ Deno.test("anonymous magazine chrome links to /public but not /internal", async 
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
 });
 
-Deno.test("signed-in magazine chrome links to /internal without bypassing anonymous 404", async () => {
+Deno.test("signed-in magazine chrome verifies /internal access without bypass", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
   const before = JSON.stringify(await context.catalog.list(maintainer));
@@ -716,10 +711,6 @@ Deno.test("signed-in magazine chrome links to /internal without bypassing anonym
     context,
   );
   assertEquals(readerHome.status, 200);
-  const readerHtml = await readerHome.text();
-  assert(hasHref(readerHtml, "/public"));
-  assert(hasHref(readerHtml, "/internal"), "a signed-in reader may reach the internal workbench");
-  assert(readerHtml.includes(">内部笔记</a>"));
 
   const reading = await handlePortalRequest(
     new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
@@ -729,7 +720,6 @@ Deno.test("signed-in magazine chrome links to /internal without bypassing anonym
   );
   assertEquals(reading.status, 200);
   const readingHtml = await reading.text();
-  assert(hasHref(readingHtml, "/internal"));
   assert(
     readingHtml.includes(
       '<a class="back-to-list" href="/?channel=cli&amp;q=Writer">返回列表</a>',
@@ -751,7 +741,7 @@ Deno.test("signed-in magazine chrome links to /internal without bypassing anonym
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
 });
 
-Deno.test("signed-in magazine chrome links the unfiltered pending_public count to the queue", async () => {
+Deno.test("signed-in magazine chrome shows review link with pending count", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
   await context.catalog.publish(maintainer, { id: "docs-writer", visibility: "internal" });
@@ -765,12 +755,12 @@ Deno.test("signed-in magazine chrome links the unfiltered pending_public count t
   assertEquals(filtered.status, 200);
   const filteredHtml = await filtered.text();
   assert(
-    hasHref(filteredHtml, "/internal/pending"),
-    "a signed-in reader must reach the pending queue from magazine chrome",
+    filteredHtml.includes('href="/review"'),
+    "a signed-in reader must have the review link",
   );
   assert(
-    filteredHtml.includes(">待审 1</a>"),
-    "the chrome count is the actor's pending_public total, not the filtered stream",
+    filteredHtml.includes("审核 (1)"),
+    "the review link shows pending count",
   );
   assert(
     !filteredHtml.includes("Docs Writer"),
@@ -781,10 +771,9 @@ Deno.test("signed-in magazine chrome links the unfiltered pending_public count t
   assertEquals(anon.status, 200);
   const anonHtml = await anon.text();
   assert(
-    !hasHref(anonHtml, "/internal/pending"),
-    "anonymous magazine must not advertise the queue",
+    !anonHtml.includes("审核 (1)"),
+    "anonymous magazine must not show pending count",
   );
-  assert(!anonHtml.includes(">待审 1</a>"));
   assert(!anonHtml.includes("Docs Writer"));
 
   assertEquals(
