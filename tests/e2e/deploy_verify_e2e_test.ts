@@ -779,3 +779,4 @@ Deno.test("E2E: the deploy gate refuses an entrance bound to all interfaces", as
     await stubs.stop();
   }
 });
+
