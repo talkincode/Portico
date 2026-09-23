@@ -44,9 +44,11 @@ export function portalPerms(
   enableGithub = false,
 ): readonly string[] {
   const base = ["--allow-read", "--allow-env"];
-  const hosts = [hostname === LOOPBACK_HOSTNAME || hostname === "localhost"
-    ? LOOPBACK_HOSTNAME
-    : `${LOOPBACK_HOSTNAME},${hostname}`];
+  const hosts = [
+    hostname === LOOPBACK_HOSTNAME || hostname === "localhost"
+      ? LOOPBACK_HOSTNAME
+      : `${LOOPBACK_HOSTNAME},${hostname}`,
+  ];
   if (enableGithub) {
     hosts.push(...githubNetHosts());
   }

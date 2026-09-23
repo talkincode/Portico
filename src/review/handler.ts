@@ -71,7 +71,10 @@ export async function handleReviewRequest(
       // split across entrances does not fork.
       if (actor.role === "anonymous") {
         if (wantsHtml(request)) {
-          return new Response(null, { status: 303, headers: { "location": "/login?next=/review" } });
+          return new Response(null, {
+            status: 303,
+            headers: { "location": "/login?next=/review" },
+          });
         }
         return jsonError(401, "authentication required");
       }
@@ -256,9 +259,7 @@ function oauthSessionHeaders(sessionToken: string): Headers {
   const headers = new Headers({ "location": "/review" });
   headers.append(
     "set-cookie",
-    `portico_session=${
-      encodeURIComponent(sessionToken)
-    }; Path=/; Secure; HttpOnly; SameSite=Lax`,
+    `portico_session=${encodeURIComponent(sessionToken)}; Path=/; Secure; HttpOnly; SameSite=Lax`,
   );
   headers.append("set-cookie", "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0");
   return headers;

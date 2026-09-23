@@ -1381,7 +1381,10 @@ Deno.test("portal /login page is 200 for anonymous users", async () => {
   assert(html.includes('action="/login"'), "login page should have login form");
   assert(html.includes("一次性凭证"), "login page should show credential field");
   assert(!html.includes("/oauth/start"), "login page should not show oauth link without github");
-  assert(!html.includes("使用 GitHub 登录"), "login page should not show github button without config");
+  assert(
+    !html.includes("使用 GitHub 登录"),
+    "login page should not show github button without config",
+  );
 });
 
 Deno.test("portal /login page redirects signed-in users to /internal", async () => {
@@ -1397,7 +1400,9 @@ Deno.test("portal /login page redirects signed-in users to /internal", async () 
 Deno.test("portal /login with next param redirects signed-in users to that path", async () => {
   const context = await seededContext();
   const response = await handlePortalRequest(
-    new Request("http://portico.local/login?next=/internal/audit", { headers: actorHeaders(auditor) }),
+    new Request("http://portico.local/login?next=/internal/audit", {
+      headers: actorHeaders(auditor),
+    }),
     context,
   );
   assertEquals(response.status, 303);
@@ -1413,7 +1418,9 @@ Deno.test("portal /login rejects unsafe next params", async () => {
   ];
   for (const next of unsafe) {
     const response = await handlePortalRequest(
-      new Request(`http://portico.local/login?next=${encodeURIComponent(next)}`, { headers: actorHeaders(reader) }),
+      new Request(`http://portico.local/login?next=${encodeURIComponent(next)}`, {
+        headers: actorHeaders(reader),
+      }),
       context,
     );
     assertEquals(response.status, 303);
@@ -1580,7 +1587,10 @@ Deno.test("portal oauth start redirects to github when configured", async () => 
   );
   assertEquals(response.status, 303);
   const location = response.headers.get("location") ?? "";
-  assert(location.startsWith("https://github.com/login/oauth/authorize"), "should redirect to github");
+  assert(
+    location.startsWith("https://github.com/login/oauth/authorize"),
+    "should redirect to github",
+  );
   assert(location.includes("client_id=test-client-id"), "should include client_id");
   const stateCookie = response.headers.get("set-cookie") ?? "";
   assert(stateCookie.includes("portico_oauth_state="), "should set state cookie");
@@ -1609,7 +1619,8 @@ Deno.test("portal oauth callback rejects mismatched state", async () => {
       callbackUrl: "https://portico.example.test/oauth/callback",
       allowlist: ["jamiesun"],
     },
-    exchange: () => Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: [] }),
+    exchange: () =>
+      Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: [] }),
   };
   const response = await handlePortalRequest(
     new Request("http://portico.local/oauth/callback?code=test&state=wrong", {
@@ -1679,7 +1690,11 @@ Deno.test("portal oauth callback mints session for roster human via email", asyn
       allowlist: ["jamiesun"],
     },
     exchange: () =>
-      Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: ["jamiesun@example.com"] }),
+      Promise.resolve({
+        login: "jamiesun",
+        email: "jamiesun@example.com",
+        emails: ["jamiesun@example.com"],
+      }),
   };
   const state = "test-state";
   const response = await handlePortalRequest(
@@ -1692,7 +1707,10 @@ Deno.test("portal oauth callback mints session for roster human via email", asyn
   assertEquals(response.headers.get("location"), "/internal");
   assertEquals(sessions, ["jamiesun@example.com"]);
   const cookies = response.headers.getSetCookie();
-  assert(cookies.some((c) => c.startsWith("portico_session=pst1_test")), "should set session cookie");
+  assert(
+    cookies.some((c) => c.startsWith("portico_session=pst1_test")),
+    "should set session cookie",
+  );
   assert(cookies.some((c) => c.includes("Path=/")), "session cookie should have root path");
 });
 
@@ -1707,7 +1725,11 @@ Deno.test("portal oauth callback rejects user not in roster", async () => {
       allowlist: ["jamiesun"],
     },
     exchange: () =>
-      Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: ["jamiesun@example.com"] }),
+      Promise.resolve({
+        login: "jamiesun",
+        email: "jamiesun@example.com",
+        emails: ["jamiesun@example.com"],
+      }),
   };
   const state = "test-state";
   const response = await handlePortalRequest(

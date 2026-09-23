@@ -1066,7 +1066,9 @@ function renderChrome(input: {
     : "";
   // Auth chrome: show login link for anonymous, whoami + logout for signed-in
   const authChrome = input.signedInId
-    ? `<span class="auth-user">${escapeHtml(input.signedInId)}</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
+    ? `<span class="auth-user">${
+      escapeHtml(input.signedInId)
+    }</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
     : `<a class="auth-login" href="/login">登录</a>`;
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>

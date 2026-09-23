@@ -415,11 +415,15 @@ Deno.test("E2E: /internal/approvals shows the same notes to a reader; anonymous 
     assertEquals(asAuditor.status, 200);
     assert(asAuditor.body.includes("Package coordinate reviewed."));
 
-    await assertLoginRedirect(`${base}/internal/approvals`, "anonymous /internal/approvals", (body) => {
-      assert(!body.includes("Docs Writer"));
-      assert(!body.includes("Package coordinate reviewed."));
-      assert(!body.includes("审批记录"));
-    });
+    await assertLoginRedirect(
+      `${base}/internal/approvals`,
+      "anonymous /internal/approvals",
+      (body) => {
+        assert(!body.includes("Docs Writer"));
+        assert(!body.includes("Package coordinate reviewed."));
+        assert(!body.includes("审批记录"));
+      },
+    );
   });
 
   const catalogAfter = await Deno.readFile(catalog);
@@ -698,11 +702,15 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
     assert(!asWeb.body.includes("Docs MCP"), "auditor web filter must hide the mcp candidate");
     assert(!/<button/i.test(asWeb.body), "auditor must not get an approve button after filtering");
 
-    await assertLoginRedirect(`${base}/internal/pending?channel=cli`, "anonymous /internal/pending?channel=cli", (body) => {
-      assert(!body.includes("Docs Writer"));
-      assert(!body.includes("待审队列"));
-      assert(!body.includes("jsr:@example/docs-writer"));
-    });
+    await assertLoginRedirect(
+      `${base}/internal/pending?channel=cli`,
+      "anonymous /internal/pending?channel=cli",
+      (body) => {
+        assert(!body.includes("Docs Writer"));
+        assert(!body.includes("待审队列"));
+        assert(!body.includes("jsr:@example/docs-writer"));
+      },
+    );
   });
 
   const catalogAfter = await Deno.readFile(catalog);
