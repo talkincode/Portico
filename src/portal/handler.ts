@@ -813,16 +813,20 @@ async function handleOauthCallback(request: Request, context: PortalContext): Pr
   }
 
   const emails = [user.email, ...user.emails].filter((email): email is string => !!email);
+  const sessionErrors: string[] = [];
   for (const email of emails) {
     try {
       const session = await context.access.createBrowserSession(email);
       return oauthSuccessResponse(session.actor, session.token);
-    } catch {
-      // Try the next verified email; a roster miss is not fatal yet.
+    } catch (error) {
+      sessionErrors.push(error instanceof Error ? error.message : String(error));
     }
   }
 
-  console.error(`[portal/oauth] roster miss login=${user.login} emails=${emails.join(",")}`);
+  console.error(
+    `[portal/oauth] roster miss login=${user.login} emails=${emails.join(",")}` +
+      (sessionErrors.length > 0 ? ` errors=[${sessionErrors.join("; ")}]` : ""),
+  );
   return fail(
     403,
     `GitHub 登录成功，但名册里没有 ${emails[0] ?? "你的邮箱"}，请联系管理员绑定。`,

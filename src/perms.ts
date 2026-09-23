@@ -38,10 +38,19 @@ export function readOnlyHttpPerms(hostname: string = LOOPBACK_HOSTNAME): readonl
  * Portal permissions with optional GitHub OAuth outbound access.
  * When `enableGithub` is true, adds `github.com` and `api.github.com` to the
  * net allow list for OAuth token exchange and user lookup.
+ *
+ * Portal is read-only for the catalog and identities — it never rewrites those
+ * governance pillars. When GitHub OAuth is enabled and `paths.sessions` is
+ * provided, the Portal needs scoped write access to mint browser sessions for
+ * verified GitHub users, mirroring the scope Review already holds. Without
+ * this grant, `createBrowserSession` fails with a Deno permission denial that
+ * the catch block swallows, logging a misleading "roster miss" for humans who
+ * do exist.
  */
 export function portalPerms(
   hostname: string = LOOPBACK_HOSTNAME,
   enableGithub = false,
+  paths?: { sessions: string },
 ): readonly string[] {
   const base = ["--allow-read", "--allow-env"];
   const hosts = [
@@ -52,7 +61,11 @@ export function portalPerms(
   if (enableGithub) {
     hosts.push(...githubNetHosts());
   }
-  return [...base, `--allow-net=${hosts.join(",")}`];
+  const perms = [...base, `--allow-net=${hosts.join(",")}`];
+  if (enableGithub && paths?.sessions) {
+    perms.push(`--allow-write=${paths.sessions},${paths.sessions}.tmp`);
+  }
+  return perms;
 }
 
 export function gatewayPerms(hostname: string = LOOPBACK_HOSTNAME): readonly string[] {
