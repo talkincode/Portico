@@ -185,14 +185,14 @@ fi
 
 # The product page, not an error page. The live Portal answers a 404 with the
 # same `<title>Portico · Portico</title>` and the same shell, so a title check
-# alone accepts an error page: the channel rail only renders for a real
+# alone accepts an error page: the category navigation only renders for a real
 # discovery page.
 probe "$PORTAL/"
 if [ "$code" = "200" ] && contains "$payload" '<title>Portico' &&
-  contains "$payload" 'class="filter-tabs"'; then
+  contains "$payload" 'class="nav"'; then
   ok portal-product-page
 else
-  bad portal-product-page "HTTP $code is not the discovery shell (title or channel rail missing)"
+  bad portal-product-page "HTTP $code is not the discovery shell (title or category nav missing)"
 fi
 
 # The Portal may only advertise a Review entrance this deployment serves. This

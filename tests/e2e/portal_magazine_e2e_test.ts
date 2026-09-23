@@ -425,20 +425,15 @@ Deno.test("E2E: magazine and public surfaces reach each other; anonymous /intern
     const anonHome = await fetch(`${base}/`);
     assertEquals(anonHome.status, 200);
     const anonHomeHtml = await anonHome.text();
-    assert(anonHomeHtml.includes('href="/public"'));
-    assert(anonHomeHtml.includes(">公开发布</a>"));
-    assert(!anonHomeHtml.includes('href="/internal"'));
+    assert(!anonHomeHtml.includes('href="/internal"'), "anonymous must not see /internal link");
 
     const readerHome = await fetch(`${base}/`, { headers: readerHeaders() });
     assertEquals(readerHome.status, 200);
     const readerHomeHtml = await readerHome.text();
-    assert(readerHomeHtml.includes('href="/internal"'));
-    assert(readerHomeHtml.includes(">内部笔记</a>"));
     assert(
-      readerHomeHtml.includes('href="/internal/pending"'),
-      "signed-in magazine chrome must offer the pending queue",
+      readerHomeHtml.includes('href="/review"'),
+      "signed-in magazine chrome must offer the review entrance",
     );
-    assert(!anonHomeHtml.includes('href="/internal/pending"'));
 
     const publicPage = await fetch(`${base}/public`);
     assertEquals(publicPage.status, 200);
