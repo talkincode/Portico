@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
-import { cfAccessNetHost, githubNetHosts, reviewPerms } from "../src/perms.ts";
+import { cfAccessNetHost, githubNetHosts, portalPerms, reviewPerms } from "../src/perms.ts";
 
 /**
  * macOS (LaunchDaemon) deployment contract. The Linux docker/systemd scripts
@@ -397,4 +397,41 @@ Deno.test("deploy macos: verify requires a revision pin and honours it", async (
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
+});
+
+Deno.test("deploy macos: portal stays read-only without GitHub OAuth", () => {
+  const plain = portalPerms("127.0.0.1", false);
+  assert(!plain.some((flag) => flag.startsWith("--allow-write")), "no write without github");
+  const withGithubButNoPaths = portalPerms("127.0.0.1", true);
+  assert(
+    !withGithubButNoPaths.some((flag) => flag.startsWith("--allow-write")),
+    "no write with github but without paths",
+  );
+});
+
+Deno.test("deploy macos: portal sessions write grant mirrors review when GitHub OAuth is on", () => {
+  const paths = { sessions: "/app/data/sessions.json" };
+  const flags = portalPerms("127.0.0.1", true, paths);
+  const write = flags.find((flag) => flag.startsWith("--allow-write=")) ?? "";
+  assert(write.includes("/app/data/sessions.json"), "portal write grant must cover sessions");
+  assert(
+    write.includes("/app/data/sessions.json.tmp"),
+    "portal write grant must cover sessions.tmp",
+  );
+  assert(!write.includes("catalog"), "portal must not write catalog");
+  assert(!write.includes("identities"), "portal must not write identities");
+});
+
+Deno.test("deploy macos: portal github hosts stay closed unless GitHub login is on", () => {
+  const plain = portalPerms("127.0.0.1", false);
+  assert(!plain.some((flag) => flag.includes("github.com")), "no github hosts without login");
+  const withGithub = portalPerms("127.0.0.1", true);
+  assert(
+    withGithub.some((flag) => flag.includes("github.com")),
+    "github authorize host granted when enabled",
+  );
+  assert(
+    withGithub.some((flag) => flag.includes("api.github.com")),
+    "github api host granted when enabled",
+  );
 });

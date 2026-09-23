@@ -253,7 +253,11 @@ if (import.meta.main) {
   // so an intranet `PORTICO_BIND` does not produce a startup failure.
   const envObj = Deno.env.toObject();
   const githubEnabled = parseGithubEnv(envObj).enabled;
-  const portalPerms = portalPermsFor(setup.hostname, githubEnabled);
+  const portalPerms = portalPermsFor(
+    setup.hostname,
+    githubEnabled,
+    githubEnabled ? { sessions: setup.sessions } : undefined,
+  );
   const gatewayPerms = gatewayPermsFor(setup.hostname);
   const mcpPerms = readOnlyHttpPerms(setup.hostname);
   const reviewPermsFor = reviewPerms(setup.hostname, {
