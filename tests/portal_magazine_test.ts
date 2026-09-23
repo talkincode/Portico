@@ -120,10 +120,11 @@ Deno.test("dark and light magazine shells share the cyan accent and keep CSP clo
   assert(!lightHtml.includes("<script"), "theme switch must not require a script");
   for (const html of [darkHtml, lightHtml]) {
     assert(html.includes("PORTICO"), "masthead brand");
-    assert(html.includes("内容"));
-    assert(html.includes("专题"));
-    assert(html.includes("收藏"));
-    assert(html.includes("aria-disabled"), "收藏 is display-only");
+    assert(html.includes("全部"), "all categories link");
+    assert(html.includes("信息刺客"), "info-assassin category");
+    assert(html.includes("Mira Radio"), "mira-radio category");
+    assert(html.includes("未分类"), "uncategorized category");
+    assert(html.includes("公开发布"), "public releases link");
   }
 });
 
@@ -302,7 +303,7 @@ function topbarLink(html: string, label: string): { className: string; href: str
   return { className: match[1], href: match[2] };
 }
 
-Deno.test("unfiltered reading page does not default 专题 to web and highlights 内容", async () => {
+Deno.test("unfiltered reading page highlights 全部 category in navigation", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
@@ -312,16 +313,14 @@ Deno.test("unfiltered reading page does not default 专题 to web and highlights
   );
   assertEquals(page.status, 200);
   const html = await page.text();
-  const content = topbarLink(html, "内容");
-  const topic = topbarLink(html, "专题");
-  assertEquals(content.href, "/");
-  assertEquals(content.className, "active");
-  assertEquals(topic.href, "/");
-  assertEquals(topic.className, "");
-  assert(!topic.href.includes("channel=web"), "null channel is all, not a silent web filter");
+  const allCategories = topbarLink(html, "全部");
+  const infoAssassin = topbarLink(html, "信息刺客");
+  assertEquals(allCategories.href, "/");
+  assertEquals(allCategories.className.trim(), "active");
+  assert(!infoAssassin.className.includes("active"), "info-assassin should not be active when no category");
 });
 
-Deno.test("channel-filtered reading page highlights 专题 without dropping the filter", async () => {
+Deno.test("channel-filtered reading page preserves channel in category links", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
@@ -333,12 +332,11 @@ Deno.test("channel-filtered reading page highlights 专题 without dropping the 
   );
   assertEquals(page.status, 200);
   const html = await page.text();
-  const content = topbarLink(html, "内容");
-  const topic = topbarLink(html, "专题");
-  assertEquals(content.href, "/");
-  assertEquals(content.className, "");
-  assertEquals(topic.href, "/?channel=cli");
-  assertEquals(topic.className, "active");
+  const allCategories = topbarLink(html, "全部");
+  const infoAssassin = topbarLink(html, "信息刺客");
+  assert(allCategories.href.includes("channel=cli"), "category links should preserve channel filter");
+  assertEquals(allCategories.className.trim(), "active");
+  assert(infoAssassin.href.includes("channel=cli"), "info-assassin link should preserve channel filter");
 });
 
 function railLinks(html: string): Array<{ className: string; href: string; label: string }> {
@@ -391,7 +389,7 @@ Deno.test("reading page keeps one channel navigator that returns to the filtered
   assert(!html.includes(">MCP 服务<"));
 });
 
-Deno.test("reading page channel tabs and breadcrumb home keep the search query", async () => {
+Deno.test("reading page category links and breadcrumb home keep the search query", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
@@ -403,10 +401,10 @@ Deno.test("reading page channel tabs and breadcrumb home keep the search query",
   );
   assertEquals(page.status, 200);
   const html = await page.text();
-  const content = topbarLink(html, "内容");
-  const topic = topbarLink(html, "专题");
-  assertEquals(content.href, "/?q=Writer");
-  assertEquals(topic.href, "/?channel=cli&amp;q=Writer");
+  const allCategories = topbarLink(html, "全部");
+  const infoAssassin = topbarLink(html, "信息刺客");
+  assert(allCategories.href.includes("q=Writer"), "all-categories link should preserve search query");
+  assert(infoAssassin.href.includes("q=Writer"), "info-assassin link should preserve search query");
 
   const home = html.match(/<nav class="breadcrumbs">\s*<a href="([^"]*)">首页<\/a>/);
   if (!home) throw new Error("reading page must have a breadcrumb home link");

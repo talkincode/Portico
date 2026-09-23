@@ -1,12 +1,13 @@
-import type { AgentSurface, Channel } from "../catalog/mod.ts";
+import type { AgentSurface, Channel, ContentCategory } from "../catalog/mod.ts";
 import type { DashboardView } from "../catalog/dashboard.ts";
-import { CHANNEL_LABEL } from "./design/tokens.ts";
+import { CATEGORY_LABEL, CHANNEL_LABEL } from "./design/tokens.ts";
 import { type ReviewEntry, reviewHref } from "./review-entry.ts";
 
 export type { DashboardView };
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ChannelFilter = Channel | null;
+export type CategoryFilter = ContentCategory | null;
 
 export interface MagazinePick {
   id: string;
@@ -20,6 +21,8 @@ export interface MagazinePick {
 export interface MagazinePageInput {
   theme: ThemeMode;
   channel: ChannelFilter;
+  /** Content category filter (栏目) - primary navigation */
+  category?: CategoryFilter;
   q?: string;
   view: DashboardView;
   selected?: AgentSurface;
@@ -907,6 +910,69 @@ const MAGAZINE_CSS = `
       }
       .empty { color: var(--muted); }
 
+      /* Tags Display */
+      .tags-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.85rem;
+      }
+      .tag-chip {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        background: var(--tag-bg);
+        color: var(--muted);
+        border: 1px solid var(--rule);
+      }
+
+      /* Media Player */
+      .media-player {
+        margin: 1.5rem 0;
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--tag-bg);
+        border: 1px solid var(--rule);
+      }
+      .media-player video,
+      .media-player audio {
+        width: 100%;
+        display: block;
+      }
+      .video-player video {
+        max-height: 480px;
+        background: #000;
+      }
+      .audio-player {
+        padding: 1rem;
+      }
+      .audio-player audio {
+        width: 100%;
+      }
+      .media-link {
+        padding: 1.5rem;
+        text-align: center;
+      }
+      .btn-media {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: var(--accent-soft);
+        color: var(--accent);
+        padding: 0.6rem 1.25rem;
+        border-radius: 6px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: opacity 0.15s;
+      }
+      .btn-media:hover {
+        opacity: 0.85;
+        color: var(--accent);
+        text-decoration: none;
+      }
+
       /* Auth Chrome */
       .auth-chrome {
         display: flex;
@@ -972,21 +1038,30 @@ export function parseChannel(raw: string | null): ChannelFilter {
   return null;
 }
 
+export function parseCategory(raw: string | null): CategoryFilter {
+  if (raw === "info-assassin" || raw === "mira-radio" || raw === "uncategorized") {
+    return raw;
+  }
+  return null;
+}
+
 export function renderMagazinePage(input: MagazinePageInput): string {
   const picks = input.picks ?? [];
   const selected = input.selected;
+  const category = input.category ?? null;
   const path = input.path ?? (selected ? `/s/${encodeURIComponent(selected.id)}` : "/");
   const hero = selected
     ? undefined
     : input.view.surfaces.find((item) => item.governanceState === "approved_public");
   const main = selected
-    ? renderReading(input.view.surfaces, selected, input.theme, input.channel, input.q)
-    : renderHome(input.view.surfaces, hero, input.theme, input.channel, input.q);
-  const side = selected ? "" : renderSidebar(picks, input.theme, input.channel, path);
+    ? renderReading(input.view.surfaces, selected, input.theme, input.channel, category, input.q)
+    : renderHome(input.view.surfaces, hero, input.theme, input.channel, category, input.q);
+  const side = selected ? "" : renderSidebar(picks, input.theme, input.channel, category, path);
   const frameClass = selected ? "frame reading" : "frame home";
   return renderChrome({
     theme: input.theme,
     channel: input.channel,
+    category,
     q: input.q,
     path,
     title: selected ? selected.name : "Portico",
@@ -1034,6 +1109,7 @@ export function escapeHtml(value: string): string {
 function renderChrome(input: {
   theme: ThemeMode;
   channel: ChannelFilter;
+  category?: CategoryFilter;
   q?: string;
   path: string;
   title: string;
@@ -1045,26 +1121,27 @@ function renderChrome(input: {
 }): string {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
   const q = input.q;
-  const contentHref = withQuery("/", input.theme, null, q);
-  const topicHref = withQuery("/", input.theme, input.channel, q);
-  const contentActive = input.channel === null ? " active" : "";
-  const topicActive = input.channel !== null ? " active" : "";
+  const category = input.category ?? null;
+  const allHref = withCategoryQuery("/", input.theme, null, input.channel, q);
+  const infoAssassinHref = withCategoryQuery("/", input.theme, "info-assassin", input.channel, q);
+  const miraRadioHref = withCategoryQuery("/", input.theme, "mira-radio", input.channel, q);
+  const uncategorizedHref = withCategoryQuery("/", input.theme, "uncategorized", input.channel, q);
+  const allActive = category === null ? " active" : "";
+  const infoAssassinActive = category === "info-assassin" ? " active" : "";
+  const miraRadioActive = category === "mira-radio" ? " active" : "";
+  const uncategorizedActive = category === "uncategorized" ? " active" : "";
   const internalLink = input.showInternal === true
     ? `\n        <a class="" href="/internal">内部笔记</a>`
     : "";
   const pendingLink = input.showInternal === true && input.pendingPublic !== undefined
     ? `\n        <a class="" href="/internal/pending">待审 ${input.pendingPublic}</a>`
     : "";
-  // One-click human path: anonymous callers get the login entry, signed-in
-  // callers jump straight to the pending list. Neither leaks /internal, and a
-  // deployment that serves no Review entrance renders no entry at all.
   const review = reviewHref(input.reviewEntry, input.showInternal === true);
   const reviewLink = review
     ? `\n        <a class="" href="${escapeHtml(review)}">${
       input.showInternal === true ? "去审核" : "审核登录"
     }</a>`
     : "";
-  // Auth chrome: show login link for anonymous, whoami + logout for signed-in
   const authChrome = input.signedInId
     ? `<span class="auth-user">${
       escapeHtml(input.signedInId)
@@ -1087,13 +1164,14 @@ function renderChrome(input: {
           <path d="M9 4v16"/>
           <path d="M14 9l3 3-3 3"/>
         </svg>
-        <a class="brand" href="${escapeHtml(contentHref)}">PORTICO</a>
+        <a class="brand" href="${escapeHtml(allHref)}">PORTICO</a>
       </div>
       <nav class="nav">
-        <a class="${contentActive.trim()}" href="${escapeHtml(contentHref)}">内容</a>
-        <a class="${topicActive.trim()}" href="${escapeHtml(topicHref)}">专题</a>
+        <a class="${allActive.trim()}" href="${escapeHtml(allHref)}">全部</a>
+        <a class="${infoAssassinActive.trim()}" href="${escapeHtml(infoAssassinHref)}">${escapeHtml(CATEGORY_LABEL["info-assassin"])}</a>
+        <a class="${miraRadioActive.trim()}" href="${escapeHtml(miraRadioHref)}">${escapeHtml(CATEGORY_LABEL["mira-radio"])}</a>
+        <a class="${uncategorizedActive.trim()}" href="${escapeHtml(uncategorizedHref)}">${escapeHtml(CATEGORY_LABEL.uncategorized)}</a>
         <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}
-        <span aria-disabled="true">收藏</span>
       </nav>
       <div class="topbar-right">
         ${reviewLink ? `<span class="review-entry">${reviewLink.trim()}</span>` : ""}
@@ -1103,6 +1181,7 @@ function renderChrome(input: {
       ? ""
       : `<input type="hidden" name="theme" value="${escapeHtml(input.theme)}">`
   }
+          ${category ? `<input type="hidden" name="category" value="${escapeHtml(category)}">` : ""}
           ${
     input.channel ? `<input type="hidden" name="channel" value="${escapeHtml(input.channel)}">` : ""
   }
@@ -1135,38 +1214,40 @@ function renderHome(
   hero: AgentSurface | undefined,
   theme: ThemeMode,
   channel: ChannelFilter,
+  category: CategoryFilter,
   q?: string,
 ): string {
   const empty = surfaces.length === 0 ? `<p class="empty">没有可见的 Agent 表面。</p>` : "";
-  const heroHtml = hero ? renderHero(hero, theme, channel) : "";
-  const filterTabs = renderFilterTabs(theme, channel, "/", q);
-  const cards = surfaces.map((surface, idx) => renderCard(surface, theme, channel, { index: idx }))
+  const heroHtml = hero ? renderHero(hero, theme, channel, category) : "";
+  const channelFilterTabs = renderChannelFilterTabs(theme, channel, category, "/", q);
+  const cards = surfaces.map((surface, idx) => renderCard(surface, theme, channel, category, { index: idx }))
     .join("");
   return `<main>
       ${heroHtml}
-      ${filterTabs}
+      ${channelFilterTabs}
       <section class="stream">${empty}${cards}</section>
     </main>`;
 }
 
-function renderFilterTabs(
+function renderChannelFilterTabs(
   theme: ThemeMode,
   channel: ChannelFilter,
+  category: CategoryFilter,
   path: string,
   q?: string,
 ): string {
   const items: Array<{ id: ChannelFilter; label: string }> = [
-    { id: null, label: "全部" },
+    { id: null, label: "全部渠道" },
     { id: "web", label: "Web" },
     { id: "cli", label: "CLI" },
     { id: "mcp", label: "MCP" },
   ];
   const links = items.map((item) => {
-    const href = withQuery(path.startsWith("/s/") ? path : "/", theme, item.id, q);
+    const href = withCategoryQuery(path.startsWith("/s/") ? path : "/", theme, category, item.id, q);
     const active = channel === item.id ? " active" : "";
-    return `<a class="${active.trim()}" href="${escapeHtml(href)}">${item.label}</a>`;
+    return `<a class="badge-chip${active}" href="${escapeHtml(href)}">${item.label}</a>`;
   }).join("");
-  return `<nav class="filter-tabs">${links}</nav>`;
+  return `<nav class="filter-tabs" aria-label="渠道过滤">${links}</nav>`;
 }
 
 function renderReading(
@@ -1174,13 +1255,14 @@ function renderReading(
   selected: AgentSurface,
   theme: ThemeMode,
   channel: ChannelFilter,
+  category: CategoryFilter,
   q?: string,
 ): string {
-  const contentHref = withQuery("/", theme, null, q);
+  const contentHref = withCategoryQuery("/", theme, category, null, q);
   const crumbChannel = readingChannel(selected, channel);
-  const crumbHref = withQuery("/", theme, crumbChannel, q);
+  const crumbHref = withCategoryQuery("/", theme, category, crumbChannel, q);
   const cards = surfaces.map((surface, idx) =>
-    renderCard(surface, theme, channel, { compact: true, currentId: selected.id, index: idx })
+    renderCard(surface, theme, channel, category, { compact: true, currentId: selected.id, index: idx })
   ).join("");
 
   return `
@@ -1191,25 +1273,25 @@ function renderReading(
       </div>
       <nav class="rail-nav">
         <a class="rail-link${channel === null ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, null, q))
+    escapeHtml(withCategoryQuery("/", theme, category, null, q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           <span>全部服务</span>
         </a>
         <a class="rail-link${channel === "web" ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, "web", q))
+    escapeHtml(withCategoryQuery("/", theme, category, "web", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           <span>${escapeHtml(CHANNEL_LABEL.web)}</span>
         </a>
         <a class="rail-link${channel === "cli" ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, "cli", q))
+    escapeHtml(withCategoryQuery("/", theme, category, "cli", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
           <span>${escapeHtml(CHANNEL_LABEL.cli)}</span>
         </a>
         <a class="rail-link${channel === "mcp" ? " active" : ""}" href="${
-    escapeHtml(withQuery("/", theme, "mcp", q))
+    escapeHtml(withCategoryQuery("/", theme, category, "mcp", q))
   }">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           <span>${escapeHtml(CHANNEL_LABEL.mcp)}</span>
@@ -1240,18 +1322,23 @@ function renderReading(
   }</a> &gt; <span>${escapeHtml(selected.name)}</span>
       </nav>
       <p class="reading-exit"><a class="back-to-list" href="${
-    escapeHtml(withQuery("/", theme, channel, q))
+    escapeHtml(withCategoryQuery("/", theme, category, channel, q))
   }">返回列表</a></p>
 
       <div class="detail-header">
         <div class="detail-kicker-row">
-          <span class="badge-chip">${escapeHtml(channelLabel(selected.channels))}</span>
+          <span class="badge-chip">${escapeHtml(categoryLabel(selected.category))}</span>
+          <span class="badge-chip" style="background: var(--tag-bg); color: var(--muted);">${escapeHtml(channelLabel(selected.channels))}</span>
           <span class="kicker">${governanceLabel(selected.governanceState)}</span>
           <span class="version-tag">v${escapeHtml(selected.version)}</span>
         </div>
         <h1>${escapeHtml(selected.name)}</h1>
         <p class="lead-paragraph">${escapeHtml(selected.description)}</p>
+        ${renderTagsDisplay(selected.tags)}
       </div>
+
+      <!-- Media Playback (if available) -->
+      ${renderMediaPlayer(selected.mediaUrl)}
 
       <!-- Access and Direct Connection Box -->
       ${renderAccessBox(selected)}
@@ -1426,10 +1513,11 @@ function renderSidebar(
   picks: MagazinePick[],
   theme: ThemeMode,
   channel: ChannelFilter,
+  category: CategoryFilter,
   _path: string,
 ): string {
   const pickHtml = picks.map((pick, index) => {
-    const href = withQuery(`/s/${encodeURIComponent(pick.id)}`, theme, channel);
+    const href = withCategoryQuery(`/s/${encodeURIComponent(pick.id)}`, theme, category, channel);
     const num = (index + 1).toString().padStart(2, "0");
     return `        <article class="pick-item" data-kind="catalog_card" data-id="${
       escapeHtml(pick.id)
@@ -1505,8 +1593,13 @@ function renderSidebar(
     </aside>`;
 }
 
-function renderHero(surface: AgentSurface, theme: ThemeMode, channel: ChannelFilter): string {
-  const href = withQuery(`/s/${encodeURIComponent(surface.id)}`, theme, channel);
+function renderHero(
+  surface: AgentSurface,
+  theme: ThemeMode,
+  channel: ChannelFilter,
+  category: CategoryFilter,
+): string {
+  const href = withCategoryQuery(`/s/${encodeURIComponent(surface.id)}`, theme, category, channel);
   return `<section class="hero" data-hero data-id="${escapeHtml(surface.id)}" data-governance="${
     escapeHtml(surface.governanceState)
   }">
@@ -1544,9 +1637,10 @@ function renderCard(
   surface: AgentSurface,
   theme: ThemeMode,
   channel: ChannelFilter,
+  category: CategoryFilter,
   opts: { compact?: boolean; currentId?: string; index?: number } = {},
 ): string {
-  const href = withQuery(`/s/${encodeURIComponent(surface.id)}`, theme, channel);
+  const href = withCategoryQuery(`/s/${encodeURIComponent(surface.id)}`, theme, category, channel);
   const current = opts.currentId === surface.id ? " current" : "";
 
   if (opts.compact) {
@@ -1665,6 +1759,59 @@ function channelLabel(channels: string[]): string {
   return channels.map((item) => CHANNEL_LABEL[item as Channel] ?? item).join(" · ");
 }
 
+function categoryLabel(category: ContentCategory | undefined): string {
+  if (!category) return CATEGORY_LABEL.uncategorized;
+  const label = CATEGORY_LABEL[category];
+  return label !== undefined ? label : CATEGORY_LABEL.uncategorized;
+}
+
+function renderTagsDisplay(tags: string[] | undefined): string {
+  if (!tags || tags.length === 0) return "";
+  const tagHtml = tags.map((tag) =>
+    `<span class="tag-chip">${escapeHtml(tag)}</span>`
+  ).join("");
+  return `<div class="tags-row">${tagHtml}</div>`;
+}
+
+function renderMediaPlayer(mediaUrl: string | undefined): string {
+  if (!mediaUrl) return "";
+  const safeUrl = escapeHtml(mediaUrl);
+  const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(mediaUrl) ||
+    mediaUrl.includes("video") ||
+    mediaUrl.includes("youtube") ||
+    mediaUrl.includes("vimeo");
+  const isAudio = /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(mediaUrl) ||
+    mediaUrl.includes("audio") ||
+    mediaUrl.includes("podcast");
+
+  if (isVideo) {
+    return `
+      <div class="media-player video-player">
+        <video controls preload="metadata">
+          <source src="${safeUrl}" />
+          您的浏览器不支持视频播放。<a href="${safeUrl}" target="_blank">下载视频</a>
+        </video>
+      </div>`;
+  }
+
+  if (isAudio) {
+    return `
+      <div class="media-player audio-player">
+        <audio controls preload="metadata">
+          <source src="${safeUrl}" />
+          您的浏览器不支持音频播放。<a href="${safeUrl}" target="_blank">下载音频</a>
+        </audio>
+      </div>`;
+  }
+
+  return `
+    <div class="media-player media-link">
+      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="btn-media">
+        播放媒体 ↗
+      </a>
+    </div>`;
+}
+
 function byline(surface: AgentSurface): string {
   const lead = surface.maintainers[0];
   return lead ? lead.id : "";
@@ -1706,5 +1853,21 @@ function withQuery(
   q?: string,
 ): string {
   const query = queryOf(theme, channel, q).toString();
+  return query ? `${path}?${query}` : path;
+}
+
+function withCategoryQuery(
+  path: string,
+  theme: ThemeMode,
+  category: CategoryFilter,
+  channel: ChannelFilter,
+  q?: string,
+): string {
+  const params = new URLSearchParams();
+  if (theme !== "system") params.set("theme", theme);
+  if (category) params.set("category", category);
+  if (channel) params.set("channel", channel);
+  if (q) params.set("q", q);
+  const query = params.toString();
   return query ? `${path}?${query}` : path;
 }

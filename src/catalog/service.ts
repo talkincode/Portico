@@ -17,6 +17,7 @@ import type {
   CatalogChangeRecord,
   Channel,
   CliPackageInfo,
+  ContentCategory,
   EntryKind,
   EntryRef,
   GovernanceState,
@@ -41,6 +42,9 @@ const ALLOWED_REGISTER_KEYS = new Set([
   "visibility",
   "entry",
   "maintainers",
+  "category",
+  "tags",
+  "mediaUrl",
 ]);
 const ALLOWED_PUBLISH_KEYS = new Set(["id", "visibility"]);
 const ALLOWED_UPDATE_KEYS = new Set([
@@ -50,6 +54,9 @@ const ALLOWED_UPDATE_KEYS = new Set([
   "channels",
   "version",
   "entry",
+  "category",
+  "tags",
+  "mediaUrl",
 ]);
 const UPDATE_MUTABLE_KEYS = new Set([
   "name",
@@ -57,6 +64,9 @@ const UPDATE_MUTABLE_KEYS = new Set([
   "channels",
   "version",
   "entry",
+  "category",
+  "tags",
+  "mediaUrl",
 ]);
 const ALLOWED_APPROVAL_KEYS = new Set(["id", "note"]);
 const APPROVAL_NOTE_MAX = 500;
@@ -195,6 +205,9 @@ const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
 const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
 const ACTOR_ROLES = new Set<ActorRole>(["reader", "maintainer", "auditor", "anonymous"]);
+const CATEGORIES = new Set<ContentCategory>(["info-assassin", "mira-radio", "uncategorized"]);
+const MAX_TAGS = 20;
+const MAX_TAG_LENGTH = 50;
 
 export class CatalogService {
   constructor(private readonly store: CatalogStore) {}
@@ -1093,7 +1106,7 @@ function parseUpdateInput(input: UpdateInput): { id: string; fields: Partial<Upd
   if (mutableKeys.length === 0) {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
-      "update requires at least one of: name, description, channels, version, entry",
+      "update requires at least one of: name, description, channels, version, entry, category, tags, mediaUrl",
     );
   }
 
@@ -1111,6 +1124,9 @@ function parseUpdateInput(input: UpdateInput): { id: string; fields: Partial<Upd
   }
   if ("channels" in input) fields.channels = parseChannels(input.channels);
   if ("entry" in input) fields.entry = parseEntry(input.entry);
+  if ("category" in input) fields.category = parseCategory(input.category);
+  if ("tags" in input) fields.tags = parseTags(input.tags);
+  if ("mediaUrl" in input) fields.mediaUrl = parseMediaUrl(input.mediaUrl);
 
   return { id: input.id, fields };
 }
@@ -1159,6 +1175,9 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
   assertChannelEntry(channels, entry);
   assertWebEntryNotSelfPage(input.id, entry);
   const maintainers = parseMaintainers(input.maintainers);
+  const category = parseCategory(input.category);
+  const tags = parseTags(input.tags);
+  const mediaUrl = parseMediaUrl(input.mediaUrl);
 
   return {
     id: input.id,
@@ -1169,6 +1188,9 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
     visibility: input.visibility,
     entry,
     maintainers,
+    ...(category ? { category } : {}),
+    ...(tags ? { tags } : {}),
+    ...(mediaUrl ? { mediaUrl } : {}),
   };
 }
 
@@ -1478,6 +1500,109 @@ function parseMaintainers(value: unknown): MaintainerRef[] {
     }
     return { id: ref.id, kind: ref.kind };
   });
+}
+
+function parseCategory(value: unknown): ContentCategory | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "category must be a string");
+  }
+  if (!CATEGORIES.has(value as ContentCategory)) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      `category must be one of: ${[...CATEGORIES].join(", ")}`,
+    );
+  }
+  return value as ContentCategory;
+}
+
+function parseTags(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "tags must be an array");
+  }
+  if (value.length > MAX_TAGS) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      `tags cannot have more than ${MAX_TAGS} items`,
+    );
+  }
+  const tags: string[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i];
+    if (typeof item !== "string") {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `tags[${i}] must be a string`,
+      );
+    }
+    const tag = item.trim().toLowerCase();
+    if (!tag) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `tags[${i}] must not be empty`,
+      );
+    }
+    if (tag.length > MAX_TAG_LENGTH) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `tags[${i}] is too long (max ${MAX_TAG_LENGTH} chars)`,
+      );
+    }
+    if (/[<>"'&]/.test(tag)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        `tags[${i}] contains invalid characters`,
+      );
+    }
+    if (containsPlaintextSecretValue(tag)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_INPUT,
+        "plaintext secret fields are not allowed; store a reference instead",
+      );
+    }
+    if (!tags.includes(tag)) {
+      tags.push(tag);
+    }
+  }
+  return tags.length > 0 ? tags : undefined;
+}
+
+function parseMediaUrl(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new CatalogError(ErrorCode.INVALID_INPUT, "mediaUrl must be a string");
+  }
+  const url = value.trim();
+  if (!url) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mediaUrl must be an absolute http(s) URL",
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mediaUrl must be an http(s) URL",
+    );
+  }
+  if (parsed.username || parsed.password) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "mediaUrl must not include userinfo; store a secret reference instead",
+    );
+  }
+  if (containsPlaintextSecretValue(url)) {
+    throw new CatalogError(
+      ErrorCode.INVALID_INPUT,
+      "plaintext secret fields are not allowed; store a reference instead",
+    );
+  }
+  return url;
 }
 
 function requireText(value: unknown, field: string, max: number): string {

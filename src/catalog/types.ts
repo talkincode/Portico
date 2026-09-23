@@ -9,6 +9,12 @@ export type GovernanceState =
 export type ActorKind = "human" | "agent";
 export type ActorRole = "reader" | "maintainer" | "auditor" | "anonymous";
 export type ApprovalDecision = "approved" | "rejected";
+
+/**
+ * Content categories for portal navigation (栏目).
+ * These are the primary navigation taxonomy; channels are demoted to filters/badges.
+ */
+export type ContentCategory = "info-assassin" | "mira-radio" | "uncategorized";
 /** A public-boundary decision recorded in the approval trail. `withdrawn` ends
  * public reachability of an already approved surface; it is not an approval. */
 export type PublicDecision = ApprovalDecision | "withdrawn";
@@ -48,6 +54,20 @@ export interface AgentSurface {
   publicSubmission?: PublicSubmission;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Content category for portal navigation (栏目).
+   * Defaults to "uncategorized" when not specified.
+   */
+  category?: ContentCategory;
+  /**
+   * Tags for filtering and search. Distinct from categories.
+   */
+  tags?: string[];
+  /**
+   * Optional media URL for audio/video playback.
+   * Must be an absolute http(s) URL pointing to audio/video content.
+   */
+  mediaUrl?: string;
 }
 
 export interface ApprovalRecord {
@@ -127,6 +147,19 @@ export interface RegisterInput {
   visibility: Visibility;
   entry: EntryRef;
   maintainers: MaintainerRef[];
+  /**
+   * Content category for portal navigation (栏目).
+   * Defaults to "uncategorized" when not specified.
+   */
+  category?: ContentCategory;
+  /**
+   * Tags for filtering and search.
+   */
+  tags?: string[];
+  /**
+   * Optional media URL for audio/video playback.
+   */
+  mediaUrl?: string;
 }
 
 export interface PublishInput {
@@ -141,6 +174,18 @@ export interface UpdateInput {
   channels?: Channel[];
   version?: string;
   entry?: EntryRef;
+  /**
+   * Content category for portal navigation (栏目).
+   */
+  category?: ContentCategory;
+  /**
+   * Tags for filtering and search.
+   */
+  tags?: string[];
+  /**
+   * Optional media URL for audio/video playback.
+   */
+  mediaUrl?: string;
 }
 
 export interface ApprovalDecisionInput {
