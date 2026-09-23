@@ -597,8 +597,11 @@ Deno.test("E2E: an unusable cutoff is refused everywhere, and the role gate is a
       // The page stays invisible, cutoff or not.
       const pageRefused = await fetch(`${portalUrl}/internal/audit?asOf=yesterday`, {
         headers: authHeaders(session),
+        redirect: "manual",
       });
-      assertEquals(pageRefused.status, 404, label);
+      // Anonymous is redirected to login (303), authenticated non-auditors get 404.
+      const expectedStatus = session === null ? 303 : 404;
+      assertEquals(pageRefused.status, expectedStatus, label);
     }
 
     // Every refusal above left the trail exactly as it was.

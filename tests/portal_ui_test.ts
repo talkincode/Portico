@@ -108,31 +108,7 @@ Deno.test("the internal console shows governance states the public page must nev
   );
 });
 
-Deno.test("anonymous callers get 404 on every internal route, never a 403", async () => {
-  const context = await seeded();
-  await context.catalog.register(maintainer, surface());
-
-  for (
-    const path of [
-      "/internal",
-      "/internal/c",
-      "/internal/audit",
-      "/internal/approvals",
-      "/internal/pending",
-      "/internal/s/docs-writer",
-    ]
-  ) {
-    const { status, html } = await get(context, path);
-    assertEquals(status, 404, `${path} must be 404 for anonymous`);
-    assert(!html.includes("Docs Writer"), `${path} must not leak an internal record`);
-    assert(
-      !html.includes("FORBIDDEN"),
-      `${path} must not confirm that an internal console exists`,
-    );
-  }
-});
-
-Deno.test("anonymous internal pages 404 as HTML, not a JSON envelope", async () => {
+Deno.test("anonymous callers redirect to login on every internal route, never a 403", async () => {
   const context = await seeded();
   await context.catalog.register(maintainer, surface());
 
@@ -150,14 +126,41 @@ Deno.test("anonymous internal pages 404 as HTML, not a JSON envelope", async () 
       new Request(`http://portico.local${path}`),
       context,
     );
-    assertEquals(response.status, 404, `${path} must be 404 for anonymous`);
-    assertEquals(
-      response.headers.get("content-type"),
-      "text/html; charset=utf-8",
-      `${path} must be a page, not an API error`,
+    assertEquals(response.status, 303, `${path} must redirect anonymous to login`);
+    const location = response.headers.get("location");
+    assert(location?.startsWith("/login"), `${path} must redirect to /login`);
+    assert(location?.includes(`next=`), `${path} redirect must carry a next param`);
+    const html = await response.text();
+    assert(!html.includes("Docs Writer"), `${path} must not leak an internal record`);
+    assert(
+      !html.includes("FORBIDDEN"),
+      `${path} must not confirm that an internal console exists`,
     );
+  }
+});
+
+Deno.test("anonymous internal pages redirect to login, not a JSON envelope", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  for (
+    const path of [
+      "/internal",
+      "/internal/c",
+      "/internal/audit",
+      "/internal/approvals",
+      "/internal/pending",
+      "/internal/s/docs-writer",
+    ]
+  ) {
+    const response = await handlePortalRequest(
+      new Request(`http://portico.local${path}`),
+      context,
+    );
+    assertEquals(response.status, 303, `${path} must redirect anonymous to login`);
+    const location = response.headers.get("location");
+    assert(location?.startsWith("/login"), `${path} redirect must go to /login`);
     const body = await response.text();
-    assert(body.includes("<!DOCTYPE html>"), `${path} must render HTML`);
     assert(!body.trimStart().startsWith("{"), `${path} must not leak a JSON envelope`);
     assert(!body.includes("Docs Writer"), `${path} must not leak an internal record`);
     assert(!body.includes("FORBIDDEN"), `${path} must not confirm the console exists`);
@@ -650,11 +653,19 @@ Deno.test("the pending queue shows an escaped entry as text and never links it",
     "a pending entry must not be a clickable target",
   );
 
-  const asAnon = await get(context, "/internal/pending");
-  assertEquals(asAnon.status, 404);
+  const anonResponse = await handlePortalRequest(
+    new Request("http://portico.local/internal/pending"),
+    context,
+  );
+  assertEquals(anonResponse.status, 303, "anonymous /internal/pending must redirect to login");
   assert(
-    !asAnon.html.includes("pending.example.test"),
-    "anonymous 404 must not leak the pending entry",
+    anonResponse.headers.get("location")?.startsWith("/login"),
+    "anonymous redirect must go to /login",
+  );
+  const anonBody = await anonResponse.text();
+  assert(
+    !anonBody.includes("pending.example.test"),
+    "anonymous redirect must not leak the pending entry",
   );
 });
 
@@ -725,20 +736,28 @@ Deno.test("the pending queue labels entry kinds as text and never links them", a
   assert(!/<form/i.test(page.html), "labeling kinds must not add a write form");
   assert(!/<button/i.test(page.html), "labeling kinds must not add an approve button");
 
-  const asAnon = await get(context, "/internal/pending");
-  assertEquals(asAnon.status, 404);
-  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak pending names");
+  const anonResponse = await handlePortalRequest(
+    new Request("http://portico.local/internal/pending"),
+    context,
+  );
+  assertEquals(anonResponse.status, 303, "anonymous /internal/pending must redirect to login");
   assert(
-    !asAnon.html.includes("pending-web.example.test"),
-    "anonymous 404 must not leak the url entry",
+    anonResponse.headers.get("location")?.startsWith("/login"),
+    "anonymous redirect must go to /login",
+  );
+  const anonBody = await anonResponse.text();
+  assert(!anonBody.includes("Pending CLI"), "anonymous redirect must not leak pending names");
+  assert(
+    !anonBody.includes("pending-web.example.test"),
+    "anonymous redirect must not leak the url entry",
   );
   assert(
-    !asAnon.html.includes("pending-mcp.example.test"),
-    "anonymous 404 must not leak the mcp entry",
+    !anonBody.includes("pending-mcp.example.test"),
+    "anonymous redirect must not leak the mcp entry",
   );
   assert(
-    !asAnon.html.includes("jsr:@example/pending-cli"),
-    "anonymous 404 must not leak the package coordinate",
+    !anonBody.includes("jsr:@example/pending-cli"),
+    "anonymous redirect must not leak the package coordinate",
   );
 
   assertEquals(
@@ -841,14 +860,22 @@ Deno.test("the pending queue filters pending_public candidates by channel as rea
   assert(unknown.html.includes("Pending Web"), "unknown channel must still list web candidates");
   assert(unknown.html.includes("Pending MCP"), "unknown channel must still list mcp candidates");
 
-  const asAnon = await get(context, "/internal/pending?channel=cli");
-  assertEquals(asAnon.status, 404);
-  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak filtered names");
-  assert(
-    !asAnon.html.includes("jsr:@example/pending-cli"),
-    "anonymous 404 must not leak a filtered package coordinate",
+  const anonResponse = await handlePortalRequest(
+    new Request("http://portico.local/internal/pending?channel=cli"),
+    context,
   );
-  assert(!asAnon.html.includes("待审队列"), "anonymous 404 must not advertise the queue");
+  assertEquals(anonResponse.status, 303, "anonymous /internal/pending with filter must redirect to login");
+  assert(
+    anonResponse.headers.get("location")?.startsWith("/login"),
+    "anonymous redirect must go to /login",
+  );
+  const anonBody = await anonResponse.text();
+  assert(!anonBody.includes("Pending CLI"), "anonymous redirect must not leak filtered names");
+  assert(
+    !anonBody.includes("jsr:@example/pending-cli"),
+    "anonymous redirect must not leak a filtered package coordinate",
+  );
+  assert(!anonBody.includes("待审队列"), "anonymous redirect must not advertise the queue");
 
   assertEquals(
     JSON.stringify(await context.catalog.list(maintainer)),
@@ -952,12 +979,20 @@ Deno.test("the pending queue channel tabs show pending counts and ignore interna
   );
   assert(!/<button/i.test(asCli.html), "auditor must not get an approve button after counting");
 
-  const asAnon = await get(context, "/internal/pending?channel=cli");
-  assertEquals(asAnon.status, 404);
-  assert(!asAnon.html.includes("Pending CLI"), "anonymous 404 must not leak pending names");
+  const anonResponse = await handlePortalRequest(
+    new Request("http://portico.local/internal/pending?channel=cli"),
+    context,
+  );
+  assertEquals(anonResponse.status, 303, "anonymous /internal/pending must redirect to login");
   assert(
-    !asAnon.html.includes('href="/internal/pending?channel=cli"'),
-    "anonymous 404 must not advertise channel counts",
+    anonResponse.headers.get("location")?.startsWith("/login"),
+    "anonymous redirect must go to /login",
+  );
+  const anonBody = await anonResponse.text();
+  assert(!anonBody.includes("Pending CLI"), "anonymous redirect must not leak pending names");
+  assert(
+    !anonBody.includes('href="/internal/pending?channel=cli"'),
+    "anonymous redirect must not advertise channel counts",
   );
 
   assertEquals(
@@ -1250,8 +1285,16 @@ Deno.test("public and internal planes link back to magazine discovery without le
   );
   assert(readerInternal.html.includes(">发现</a>"));
 
-  const anonInternal = await get(context, "/internal");
-  assertEquals(anonInternal.status, 404);
-  assert(!anonInternal.html.includes("Docs Web"));
+  const anonInternalResponse = await handlePortalRequest(
+    new Request("http://portico.local/internal"),
+    context,
+  );
+  assertEquals(anonInternalResponse.status, 303, "anonymous /internal must redirect to login");
+  assert(
+    anonInternalResponse.headers.get("location")?.startsWith("/login"),
+    "anonymous redirect must go to /login",
+  );
+  const anonInternalBody = await anonInternalResponse.text();
+  assert(!anonInternalBody.includes("Docs Web"), "anonymous redirect must not leak internal data");
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
 });

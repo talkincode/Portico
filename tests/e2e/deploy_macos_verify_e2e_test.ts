@@ -31,7 +31,7 @@ const CHECKS = [
   "portal-public",
   "review-public",
   "catalog-envelope",
-  "internal-anon-404",
+  "internal-anon-fail-closed",
   "gateway-does-not-execute-tools",
   "mcp-jsonrpc-initialize",
 ];

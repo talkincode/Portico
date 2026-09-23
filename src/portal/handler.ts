@@ -26,6 +26,7 @@ import {
 import { type GatewayService, listGatewayAudit } from "../gateway/mod.ts";
 import { type PageService } from "../ui/mod.ts";
 import {
+  esc,
   prefersDark,
   type PublicContext,
   renderApprovalsView,
@@ -36,6 +37,7 @@ import {
   renderPublicArticle,
   renderPublicIndex,
   renderPublicTopic,
+  renderShell,
   renderSurfaceView,
   resolvePageTheme,
   summarize,
@@ -47,9 +49,20 @@ import type { ReviewEntry } from "./review-entry.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
 import { audienceReport } from "../catalog/audience.ts";
 import { boundarySweep } from "../catalog/boundary.ts";
+import {
+  type ExchangeGithubCode,
+  githubAuthorizeUrl,
+  type GithubOauthConfig,
+  isAllowedGithubUser,
+} from "../review/github.ts";
 
 export interface PortalCfAccess {
   verify(assertion: string): Promise<{ email: string } | null>;
+}
+
+export interface PortalGithub {
+  config: GithubOauthConfig;
+  exchange: ExchangeGithubCode;
 }
 
 export interface PortalContext {
@@ -80,6 +93,12 @@ export interface PortalContext {
    * deployment ships no Review behind the chrome, so no page advertises one.
    */
   reviewEntry?: ReviewEntry;
+  /**
+   * Optional Portal GitHub OAuth login. Verified, allowlisted GitHub users
+   * mint a normal Portico browser session for the roster human their email
+   * matches. Absent means off.
+   */
+  github?: PortalGithub;
 }
 
 export async function handlePortalRequest(
@@ -88,6 +107,13 @@ export async function handlePortalRequest(
 ): Promise<Response> {
   try {
     const url = new URL(request.url);
+
+    // Login routes must be handled before requiring GET-only
+    if (url.pathname === "/login") return await handleLogin(request, context);
+    if (url.pathname === "/logout") return await handleLogout(request, context);
+    if (url.pathname === "/oauth/start") return handleOauthStart(request, context);
+    if (url.pathname === "/oauth/callback") return await handleOauthCallback(request, context);
+
     const actor = await resolveActor(request, context);
     if (request.method !== "GET") {
       return jsonError(405, ErrorCode.USAGE, "method not allowed");
@@ -217,11 +243,13 @@ export async function handlePortalRequest(
 
     // ── internal console ─────────────────────────────────────────────────
     // Everything below is served only to identities that already see internal
-    // records. Anonymous requests get a 404, not a 403: an unauthenticated
-    // caller learns nothing about which routes exist.
+    // records. Anonymous requests redirect to login with the requested path
+    // preserved so they can return after authenticating. API/JSON probes still
+    // see no catalog contents — the redirect is HTML-only.
     if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) {
       if (actor.role === "anonymous") {
-        return htmlNotFound(request, context.reviewEntry);
+        const next = url.pathname + url.search;
+        return loginRedirect(next);
       }
       return await internalPage(request, url, actor, context);
     }
@@ -276,6 +304,7 @@ export async function handlePortalRequest(
             showInternal: actor.role !== "anonymous",
             pendingPublic,
             reviewEntry: context.reviewEntry,
+            signedInId: actor.role !== "anonymous" ? actor.id : undefined,
           }));
         } catch (error) {
           if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
@@ -294,6 +323,7 @@ export async function handlePortalRequest(
         showInternal: actor.role !== "anonymous",
         pendingPublic,
         reviewEntry: context.reviewEntry,
+        signedInId: actor.role !== "anonymous" ? actor.id : undefined,
       }));
     }
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
@@ -333,14 +363,32 @@ function canonicalMagazineReadingUrl(url: URL, selected: AgentSurface): URL | nu
  * There is deliberately no `X-Portico-Actor-*` path: a header is not proof of
  * an identity, and the roster ids are published in the README.
  *
+ * Session tokens can come from:
+ * 1. `Authorization: Bearer` or `X-Portico-Session` headers (API style)
+ * 2. `portico_session` cookie (browser style, set by /login)
+ *
  * A verified Cloudflare Access JWT is a Portal-only fallback: it never writes
  * a session, never outranks a presented Portico session, and the plaintext
  * `Cf-Access-Authenticated-User-Email` header is not proof.
  */
 async function resolveActor(request: Request, context: PortalContext): Promise<Actor> {
-  const sessionToken = readSessionToken(request);
-  if (sessionToken) {
-    return await context.access.resolveRequestActor({ sessionToken });
+  const headerToken = readSessionToken(request);
+  if (headerToken) {
+    // API-style session tokens (Authorization header or X-Portico-Session)
+    // must throw on invalid/revoked sessions — the caller explicitly presented
+    // proof and it's wrong, so FORBIDDEN is the right answer.
+    return await context.access.resolveSession(headerToken);
+  }
+  const cookieToken = readSessionCookie(request);
+  if (cookieToken) {
+    // Cookie-based sessions (browser flow) fall back to anonymous when
+    // invalid/expired — a stale cookie from a previous session should redirect
+    // to login, not 403 an unsuspecting browser.
+    try {
+      return await context.access.resolveSession(cookieToken);
+    } catch {
+      // Invalid or expired cookie session: fall through to anonymous or CF Access.
+    }
   }
   if (context.cfAccess) {
     const assertion = request.headers.get("cf-access-jwt-assertion");
@@ -356,7 +404,7 @@ async function resolveActor(request: Request, context: PortalContext): Promise<A
       }
     }
   }
-  return await context.access.resolveRequestActor({ sessionToken: null });
+  return { id: "anonymous", kind: "human", role: "anonymous" };
 }
 
 function auditService(context: PortalContext): AuditService {
@@ -614,4 +662,266 @@ function securityHeaders(contentType: string): HeadersInit {
     "x-content-type-options": "nosniff",
     "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
   };
+}
+
+function loginSecurityHeaders(contentType: string): HeadersInit {
+  return {
+    "content-type": contentType,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+  };
+}
+
+function loginRedirect(next?: string): Response {
+  const target = next && isSafeNextPath(next) ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  return new Response(null, { status: 303, headers: { location: target } });
+}
+
+function isSafeNextPath(path: string): boolean {
+  if (!path.startsWith("/")) return false;
+  if (path.startsWith("//")) return false;
+  try {
+    const url = new URL(path, "http://localhost");
+    return url.pathname === path.split("?")[0];
+  } catch {
+    return false;
+  }
+}
+
+async function handleLogin(request: Request, context: PortalContext): Promise<Response> {
+  const url = new URL(request.url);
+  const next = url.searchParams.get("next");
+  const safeNext = next && isSafeNextPath(next) ? next : null;
+
+  if (request.method === "GET") {
+    const actor = await resolveActor(request, context);
+    if (actor.role !== "anonymous") {
+      return postLoginRedirect(actor, safeNext);
+    }
+    return new Response(
+      renderLoginPage(request, context.github !== undefined, safeNext),
+      { status: 200, headers: loginSecurityHeaders("text/html; charset=utf-8") },
+    );
+  }
+
+  if (request.method !== "POST") {
+    return jsonError(405, ErrorCode.USAGE, "method not allowed");
+  }
+
+  const contentType = request.headers.get("content-type") ?? "";
+  const body = contentType.includes("application/json")
+    ? await request.json() as { id?: unknown; token?: unknown }
+    : Object.fromEntries((await request.formData()).entries());
+
+  if (typeof body.id !== "string" || typeof body.token !== "string") {
+    return new Response(
+      renderLoginPage(request, context.github !== undefined, safeNext, "身份和凭证都是必填项"),
+      { status: 400, headers: loginSecurityHeaders("text/html; charset=utf-8") },
+    );
+  }
+
+  try {
+    const session = await context.access.login({ id: body.id, token: body.token });
+    if (session.actor.kind !== "human") {
+      return new Response(
+        renderLoginPage(request, context.github !== undefined, safeNext, "浏览器登录仅限人类身份"),
+        { status: 403, headers: loginSecurityHeaders("text/html; charset=utf-8") },
+      );
+    }
+    return postLoginResponse(session.actor, session.token, safeNext);
+  } catch (error) {
+    const message = error instanceof CatalogError ? "身份或凭证无效" : "登录失败";
+    return new Response(
+      renderLoginPage(request, context.github !== undefined, safeNext, message),
+      { status: 403, headers: loginSecurityHeaders("text/html; charset=utf-8") },
+    );
+  }
+}
+
+async function handleLogout(request: Request, context: PortalContext): Promise<Response> {
+  if (request.method !== "POST") {
+    return jsonError(405, ErrorCode.USAGE, "method not allowed");
+  }
+
+  const token = readSessionCookie(request);
+  if (token) {
+    try {
+      await context.access.logout(token);
+    } catch {
+      // Ignore logout failures; the cookie is cleared regardless.
+    }
+  }
+
+  const headers = new Headers({ location: "/" });
+  headers.append("set-cookie", "portico_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0");
+  return new Response(null, { status: 303, headers });
+}
+
+function handleOauthStart(_request: Request, context: PortalContext): Response {
+  if (!context.github) {
+    return jsonError(501, ErrorCode.INVALID_STATE, "github login is not configured");
+  }
+  const state = randomState();
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: githubAuthorizeUrl(context.github.config, state),
+      "set-cookie":
+        `portico_oauth_state=${state}; Path=/oauth/callback; Secure; HttpOnly; SameSite=Lax; Max-Age=600`,
+    },
+  });
+}
+
+async function handleOauthCallback(request: Request, context: PortalContext): Promise<Response> {
+  if (!context.github) {
+    return jsonError(501, ErrorCode.INVALID_STATE, "github login is not configured");
+  }
+
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const expected = readCookie(request, "portico_oauth_state");
+
+  const fail = (status: number, reason: string, log: string): Response => {
+    console.error(`[portal/oauth] ${log}`);
+    return new Response(
+      renderLoginPage(request, true, null, reason),
+      { status, headers: loginSecurityHeaders("text/html; charset=utf-8") },
+    );
+  };
+
+  if (!code || !state || !expected || state !== expected) {
+    return fail(400, "GitHub 回调校验失败，请重新点击登录。", "state mismatch or missing code");
+  }
+
+  let user;
+  try {
+    user = await context.github.exchange(context.github.config, code);
+  } catch {
+    return fail(502, "GitHub 换 token 失败，请重试。", "github exchange failed");
+  }
+
+  if (!isAllowedGithubUser(user, context.github.config.allowlist)) {
+    console.error(`[portal/oauth] allowlist deny login=${user.login}`);
+    return fail(403, `GitHub 账号 ${user.login} 不在 allowlist 中。`, "allowlist deny");
+  }
+
+  const emails = [user.email, ...user.emails].filter((email): email is string => !!email);
+  for (const email of emails) {
+    try {
+      const session = await context.access.createBrowserSession(email);
+      return oauthSuccessResponse(session.actor, session.token);
+    } catch {
+      // Try the next verified email; a roster miss is not fatal yet.
+    }
+  }
+
+  console.error(`[portal/oauth] roster miss login=${user.login} emails=${emails.join(",")}`);
+  return fail(
+    403,
+    `GitHub 登录成功，但名册里没有 ${emails[0] ?? "你的邮箱"}，请联系管理员绑定。`,
+    "roster miss",
+  );
+}
+
+function postLoginRedirect(actor: Actor, next: string | null): Response {
+  const target = postLoginTarget(actor, next);
+  return new Response(null, { status: 303, headers: { location: target } });
+}
+
+function postLoginResponse(actor: Actor, token: string, next: string | null): Response {
+  const target = postLoginTarget(actor, next);
+  const headers = new Headers({ location: target });
+  headers.append(
+    "set-cookie",
+    `portico_session=${encodeURIComponent(token)}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+  );
+  return new Response(null, { status: 303, headers });
+}
+
+function oauthSuccessResponse(actor: Actor, token: string): Response {
+  const target = postLoginTarget(actor, null);
+  const headers = new Headers({ location: target });
+  headers.append(
+    "set-cookie",
+    `portico_session=${encodeURIComponent(token)}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+  );
+  headers.append("set-cookie", "portico_oauth_state=; Path=/oauth/callback; Max-Age=0");
+  return new Response(null, { status: 303, headers });
+}
+
+function postLoginTarget(actor: Actor, next: string | null): string {
+  if (next && isSafeNextPath(next)) return next;
+  if (actor.role === "reader" || actor.role === "maintainer" || actor.role === "auditor") {
+    return "/internal";
+  }
+  return "/";
+}
+
+function readCookie(request: Request, name: string): string | null {
+  const cookies = request.headers.get("cookie") ?? "";
+  const match = new RegExp(`(?:^|;\\s*)${name}=([^;]+)`).exec(cookies);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function readSessionCookie(request: Request): string | null {
+  return readCookie(request, "portico_session");
+}
+
+function randomState(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const LOGIN_CSS = `
+.login-wrap{min-height:72vh;display:flex;align-items:center;justify-content:center;padding:32px 16px}
+.login-card{max-width:400px;width:100%;padding:28px}
+.login-card h1{font-size:1.25rem;margin:6px 0 4px}
+.login-card .tk-meta{margin:0}
+.login-github{display:block;text-align:center;text-decoration:none;font-weight:600;font-size:0.9rem;color:#f0f3f6;background:#24292f;border:1px solid #444c56;border-radius:8px;padding:10px;margin:16px 0 4px}
+.login-github:hover{background:#2f363d}
+.login-div{display:flex;align-items:center;gap:10px;color:var(--tk-muted);font-size:0.78rem;margin:18px 0 6px}
+.login-div::before,.login-div::after{content:"";flex:1;border-top:1px solid var(--tk-border, #2a2f36)}
+.login-field{margin:12px 0}
+.login-field label{display:block;font-size:0.8rem;color:var(--tk-muted);margin-bottom:6px}
+.login-field input{display:block;width:100%;box-sizing:border-box;font-size:0.9rem;color:var(--tk-ink);background:var(--tk-sunken);border:1px solid var(--tk-border, #2a2f36);border-radius:8px;padding:9px 10px}
+.login-card .tk-btn{width:100%;margin-top:14px;padding:10px}
+`;
+
+function renderLoginPage(
+  request: Request,
+  githubEnabled: boolean,
+  next: string | null,
+  error?: string,
+): string {
+  const github = githubEnabled
+    ? `<a class="login-github" href="/oauth/start">使用 GitHub 登录</a><div class="login-div"><span>或一次性凭证</span></div>`
+    : "";
+  const alert = error ? `<p class="tk-note" role="alert">${esc(error)}</p>` : "";
+  const nextField = next ? `<input type="hidden" name="next" value="${esc(next)}">` : "";
+  const formAction = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+
+  return renderShell({
+    title: "登录",
+    tone: "internal",
+    theme: resolvePageTheme("internal", null, prefersDark(request.headers)),
+    path: "/login",
+    head: `<style>${LOGIN_CSS}</style>`,
+    body: `  <main class="login-wrap">
+    <div class="tk-panel login-card">
+      <p class="tk-meta">PORTICO · 门户登录</p>
+      <h1>登录</h1>
+      ${alert}
+      ${github}
+      <form method="post" action="${esc(formAction)}">
+        ${nextField}
+        <div class="login-field"><label for="login-id">身份</label><input id="login-id" name="id" autocomplete="username" required></div>
+        <div class="login-field"><label for="login-token">一次性凭证</label><input id="login-token" name="token" type="password" autocomplete="current-password" required></div>
+        <button class="tk-btn" type="submit">登录</button>
+      </form>
+      <p class="tk-note" style="margin-top:16px">登录后可访问内部工作台。仅 allowlisted 账号可通过 GitHub 登录；能看到什么由名册决定。</p>
+    </div>
+  </main>`,
+  });
 }

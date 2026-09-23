@@ -386,8 +386,11 @@ Deno.test("E2E: only the auditor reads standing verdicts, and an empty trail is 
       // The page itself stays invisible to a non-auditor.
       const pageResult = await fetch(`${portalUrl}/internal/audit`, {
         headers: authHeaders(session),
+        redirect: "manual",
       });
-      assertEquals(pageResult.status, 404, label);
+      // Anonymous is redirected to login (303), authenticated non-auditors get 404.
+      const expectedStatus = session === null ? 303 : 404;
+      assertEquals(pageResult.status, expectedStatus, label);
     }
 
     // A refused read leaves no conclusion file behind.
