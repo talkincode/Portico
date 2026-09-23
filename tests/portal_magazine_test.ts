@@ -373,7 +373,10 @@ Deno.test("unfiltered reading page highlights 全部 category in navigation", as
   const infoAssassin = topbarLink(html, "信息刺客");
   assertEquals(allCategories.href, "/");
   assertEquals(allCategories.className.trim(), "active");
-  assert(!infoAssassin.className.includes("active"), "info-assassin should not be active when no category");
+  assert(
+    !infoAssassin.className.includes("active"),
+    "info-assassin should not be active when no category",
+  );
 });
 
 Deno.test("channel-filtered reading page preserves channel in category links", async () => {
@@ -390,9 +393,15 @@ Deno.test("channel-filtered reading page preserves channel in category links", a
   const html = await page.text();
   const allCategories = topbarLink(html, "全部");
   const infoAssassin = topbarLink(html, "信息刺客");
-  assert(allCategories.href.includes("channel=cli"), "category links should preserve channel filter");
+  assert(
+    allCategories.href.includes("channel=cli"),
+    "category links should preserve channel filter",
+  );
   assertEquals(allCategories.className.trim(), "active");
-  assert(infoAssassin.href.includes("channel=cli"), "info-assassin link should preserve channel filter");
+  assert(
+    infoAssassin.href.includes("channel=cli"),
+    "info-assassin link should preserve channel filter",
+  );
 });
 
 function railLinks(html: string): Array<{ className: string; href: string; label: string }> {
@@ -459,7 +468,10 @@ Deno.test("reading page category links and breadcrumb home keep the search query
   const html = await page.text();
   const allCategories = topbarLink(html, "全部");
   const infoAssassin = topbarLink(html, "信息刺客");
-  assert(allCategories.href.includes("q=Writer"), "all-categories link should preserve search query");
+  assert(
+    allCategories.href.includes("q=Writer"),
+    "all-categories link should preserve search query",
+  );
   assert(infoAssassin.href.includes("q=Writer"), "info-assassin link should preserve search query");
 
   const home = html.match(/<nav class="breadcrumbs">\s*<a href="([^"]*)">首页<\/a>/);

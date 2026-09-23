@@ -1168,9 +1168,15 @@ function renderChrome(input: {
       </div>
       <nav class="nav">
         <a class="${allActive.trim()}" href="${escapeHtml(allHref)}">全部</a>
-        <a class="${infoAssassinActive.trim()}" href="${escapeHtml(infoAssassinHref)}">${escapeHtml(CATEGORY_LABEL["info-assassin"])}</a>
-        <a class="${miraRadioActive.trim()}" href="${escapeHtml(miraRadioHref)}">${escapeHtml(CATEGORY_LABEL["mira-radio"])}</a>
-        <a class="${uncategorizedActive.trim()}" href="${escapeHtml(uncategorizedHref)}">${escapeHtml(CATEGORY_LABEL.uncategorized)}</a>
+        <a class="${infoAssassinActive.trim()}" href="${escapeHtml(infoAssassinHref)}">${
+    escapeHtml(CATEGORY_LABEL["info-assassin"])
+  }</a>
+        <a class="${miraRadioActive.trim()}" href="${escapeHtml(miraRadioHref)}">${
+    escapeHtml(CATEGORY_LABEL["mira-radio"])
+  }</a>
+        <a class="${uncategorizedActive.trim()}" href="${escapeHtml(uncategorizedHref)}">${
+    escapeHtml(CATEGORY_LABEL.uncategorized)
+  }</a>
         <a class="" href="/public">公开发布</a>${internalLink}${pendingLink}
       </nav>
       <div class="topbar-right">
@@ -1220,7 +1226,9 @@ function renderHome(
   const empty = surfaces.length === 0 ? `<p class="empty">没有可见的 Agent 表面。</p>` : "";
   const heroHtml = hero ? renderHero(hero, theme, channel, category) : "";
   const channelFilterTabs = renderChannelFilterTabs(theme, channel, category, "/", q);
-  const cards = surfaces.map((surface, idx) => renderCard(surface, theme, channel, category, { index: idx }))
+  const cards = surfaces.map((surface, idx) =>
+    renderCard(surface, theme, channel, category, { index: idx })
+  )
     .join("");
   return `<main>
       ${heroHtml}
@@ -1243,7 +1251,13 @@ function renderChannelFilterTabs(
     { id: "mcp", label: "MCP" },
   ];
   const links = items.map((item) => {
-    const href = withCategoryQuery(path.startsWith("/s/") ? path : "/", theme, category, item.id, q);
+    const href = withCategoryQuery(
+      path.startsWith("/s/") ? path : "/",
+      theme,
+      category,
+      item.id,
+      q,
+    );
     const active = channel === item.id ? " active" : "";
     return `<a class="badge-chip${active}" href="${escapeHtml(href)}">${item.label}</a>`;
   }).join("");
@@ -1262,7 +1276,11 @@ function renderReading(
   const crumbChannel = readingChannel(selected, channel);
   const crumbHref = withCategoryQuery("/", theme, category, crumbChannel, q);
   const cards = surfaces.map((surface, idx) =>
-    renderCard(surface, theme, channel, category, { compact: true, currentId: selected.id, index: idx })
+    renderCard(surface, theme, channel, category, {
+      compact: true,
+      currentId: selected.id,
+      index: idx,
+    })
   ).join("");
 
   return `
@@ -1328,7 +1346,9 @@ function renderReading(
       <div class="detail-header">
         <div class="detail-kicker-row">
           <span class="badge-chip">${escapeHtml(categoryLabel(selected.category))}</span>
-          <span class="badge-chip" style="background: var(--tag-bg); color: var(--muted);">${escapeHtml(channelLabel(selected.channels))}</span>
+          <span class="badge-chip" style="background: var(--tag-bg); color: var(--muted);">${
+    escapeHtml(channelLabel(selected.channels))
+  }</span>
           <span class="kicker">${governanceLabel(selected.governanceState)}</span>
           <span class="version-tag">v${escapeHtml(selected.version)}</span>
         </div>
@@ -1767,9 +1787,7 @@ function categoryLabel(category: ContentCategory | undefined): string {
 
 function renderTagsDisplay(tags: string[] | undefined): string {
   if (!tags || tags.length === 0) return "";
-  const tagHtml = tags.map((tag) =>
-    `<span class="tag-chip">${escapeHtml(tag)}</span>`
-  ).join("");
+  const tagHtml = tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag)}</span>`).join("");
   return `<div class="tags-row">${tagHtml}</div>`;
 }
 

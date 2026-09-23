@@ -237,16 +237,15 @@ Deno.test("E2E: reading-page chrome keeps all-channels and search query", async 
     const unfiltered = await fetch(`${base}/s/docs-writer`, { headers: readerHeaders() });
     assertEquals(unfiltered.status, 200);
     const unfilteredHtml = await unfiltered.text();
-    assert(unfilteredHtml.includes('<a class="active" href="/">内容</a>'));
-    assert(unfilteredHtml.includes('<a class="" href="/">专题</a>'));
-    assert(!unfilteredHtml.includes('href="/?channel=web">专题</a>'));
+    assert(unfilteredHtml.includes('<a class="active" href="/">全部</a>'));
+    assert(unfilteredHtml.includes("信息刺客</a>"));
+    assert(unfilteredHtml.includes("Mira Radio</a>"));
 
     const searched = await fetch(`${base}/s/docs-writer?q=Writer&channel=cli`, {
       headers: readerHeaders(),
     });
     assertEquals(searched.status, 200);
     const searchedHtml = await searched.text();
-    assert(searchedHtml.includes('<a class="active" href="/?channel=cli&amp;q=Writer">专题</a>'));
     assert(searchedHtml.includes('href="/?q=Writer">首页</a>'));
     assert(searchedHtml.includes('href="/?channel=cli&amp;q=Writer">CLI</a>'));
     assert(searchedHtml.includes('class="rail-link active" href="/?channel=cli&amp;q=Writer"'));
