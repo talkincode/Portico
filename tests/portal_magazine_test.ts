@@ -66,6 +66,62 @@ function publicWeb(): RegisterInput {
   };
 }
 
+function infoAssassinSurface(): RegisterInput {
+  return {
+    id: "info-assassin-news",
+    name: "Info Assassin News",
+    description: "Tech news from the info assassin category.",
+    channels: ["web"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "url", value: "https://info.example.test/news" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+    category: "info-assassin",
+  };
+}
+
+function miraRadioSurface(): RegisterInput {
+  return {
+    id: "mira-radio-podcast",
+    name: "Mira Radio Podcast",
+    description: "Audio content from Mira Radio.",
+    channels: ["web"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "url", value: "https://mira.example.test/podcast" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+    category: "mira-radio",
+    mediaUrl: "https://mira.example.test/podcast.mp3",
+  };
+}
+
+function uncategorizedSurface(): RegisterInput {
+  return {
+    id: "misc-tool",
+    name: "Miscellaneous Tool",
+    description: "An uncategorized tool.",
+    channels: ["cli"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "package", value: "jsr:@example/misc-tool" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+    category: "uncategorized",
+  };
+}
+
+function noCategorySurface(): RegisterInput {
+  return {
+    id: "legacy-tool",
+    name: "Legacy Tool",
+    description: "A legacy tool without a category field.",
+    channels: ["cli"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "package", value: "jsr:@example/legacy-tool" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  };
+}
+
 let roster: RosterFixture;
 
 async function seededContext() {
@@ -83,7 +139,7 @@ function actorHeaders(actor: Actor): HeadersInit {
 
 const ACCENT = "#4A9EFF";
 const DARK_BG = "#0B0D0F";
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:";
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; media-src https: http:";
 
 Deno.test("dark and light magazine shells share the cyan accent and keep CSP closed", async () => {
   const context = await seededContext();
@@ -757,4 +813,131 @@ Deno.test("one-click review entry: anonymous shells link login, signed-in shells
     context,
   );
   assert(!(await readerInternal.text()).includes('href="/review"'));
+});
+
+// ── Category filtering tests ───────────────────────────────────────────────
+
+Deno.test("category=info-assassin only lists matching surfaces", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, infoAssassinSurface());
+  await context.catalog.register(maintainer, miraRadioSurface());
+  await context.catalog.register(maintainer, uncategorizedSurface());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/?category=info-assassin", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  assert(html.includes("Info Assassin News"), "info-assassin surface must be visible");
+  assert(!html.includes("Mira Radio Podcast"), "mira-radio surface must be filtered out");
+  assert(!html.includes("Miscellaneous Tool"), "uncategorized surface must be filtered out");
+});
+
+Deno.test("missing category field defaults to uncategorized bucket", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, noCategorySurface());
+  await context.catalog.register(maintainer, uncategorizedSurface());
+  await context.catalog.register(maintainer, infoAssassinSurface());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/?category=uncategorized", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  assert(html.includes("Legacy Tool"), "surface without category must be in uncategorized");
+  assert(html.includes("Miscellaneous Tool"), "explicit uncategorized must be visible");
+  assert(!html.includes("Info Assassin News"), "info-assassin must be filtered out");
+});
+
+Deno.test("category filter works together with channel and q filters", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, infoAssassinSurface());
+  await context.catalog.register(maintainer, miraRadioSurface());
+  await context.catalog.register(maintainer, internalCli());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/?category=info-assassin&channel=web", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  assert(html.includes("Info Assassin News"), "info-assassin + web must be visible");
+  assert(!html.includes("Mira Radio Podcast"), "mira-radio must be filtered by category");
+  assert(!html.includes("Docs Writer"), "cli surface must be filtered by channel");
+});
+
+Deno.test("magazine page receives and renders category filter active state", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, infoAssassinSurface());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/?category=info-assassin", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const infoAssassinLink = html.match(/<a class="([^"]*)" href="[^"]*">信息刺客<\/a>/);
+  if (!infoAssassinLink) throw new Error("信息刺客 nav link must exist");
+  assert(
+    infoAssassinLink[1].includes("active"),
+    "信息刺客 must be active when category=info-assassin",
+  );
+});
+
+Deno.test("reading page with mismatched category redirects to surface's effective category", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, infoAssassinSurface());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/s/info-assassin-news?category=mira-radio", {
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(page.status, 302);
+  const location = page.headers.get("location") ?? "";
+  assert(location.includes("category=info-assassin"), "must redirect to surface's category");
+});
+
+Deno.test("CSP header allows media-src for audio and video playback", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, miraRadioSurface());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/"),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const csp = page.headers.get("content-security-policy") ?? "";
+  assert(csp.includes("media-src https: http:"), "CSP must allow media-src for external URLs");
+  assert(!csp.includes("script-src"), "CSP must not open script-src");
+});
+
+Deno.test("null category shows all surfaces regardless of their category", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, infoAssassinSurface());
+  await context.catalog.register(maintainer, miraRadioSurface());
+  await context.catalog.register(maintainer, uncategorizedSurface());
+  await context.catalog.register(maintainer, noCategorySurface());
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  assert(html.includes("Info Assassin News"), "info-assassin must be visible");
+  assert(html.includes("Mira Radio Podcast"), "mira-radio must be visible");
+  assert(html.includes("Miscellaneous Tool"), "uncategorized must be visible");
+  assert(html.includes("Legacy Tool"), "no-category must be visible");
 });
