@@ -214,9 +214,14 @@ else
 fi
 
 expect_status portal-public-plane "$PORTAL/public" 200
-# Anonymous must not reach the internal plane, and the Catalog API must stay a
-# well-formed envelope rather than an error page.
-expect_status portal-internal-fail-closed "$PORTAL/internal" 404
+# Anonymous must not reach the internal plane: 404 (not found) or 303 (redirect
+# to login) both deny access. The Catalog API must stay a well-formed envelope.
+probe "$PORTAL/internal"
+if [ "$code" = "404" ] || [ "$code" = "303" ]; then
+  ok portal-internal-fail-closed
+else
+  bad portal-internal-fail-closed "HTTP $code exposes the internal plane to anonymous; want 404 or 303"
+fi
 probe "$PORTAL/api/catalog"
 if [ "$code" = "200" ] && contains "$payload" '{"ok":true'; then
   ok portal-catalog-envelope

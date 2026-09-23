@@ -68,6 +68,22 @@ function assertHtml404(page: { status: number; type: string; body: string }, lab
   assert(!page.body.includes("FORBIDDEN"), `${label} must not confirm a privileged route`);
 }
 
+async function assertLoginRedirect(
+  url: string,
+  label: string,
+  assertNoLeak: (body: string) => void,
+): Promise<void> {
+  const response = await fetch(url, { redirect: "manual" });
+  assertEquals(response.status, 303, `${label} must redirect to login`);
+  const location = response.headers.get("location");
+  assert(location?.startsWith("/login"), `${label} must redirect to /login`);
+  assert(location?.includes("next="), `${label} redirect must carry a next param`);
+  const body = await response.text();
+  assert(!body.trimStart().startsWith("{"), `${label} must not leak a JSON envelope`);
+  assert(!body.includes("FORBIDDEN"), `${label} must not confirm a privileged route`);
+  assertNoLeak(body);
+}
+
 Deno.test("E2E: maintainer console shows drafts; public plane only shows approved_public; theme query applies", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-ui-e2e-" });
   const catalog = `${dir}/catalog.json`;
@@ -114,10 +130,10 @@ Deno.test("E2E: maintainer console shows drafts; public plane only shows approve
       "a draft must not reach the public plane, even for its maintainer",
     );
 
-    const anonInternal = await fetchPage(`${base}/internal`);
-    assertHtml404(anonInternal, "anonymous /internal");
-    assert(!anonInternal.body.includes("Docs Writer"));
-    assert(!anonInternal.body.includes("内部笔记台"));
+    await assertLoginRedirect(`${base}/internal`, "anonymous /internal", (body) => {
+      assert(!body.includes("Docs Writer"));
+      assert(!body.includes("内部笔记台"));
+    });
   });
 
   const published = await runCli([
@@ -247,8 +263,9 @@ Deno.test("E2E: page 404s are HTML; reader vs auditor vs anonymous disagree; wit
     assertEquals(auditorAudit.status, 200);
     assert(auditorAudit.body.includes("审计时间线"));
 
-    const anonAudit = await fetchPage(`${base}/internal/audit`);
-    assertHtml404(anonAudit, "anonymous /internal/audit");
+    await assertLoginRedirect(`${base}/internal/audit`, "anonymous /internal/audit", (body) => {
+      assert(!body.includes("审计时间线"));
+    });
   });
 
   const catalogAfterDenied = await Deno.readFile(catalog);
@@ -398,11 +415,11 @@ Deno.test("E2E: /internal/approvals shows the same notes to a reader; anonymous 
     assertEquals(asAuditor.status, 200);
     assert(asAuditor.body.includes("Package coordinate reviewed."));
 
-    const asAnon = await fetchPage(`${base}/internal/approvals`);
-    assertHtml404(asAnon, "anonymous /internal/approvals");
-    assert(!asAnon.body.includes("Docs Writer"));
-    assert(!asAnon.body.includes("Package coordinate reviewed."));
-    assert(!asAnon.body.includes("审批记录"));
+    await assertLoginRedirect(`${base}/internal/approvals`, "anonymous /internal/approvals", (body) => {
+      assert(!body.includes("Docs Writer"));
+      assert(!body.includes("Package coordinate reviewed."));
+      assert(!body.includes("审批记录"));
+    });
   });
 
   const catalogAfter = await Deno.readFile(catalog);
@@ -508,11 +525,11 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
     );
     assert(!/<button/i.test(asAuditor.body), "auditor must not get an approve button");
 
-    const asAnon = await fetchPage(`${base}/internal/pending`);
-    assertHtml404(asAnon, "anonymous /internal/pending");
-    assert(!asAnon.body.includes("Docs Writer"));
-    assert(!asAnon.body.includes("待审队列"));
-    assert(!asAnon.body.includes("jsr:@example/docs-writer"));
+    await assertLoginRedirect(`${base}/internal/pending`, "anonymous /internal/pending", (body) => {
+      assert(!body.includes("Docs Writer"));
+      assert(!body.includes("待审队列"));
+      assert(!body.includes("jsr:@example/docs-writer"));
+    });
   });
 
   const catalogAfter = await Deno.readFile(catalog);
@@ -681,11 +698,11 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
     assert(!asWeb.body.includes("Docs MCP"), "auditor web filter must hide the mcp candidate");
     assert(!/<button/i.test(asWeb.body), "auditor must not get an approve button after filtering");
 
-    const asAnon = await fetchPage(`${base}/internal/pending?channel=cli`);
-    assertHtml404(asAnon, "anonymous /internal/pending?channel=cli");
-    assert(!asAnon.body.includes("Docs Writer"));
-    assert(!asAnon.body.includes("待审队列"));
-    assert(!asAnon.body.includes("jsr:@example/docs-writer"));
+    await assertLoginRedirect(`${base}/internal/pending?channel=cli`, "anonymous /internal/pending?channel=cli", (body) => {
+      assert(!body.includes("Docs Writer"));
+      assert(!body.includes("待审队列"));
+      assert(!body.includes("jsr:@example/docs-writer"));
+    });
   });
 
   const catalogAfter = await Deno.readFile(catalog);

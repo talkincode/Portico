@@ -242,7 +242,11 @@ Deno.test("magazine index keeps dual-surface /internal and /public routes", asyn
     new Request("http://portico.local/internal"),
     context,
   );
-  assertEquals(anonInternal.status, 404);
+  assertEquals(anonInternal.status, 303, "anonymous /internal must redirect to login");
+  assert(
+    anonInternal.headers.get("location")?.startsWith("/login"),
+    "anonymous /internal must redirect to /login",
+  );
   const anonInternalBody = await anonInternal.text();
   assert(!anonInternalBody.includes("Docs Writer"));
 
@@ -671,7 +675,11 @@ Deno.test("signed-in magazine chrome links to /internal without bypassing anonym
     new Request("http://portico.local/internal"),
     context,
   );
-  assertEquals(anonInternal.status, 404);
+  assertEquals(anonInternal.status, 303, "anonymous /internal must redirect to login");
+  assert(
+    anonInternal.headers.get("location")?.startsWith("/login"),
+    "anonymous /internal must redirect to /login",
+  );
   const anonInternalHtml = await anonInternal.text();
   assert(!anonInternalHtml.includes("Docs Writer"));
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);

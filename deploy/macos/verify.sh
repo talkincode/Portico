@@ -263,7 +263,15 @@ case "$body" in
   '{"ok":true,"data":'*) echo "ok catalog-envelope" ;;
   *) echo "FAIL catalog-envelope got $body"; fail=1 ;;
 esac
-check "internal-anon-404" "http://${BIND}:${PORTAL_PORT}/internal" "404"
+# Anonymous must not reach the internal plane: 404 (not found) or 303 (redirect
+# to login) both deny access.
+internal_code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' "http://${BIND}:${PORTAL_PORT}/internal") || internal_code="000"
+if [ "$internal_code" = "404" ] || [ "$internal_code" = "303" ]; then
+  echo "ok internal-anon-fail-closed $internal_code"
+else
+  echo "FAIL internal-anon-fail-closed got $internal_code want 404 or 303"
+  fail=1
+fi
 # The Gateway authorizes and routes; it never executes a tool. The port being
 # open says nothing about that, so the entrance is asked directly — same
 # question and same expectation as the Linux gate.

@@ -64,12 +64,14 @@ export async function handleReviewRequest(
         return new Response("Not found", { status: 404 });
       }
       // Browser-first login wall: a real navigation (Accept: text/html)
-      // without proof lands on the login page instead of a JSON 401 it
-      // cannot act on. API-style callers keep the machine-readable 401, so
-      // the documented 401/403 split across entrances does not fork.
+      // without proof lands on the Portal login page (the canonical human
+      // entry) instead of a JSON 401 it cannot act on. The Portal sets the
+      // session cookie at Path=/, which covers /review/* too. API-style
+      // callers keep the machine-readable 401, so the documented 401/403
+      // split across entrances does not fork.
       if (actor.role === "anonymous") {
         if (wantsHtml(request)) {
-          return new Response(null, { status: 303, headers: { "location": "/review/login" } });
+          return new Response(null, { status: 303, headers: { "location": "/login?next=/review" } });
         }
         return jsonError(401, "authentication required");
       }
@@ -238,7 +240,7 @@ function oauthSessionHeaders(sessionToken: string): Headers {
     "set-cookie",
     `portico_session=${
       encodeURIComponent(sessionToken)
-    }; Path=/review; Secure; HttpOnly; SameSite=Lax`,
+    }; Path=/; Secure; HttpOnly; SameSite=Lax`,
   );
   headers.append("set-cookie", "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0");
   return headers;
@@ -280,7 +282,7 @@ async function handleLogin(request: Request, context: ReviewContext): Promise<Re
       "location": "/review",
       "set-cookie": `portico_session=${
         encodeURIComponent(session.token)
-      }; Path=/review; Secure; HttpOnly; SameSite=Lax`,
+      }; Path=/; Secure; HttpOnly; SameSite=Lax`,
     },
   });
 }

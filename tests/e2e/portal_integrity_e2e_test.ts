@@ -190,14 +190,16 @@ async function withPortal(paths: Paths, fn: (base: string) => Promise<void>): Pr
 async function page(
   base: string,
   session: string | null,
-): Promise<{ status: number; type: string; body: string }> {
+): Promise<{ status: number; type: string; body: string; location?: string }> {
   const response = await fetch(`${base}/internal/audit`, {
     headers: session ? { authorization: "Bearer " + session } : {},
+    redirect: "manual",
   });
   return {
     status: response.status,
     type: response.headers.get("content-type") ?? "",
     body: await response.text(),
+    location: response.headers.get("location") ?? undefined,
   };
 }
 
@@ -396,8 +398,14 @@ Deno.test("E2E: the audit page names an edited record and an erased tail, and st
     await writeCatalog(paths.catalog, edited);
     for (const [label, session] of [["reader", readerSession], ["anonymous", null]] as const) {
       const denied = await page(base, session);
-      assertEquals(denied.status, 404, `${label} must not reach the verdict`);
-      assertEquals(denied.type, "text/html; charset=utf-8", `${label} must get HTML`);
+      // Anonymous is redirected to login (303), authenticated non-auditors get 404.
+      const expectedStatus = session === null ? 303 : 404;
+      assertEquals(denied.status, expectedStatus, `${label} must not reach the verdict`);
+      if (session === null) {
+        assert(denied.location?.startsWith("/login"), `${label} must redirect to /login`);
+      } else {
+        assertEquals(denied.type, "text/html; charset=utf-8", `${label} must get HTML`);
+      }
       assert(!denied.body.includes("data-integrity"), `${label} must not see the panel`);
       assert(!denied.body.includes(targetId), `${label} must not see the named record`);
       assert(!denied.body.includes("审计时间线"), `${label} must not see the timeline`);

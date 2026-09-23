@@ -374,7 +374,7 @@ Deno.test("E2E: mismatched reading-page filters redirect instead of rendering ze
   });
 });
 
-Deno.test("E2E: magazine and public surfaces reach each other; anonymous still 404s /internal", async () => {
+Deno.test("E2E: magazine and public surfaces reach each other; anonymous /internal redirects to login", async () => {
   const dir = await Deno.makeTempDir({ prefix: "portico-magazine-cross-e2e-" });
   const catalog = `${dir}/catalog.json`;
   const identities = `${dir}/identities.json`;
@@ -469,8 +469,12 @@ Deno.test("E2E: magazine and public surfaces reach each other; anonymous still 4
     assert(listHtml.includes("Docs Web"));
     assert(listHtml.includes('value="Docs"'));
 
-    const anonInternal = await fetch(`${base}/internal`);
-    assertEquals(anonInternal.status, 404);
+    const anonInternal = await fetch(`${base}/internal`, { redirect: "manual" });
+    assertEquals(anonInternal.status, 303, "anonymous /internal must redirect to login");
+    assert(
+      anonInternal.headers.get("location")?.startsWith("/login"),
+      "anonymous /internal must redirect to /login",
+    );
     const anonInternalHtml = await anonInternal.text();
     assert(!anonInternalHtml.includes("Docs Web"));
     assert(!anonInternalHtml.includes("https://docs.example.test"));

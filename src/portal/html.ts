@@ -37,6 +37,11 @@ export interface MagazinePageInput {
    * default; `{ kind: "none" }` removes every Review link from the chrome.
    */
   reviewEntry?: ReviewEntry;
+  /**
+   * The current signed-in user's id, for display in the chrome. Absent means
+   * anonymous, which gets a login link instead.
+   */
+  signedInId?: string;
 }
 
 const TITLE_FONT =
@@ -902,6 +907,47 @@ const MAGAZINE_CSS = `
       }
       .empty { color: var(--muted); }
 
+      /* Auth Chrome */
+      .auth-chrome {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-left: 1px solid var(--rule);
+        padding-left: 1rem;
+        font-size: 0.82rem;
+      }
+      .auth-user {
+        color: var(--muted);
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .auth-logout {
+        display: inline;
+        margin: 0;
+      }
+      .auth-logout button {
+        background: transparent;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 0.78rem;
+        padding: 0.25rem 0.5rem;
+      }
+      .auth-logout button:hover {
+        background: var(--tag-bg);
+        color: var(--text);
+      }
+      .auth-login {
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .auth-login:hover {
+        text-decoration: underline;
+      }
+
       @media (max-width: 1180px) {
         .reading { grid-template-columns: 260px minmax(0, 1fr); }
         .read-rail { display: none; }
@@ -947,6 +993,7 @@ export function renderMagazinePage(input: MagazinePageInput): string {
     showInternal: input.showInternal === true,
     pendingPublic: input.pendingPublic,
     reviewEntry: input.reviewEntry,
+    signedInId: input.signedInId,
     body: `<div class="${frameClass}">${main}${side}</div>`,
   });
 }
@@ -994,6 +1041,7 @@ function renderChrome(input: {
   showInternal?: boolean;
   pendingPublic?: number;
   reviewEntry?: ReviewEntry;
+  signedInId?: string;
 }): string {
   const themeAttr = input.theme === "system" ? "" : ` data-theme="${input.theme}"`;
   const q = input.q;
@@ -1016,6 +1064,10 @@ function renderChrome(input: {
       input.showInternal === true ? "去审核" : "审核登录"
     }</a>`
     : "";
+  // Auth chrome: show login link for anonymous, whoami + logout for signed-in
+  const authChrome = input.signedInId
+    ? `<span class="auth-user">${escapeHtml(input.signedInId)}</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
+    : `<a class="auth-login" href="/login">登录</a>`;
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>
@@ -1067,6 +1119,7 @@ function renderChrome(input: {
           <a href="${escapeHtml(withQuery(input.path, "dark", input.channel, q))}">夜</a>
           <a href="${escapeHtml(withQuery(input.path, "system", input.channel, q))}">自动</a>
         </p>
+        <div class="auth-chrome">${authChrome}</div>
       </div>
     </header>
     ${input.body}

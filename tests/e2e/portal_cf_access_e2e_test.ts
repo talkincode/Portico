@@ -172,14 +172,20 @@ Deno.test("E2E: a verified CF Access JWT sees the same Portal catalog as a sessi
         "cf-access-jwt-assertion": expired,
         "cf-access-authenticated-user-email": EMAIL,
       },
+      redirect: "manual",
     });
-    assertEquals(forgedHtml.status, 404);
+    // Anonymous (invalid CF Access) is redirected to login
+    assertEquals(forgedHtml.status, 303);
+    assert(forgedHtml.headers.get("location")?.startsWith("/login"));
     assert(!(await forgedHtml.text()).includes("Docs Writer"));
 
     const unknownHtml = await fetch(`${base}/internal`, {
       headers: { "cf-access-jwt-assertion": unknown },
+      redirect: "manual",
     });
-    assertEquals(unknownHtml.status, 404);
+    // Anonymous (unknown CF Access) is redirected to login
+    assertEquals(unknownHtml.status, 303);
+    assert(unknownHtml.headers.get("location")?.startsWith("/login"));
 
     const gatewayJson = await fetchJson(
       `${gatewayUrl(gateway)}/gateway/mcp/docs-writer/authorize`,

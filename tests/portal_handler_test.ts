@@ -1316,12 +1316,16 @@ Deno.test("CF Access JWT failures and the plaintext email header stay anonymous"
     assertEquals(catalog.status, 200);
     assertEquals(catalog.body.data, []);
 
+    // Anonymous /internal now redirects to login instead of 404
     const internal = await handlePortalRequest(
       new Request("http://portico.local/internal", { headers }),
       { ...context, cfAccess },
     );
-    assertEquals(internal.status, 404);
-    assert(!(await internal.text()).includes("Docs Writer"));
+    assertEquals(internal.status, 303);
+    assert(
+      internal.headers.get("location")?.startsWith("/login"),
+      "anonymous /internal should redirect to login",
+    );
   }
 });
 
@@ -1361,4 +1365,159 @@ Deno.test("a Portico session wins over a CF Access JWT; disabled CF Access ignor
   );
   assertEquals(ignored.status, 200);
   assertEquals(ignored.body.data, []);
+});
+
+// ── Portal Login Tests ───────────────────────────────────────────────────────
+
+Deno.test("portal /login page is 200 for anonymous users", async () => {
+  const context = await seededContext();
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/login"),
+    context,
+  );
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assert(html.includes("登录"), "login page should show login title");
+  assert(html.includes('action="/login"'), "login page should have login form");
+});
+
+Deno.test("portal /login page redirects signed-in users to /internal", async () => {
+  const context = await seededContext();
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/login", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/internal");
+});
+
+Deno.test("portal /login with next param redirects signed-in users to that path", async () => {
+  const context = await seededContext();
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/login?next=/internal/audit", { headers: actorHeaders(auditor) }),
+    context,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/internal/audit");
+});
+
+Deno.test("portal /login rejects unsafe next params", async () => {
+  const context = await seededContext();
+  const unsafe = [
+    "https://evil.com/steal",
+    "//evil.com/steal",
+    "javascript:alert(1)",
+  ];
+  for (const next of unsafe) {
+    const response = await handlePortalRequest(
+      new Request(`http://portico.local/login?next=${encodeURIComponent(next)}`, { headers: actorHeaders(reader) }),
+      context,
+    );
+    assertEquals(response.status, 303);
+    assertEquals(
+      response.headers.get("location"),
+      "/internal",
+      `unsafe next=${next} should redirect to /internal, not ${response.headers.get("location")}`,
+    );
+  }
+});
+
+Deno.test("portal anonymous /internal redirects to /login with next param", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/internal"),
+    context,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/login?next=%2Finternal");
+});
+
+Deno.test("portal anonymous /internal/audit redirects to /login preserving path", async () => {
+  const context = await seededContext();
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/internal/audit?kind=catalog"),
+    context,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(
+    response.headers.get("location"),
+    "/login?next=%2Finternal%2Faudit%3Fkind%3Dcatalog",
+  );
+});
+
+Deno.test("portal signed-in user can reach /internal", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/internal", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assert(html.includes("Docs Writer"), "signed-in reader should see internal content");
+});
+
+Deno.test("portal /logout clears session and redirects to home", async () => {
+  const context = await seededContext();
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/logout", {
+      method: "POST",
+      headers: actorHeaders(reader),
+    }),
+    context,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/");
+  const setCookie = response.headers.get("set-cookie");
+  assert(setCookie?.includes("portico_session=;"), "logout should clear session cookie");
+  assert(setCookie?.includes("Max-Age=0"), "logout should expire cookie immediately");
+});
+
+Deno.test("portal magazine page shows login link for anonymous", async () => {
+  const context = await seededContext();
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/"),
+    context,
+  );
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assert(html.includes('href="/login"'), "anonymous user should see login link");
+  assert(!html.includes("登出"), "anonymous user should not see logout button");
+});
+
+Deno.test("portal magazine page shows whoami and logout for signed-in user", async () => {
+  const context = await seededContext();
+
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assert(html.includes("human:reader"), "signed-in user should see their id");
+  assert(html.includes("登出"), "signed-in user should see logout button");
+  assert(!html.includes('href="/login"'), "signed-in user should not see login link");
+});
+
+Deno.test("portal login page accepts cookie-based session", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  const token = roster.tokenFor(reader.id);
+
+  // Request with cookie instead of header
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/internal", {
+      headers: { cookie: `portico_session=${encodeURIComponent(token)}` },
+    }),
+    context,
+  );
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assert(html.includes("Docs Writer"), "cookie-authenticated reader should see internal content");
 });

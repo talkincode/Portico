@@ -28,6 +28,7 @@ function context(
 const request = (path: string, init?: RequestInit) => new Request(`http://127.0.0.1${path}`, init);
 
 Deno.test("review anonymous browser GET redirects to login; API callers keep JSON errors", async () => {
+  // Anonymous browser requests redirect to the Portal login with next=/review
   const page = await handleReviewRequest(
     request("/review", { headers: { accept: "text/html,application/xhtml+xml" } }),
     {
@@ -36,7 +37,7 @@ Deno.test("review anonymous browser GET redirects to login; API callers keep JSO
     } as never,
   );
   assertEquals(page.status, 303);
-  assertEquals(page.headers.get("location"), "/review/login");
+  assertEquals(page.headers.get("location"), "/login?next=/review");
   const api = await handleReviewRequest(
     request("/review", { headers: { accept: "application/json" } }),
     {

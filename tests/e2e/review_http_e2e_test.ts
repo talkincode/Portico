@@ -239,8 +239,12 @@ Deno.test(
       assert(setCookie.includes("Secure"), "the session cookie must be HTTPS-only");
       assert(setCookie.includes("SameSite=Lax"), "the session cookie must be same-site");
       assert(
-        setCookie.includes("Path=/review"),
-        "the session cookie must not roam the whole Portal",
+        setCookie.includes("Path=/"),
+        "the session cookie must roam the whole Portal",
+      );
+      assert(
+        !setCookie.includes("Path=/review"),
+        "the session cookie must not be scoped to /review alone",
       );
       assert(
         !setCookie.includes(credential),
