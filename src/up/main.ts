@@ -4,6 +4,7 @@ import {
   cfAccessNetHost,
   gatewayPerms as gatewayPermsFor,
   githubNetHosts,
+  portalPerms as portalPermsFor,
   readOnlyHttpPerms,
   reviewPerms,
 } from "../perms.ts";
@@ -250,35 +251,40 @@ if (import.meta.main) {
 
   // Each child gets the permission set for the address it will actually bind,
   // so an intranet `PORTICO_BIND` does not produce a startup failure.
-  const portalPerms = readOnlyHttpPerms(setup.hostname);
+  const envObj = Deno.env.toObject();
+  const githubEnabled = parseGithubEnv(envObj).enabled;
+  const portalPerms = portalPermsFor(setup.hostname, githubEnabled);
   const gatewayPerms = gatewayPermsFor(setup.hostname);
   const mcpPerms = readOnlyHttpPerms(setup.hostname);
   const reviewPermsFor = reviewPerms(setup.hostname, {
     catalog: setup.catalog,
     identities: setup.identities,
     sessions: setup.sessions,
-  }, reviewExtraNet(Deno.env.toObject()));
+  }, reviewExtraNet(envObj));
 
   try {
+    // Portal gets GitHub OAuth env vars when enabled; same vars as Review.
+    const portalEnvBase: Record<string, string> = {
+      PORTICO_CATALOG_PATH: setup.catalog,
+      PORTICO_IDENTITIES_PATH: setup.identities,
+      PORTICO_SESSIONS_PATH: setup.sessions,
+      PORTICO_PAGE_PATH: setup.page,
+      PORTICO_CONCLUSIONS_PATH: setup.conclusions,
+      PORTICO_SEAL_ANCHORS_PATH: setup.sealAnchors,
+      PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
+      PORTICO_BIND: setup.hostname,
+      PORTICO_PORT: String(setup.portalPort),
+    };
+    if (githubEnabled) {
+      portalEnvBase.PORTICO_REVIEW_GITHUB_ENABLED = envObj.PORTICO_REVIEW_GITHUB_ENABLED ?? "";
+      portalEnvBase.PORTICO_REVIEW_GITHUB_CLIENT_ID = envObj.PORTICO_REVIEW_GITHUB_CLIENT_ID ?? "";
+      portalEnvBase.PORTICO_REVIEW_GITHUB_CLIENT_SECRET =
+        envObj.PORTICO_REVIEW_GITHUB_CLIENT_SECRET ?? "";
+      portalEnvBase.PORTICO_REVIEW_GITHUB_CALLBACK = envObj.PORTICO_REVIEW_GITHUB_CALLBACK ?? "";
+      portalEnvBase.PORTICO_REVIEW_ALLOWLIST = envObj.PORTICO_REVIEW_ALLOWLIST ?? "";
+    }
     started.push(
-      await start("portal", PORTAL_ENTRY, portalPerms, {
-        PORTICO_CATALOG_PATH: setup.catalog,
-        PORTICO_IDENTITIES_PATH: setup.identities,
-        PORTICO_SESSIONS_PATH: setup.sessions,
-        PORTICO_PAGE_PATH: setup.page,
-        // Portal and MCP read the same conclusion file the auditor writes with
-        // `audit conclude`, so all three entrances agree on the verdicts.
-        PORTICO_CONCLUSIONS_PATH: setup.conclusions,
-        // Portal and MCP must get the same anchor file as the CLI, or they
-        // report every pillar as unanchored (count 0) while `audit verify`
-        // compares: a rewritten chain would look clean on the web surface.
-        PORTICO_SEAL_ANCHORS_PATH: setup.sealAnchors,
-        // All three entrances read the same Gateway audit file, so the auditor
-        // timeline is identical whichever one is asked.
-        PORTICO_GATEWAY_AUDIT_PATH: setup.gatewayAudit,
-        PORTICO_BIND: setup.hostname,
-        PORTICO_PORT: String(setup.portalPort),
-      }),
+      await start("portal", PORTAL_ENTRY, portalPerms, portalEnvBase),
     );
 
     started.push(

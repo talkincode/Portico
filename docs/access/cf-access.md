@@ -72,15 +72,26 @@ JWT 校验口径见 [Validating JSON Web Tokens](https://developers.cloudflare.c
 
 ## 明确不做
 
-- 不在 Portal 实现 GitHub OAuth 客户端、邮箱 OTP 或本地 SMTP（Review 的 GitHub 登录见下节，是另一条显式启用的浏览器路径）。
+- 不在 Portal 实现邮箱 OTP 或本地 SMTP。
 - 不把 Cloudflare Tunnel / `cloudflared` 配置、隧道 token 或反代模板收进本仓库。那是边缘基础设施。
 - 不把 JWT 扩到 CLI、Gateway 或 MCP。
 - 不把未审批对象变成公开可达。匿名与失败映射看到的仍是公开面。
 
+
 ---
 
-## Review GitHub OAuth 登录（mira 模式）
+## Portal GitHub OAuth 登录（统一入口）
 
-Cloudflare 只做哑隧道时，人工登录走 Review 自带的 GitHub OAuth：`GET /review/oauth/start` 跳到 github.com（带 state cookie 防 CSRF），`GET /review/oauth/callback` 换 code、取用户与 verified 邮箱。allowlist（`PORTICO_REVIEW_ALLOWLIST`，GitHub login 或邮箱，空即全拒）先过，再用 verified 邮箱命中名册人类并签发普通 Portico 会话（`Secure; HttpOnly; SameSite=Lax` cookie）。GitHub 决定“你是谁”，名册决定“你能审什么”；非 auditor 照样不能批准。一次性凭证登录表单保留作恢复入口。
+Portal 提供统一的 GitHub OAuth 登录入口。`GET /login` 显示登录页（含 GitHub 按钮），`GET /oauth/start` 跳到 github.com（带 state cookie 防 CSRF），`GET /oauth/callback` 换 code、取用户与 verified 邮箱。allowlist（`PORTICO_REVIEW_ALLOWLIST`，GitHub login 或邮箱，空即全拒）先过，再用 verified 邮箱命中名册人类并签发普通 Portico 会话（`Secure; HttpOnly; SameSite=Lax` cookie，`Path=/`）。GitHub 决定"你是谁"，名册决定"你能看到什么"；非 auditor 照样不能访问审计面。一次性凭证登录表单保留作恢复入口。
 
-环境变量（默认全关，缺任一项即关闭）：`PORTICO_REVIEW_GITHUB_ENABLED`、`PORTICO_REVIEW_GITHUB_CLIENT_ID`、`PORTICO_REVIEW_GITHUB_CLIENT_SECRET`（只在主机）、`PORTICO_REVIEW_GITHUB_CALLBACK`（必须 https）、`PORTICO_REVIEW_ALLOWLIST`。启用时 `up`/`build` 给 Review 进程追加且仅追加 `github.com` 与 `api.github.com` 出站。GitHub OAuth App 的 Authorization callback URL 填公网 `https://portico.talkincode.net/review/oauth/callback`。
+环境变量（默认全关，缺任一项即关闭）：`PORTICO_REVIEW_GITHUB_ENABLED`、`PORTICO_REVIEW_GITHUB_CLIENT_ID`、`PORTICO_REVIEW_GITHUB_CLIENT_SECRET`（只在主机）、`PORTICO_REVIEW_GITHUB_CALLBACK`（必须 https）、`PORTICO_REVIEW_ALLOWLIST`。启用时 `up` 给 Portal 进程追加 `github.com` 与 `api.github.com` 出站权限。
+
+**推荐部署**：将 GitHub OAuth App 的 Authorization callback URL 设置为 Portal `/oauth/callback`，例如 `https://portico.talkincode.net/oauth/callback`。Portal 和 Review 共用同一套凭证配置。Review 的 `/review/oauth/start` 会自动重定向到 Portal `/oauth/start`，实现统一登录。
+
+---
+
+## Review GitHub OAuth 登录（兼容模式）
+
+如需保持 Review 独立的 OAuth 回调（回调 URL 为 `/review/oauth/callback`），Review 会直接处理 OAuth 流程。`GET /review/oauth/start` 跳到 github.com，`GET /review/oauth/callback` 完成登录。会话 cookie 的 `Path=/review`，仅限 Review 使用。
+
+启用时 `up`/`build` 给 Review 进程追加 `github.com` 与 `api.github.com` 出站。如果回调 URL 指向 Portal（`/oauth/callback`），Review 的 `/review/oauth/start` 会 303 重定向到 `/oauth/start`，由 Portal 统一处理。

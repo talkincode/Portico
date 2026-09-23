@@ -169,14 +169,22 @@ function anonymous(): Actor {
   return { id: "anonymous", kind: "human", role: "anonymous" };
 }
 /**
- * GitHub OAuth login (mira pattern, Review-only). The state token is a
- * short-lived CSRF binding held in an HttpOnly cookie, never in the URL
- * beyond the provider round-trip. Only allowlisted GitHub logins/emails
- * proceed, and only to the roster human their verified email matches —
- * GitHub never grants a role by itself.
+ * GitHub OAuth login (mira pattern). When Portal owns the callback URL, we
+ * redirect there so one callback serves both surfaces. Otherwise the state
+ * token is a short-lived CSRF binding held in an HttpOnly cookie. Only
+ * allowlisted GitHub logins/emails proceed, and only to the roster human
+ * their verified email matches — GitHub never grants a role by itself.
  */
 function handleOauthStart(context: ReviewContext): Response {
   if (!context.github) return jsonError(501, "github login is not configured");
+  // If Portal owns the callback (URL ends with /oauth/callback, not /review/oauth/callback),
+  // redirect to Portal's /oauth/start so users go through the unified login.
+  if (isPortalCallback(context.github.config.callbackUrl)) {
+    return new Response(null, {
+      status: 303,
+      headers: { "location": "/oauth/start" },
+    });
+  }
   const state = randomState();
   return new Response(null, {
     status: 303,
@@ -186,6 +194,16 @@ function handleOauthStart(context: ReviewContext): Response {
         `portico_oauth_state=${state}; Path=/review/oauth/callback; Secure; HttpOnly; SameSite=Lax; Max-Age=600`,
     },
   });
+}
+
+/** True when the callback URL ends at Portal's /oauth/callback, not Review's. */
+function isPortalCallback(callbackUrl: string): boolean {
+  try {
+    const url = new URL(callbackUrl);
+    return url.pathname === "/oauth/callback";
+  } catch {
+    return false;
+  }
 }
 
 async function handleOauthCallback(request: Request, context: ReviewContext): Promise<Response> {

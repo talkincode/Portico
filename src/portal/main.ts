@@ -3,6 +3,7 @@ import { CatalogError, ErrorCode } from "../catalog/mod.ts";
 import { readBind } from "../runtime/bind.ts";
 import { parseReviewEntry } from "./review-entry.ts";
 import { listenPortal } from "./server.ts";
+import { parseGithubEnv } from "../review/github.ts";
 
 class UsageError extends Error {
   readonly code = ErrorCode.USAGE;
@@ -23,6 +24,7 @@ if (import.meta.main) {
     const env = Deno.env.toObject();
     const { hostname, port } = readBind(env, 8788);
     const cfAccess = parseCfAccessEnv(env);
+    const github = parseGithubEnv(env);
     const server = listenPortal({
       catalogPath: readPath("PORTICO_CATALOG_PATH", env),
       identitiesPath: readPath("PORTICO_IDENTITIES_PATH", env),
@@ -33,6 +35,7 @@ if (import.meta.main) {
       conclusionsPath: env.PORTICO_CONCLUSIONS_PATH,
       sealAnchorsPath: env.PORTICO_SEAL_ANCHORS_PATH,
       reviewEntry: parseReviewEntry(env),
+      github: github.enabled ? github : undefined,
       hostname,
       port,
       onListen: (addr) => {

@@ -347,3 +347,50 @@ Deno.test("review login page uses the console shell with a github button when co
   assertEquals(plainHtml.includes("/review/oauth/start"), false);
   assertEquals(plainHtml.includes("一次性凭证"), true);
 });
+
+Deno.test("review oauth start redirects to Portal when callback is at Portal", async () => {
+  const context = {
+    catalog: {},
+    access: {},
+    github: {
+      config: {
+        enabled: true,
+        clientId: "test-id",
+        clientSecret: "test-secret",
+        callbackUrl: "https://portico.example.test/oauth/callback",
+        allowlist: ["jamiesun"],
+      },
+      exchange: () => Promise.reject(new Error("not used")),
+    },
+  };
+  const response = await handleReviewRequest(
+    new Request("http://127.0.0.1/review/oauth/start"),
+    context as never,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/oauth/start");
+});
+
+Deno.test("review oauth start uses github directly when callback is at Review", async () => {
+  const context = {
+    catalog: {},
+    access: {},
+    github: {
+      config: {
+        enabled: true,
+        clientId: "test-id",
+        clientSecret: "test-secret",
+        callbackUrl: "https://portico.example.test/review/oauth/callback",
+        allowlist: ["jamiesun"],
+      },
+      exchange: () => Promise.reject(new Error("not used")),
+    },
+  };
+  const response = await handleReviewRequest(
+    new Request("http://127.0.0.1/review/oauth/start"),
+    context as never,
+  );
+  assertEquals(response.status, 303);
+  const location = response.headers.get("location") ?? "";
+  assertEquals(location.startsWith("https://github.com/login/oauth/authorize"), true);
+});
