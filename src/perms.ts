@@ -34,6 +34,27 @@ export function readOnlyHttpPerms(hostname: string = LOOPBACK_HOSTNAME): readonl
   return ["--allow-read", "--allow-env", netAllow(hostname)];
 }
 
+/**
+ * Portal permissions with optional GitHub OAuth outbound access.
+ * When `enableGithub` is true, adds `github.com` and `api.github.com` to the
+ * net allow list for OAuth token exchange and user lookup.
+ */
+export function portalPerms(
+  hostname: string = LOOPBACK_HOSTNAME,
+  enableGithub = false,
+): readonly string[] {
+  const base = ["--allow-read", "--allow-env"];
+  const hosts = [
+    hostname === LOOPBACK_HOSTNAME || hostname === "localhost"
+      ? LOOPBACK_HOSTNAME
+      : `${LOOPBACK_HOSTNAME},${hostname}`,
+  ];
+  if (enableGithub) {
+    hosts.push(...githubNetHosts());
+  }
+  return [...base, `--allow-net=${hosts.join(",")}`];
+}
+
 export function gatewayPerms(hostname: string = LOOPBACK_HOSTNAME): readonly string[] {
   return ["--allow-read", "--allow-write", "--allow-env", netAllow(hostname)];
 }

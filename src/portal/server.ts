@@ -8,8 +8,9 @@ import {
 import { CatalogService, FileCatalogStore } from "../catalog/mod.ts";
 import { FileGatewayAuditStore, GatewayService } from "../gateway/mod.ts";
 import { FilePageStore, PageService } from "../ui/mod.ts";
-import { handlePortalRequest, type PortalCfAccess } from "./handler.ts";
+import { handlePortalRequest, type PortalCfAccess, type PortalGithub } from "./handler.ts";
 import type { ReviewEntry } from "./review-entry.ts";
+import { exchangeGithubCode, type GithubOauthConfig } from "../review/github.ts";
 
 export interface PortalListenOptions {
   catalogPath: string;
@@ -46,6 +47,13 @@ export interface PortalListenOptions {
    * process: the deployment either declares one or the chrome stays silent.
    */
   reviewEntry?: ReviewEntry;
+  /**
+   * Optional GitHub OAuth config for Portal login. When set, `/login` shows a
+   * GitHub login button, `/oauth/start` redirects to GitHub, and
+   * `/oauth/callback` handles the callback. Sessions are scoped to the Portal
+   * (`Path=/`), not Review.
+   */
+  github?: GithubOauthConfig;
 }
 
 export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
@@ -70,6 +78,9 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
   const sealAnchors = options.sealAnchorsPath
     ? new FileAnchorStore(options.sealAnchorsPath)
     : undefined;
+  const github: PortalGithub | undefined = options.github
+    ? { config: options.github, exchange: exchangeGithubCode }
+    : undefined;
   return Deno.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
@@ -85,6 +96,7 @@ export function listenPortal(options: PortalListenOptions): Deno.HttpServer {
       sealAnchors,
       cfAccess: options.cfAccess,
       reviewEntry: options.reviewEntry,
+      github,
     }));
 }
 

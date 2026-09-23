@@ -1379,6 +1379,12 @@ Deno.test("portal /login page is 200 for anonymous users", async () => {
   const html = await response.text();
   assert(html.includes("登录"), "login page should show login title");
   assert(html.includes('action="/login"'), "login page should have login form");
+  assert(html.includes("一次性凭证"), "login page should show credential field");
+  assert(!html.includes("/oauth/start"), "login page should not show oauth link without github");
+  assert(
+    !html.includes("使用 GitHub 登录"),
+    "login page should not show github button without config",
+  );
 });
 
 Deno.test("portal /login page redirects signed-in users to /internal", async () => {
@@ -1394,7 +1400,9 @@ Deno.test("portal /login page redirects signed-in users to /internal", async () 
 Deno.test("portal /login with next param redirects signed-in users to that path", async () => {
   const context = await seededContext();
   const response = await handlePortalRequest(
-    new Request("http://portico.local/login?next=/internal/audit", { headers: actorHeaders(auditor) }),
+    new Request("http://portico.local/login?next=/internal/audit", {
+      headers: actorHeaders(auditor),
+    }),
     context,
   );
   assertEquals(response.status, 303);
@@ -1410,7 +1418,9 @@ Deno.test("portal /login rejects unsafe next params", async () => {
   ];
   for (const next of unsafe) {
     const response = await handlePortalRequest(
-      new Request(`http://portico.local/login?next=${encodeURIComponent(next)}`, { headers: actorHeaders(reader) }),
+      new Request(`http://portico.local/login?next=${encodeURIComponent(next)}`, {
+        headers: actorHeaders(reader),
+      }),
       context,
     );
     assertEquals(response.status, 303);
@@ -1520,4 +1530,215 @@ Deno.test("portal login page accepts cookie-based session", async () => {
   assertEquals(response.status, 200);
   const html = await response.text();
   assert(html.includes("Docs Writer"), "cookie-authenticated reader should see internal content");
+});
+
+/* ── Portal GitHub OAuth ───────────────────────────────────────────────── */
+
+Deno.test("portal login page shows github button when configured", async () => {
+  const context = await seededContext();
+  const github = {
+    config: {
+      enabled: true as const,
+      clientId: "test-client-id",
+      clientSecret: "test-secret",
+      callbackUrl: "https://portico.example.test/oauth/callback",
+      allowlist: ["jamiesun"],
+    },
+    exchange: () => Promise.reject(new Error("not used")),
+  };
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/login"),
+    { ...context, github },
+  );
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assert(html.includes("使用 GitHub 登录"), "login page should show github button");
+  assert(html.includes("/oauth/start"), "login page should show oauth link");
+  assert(html.includes("一次性凭证"), "login page should still show credential field");
+});
+
+Deno.test("portal oauth start returns 501 when github is not configured", async () => {
+  const context = await seededContext();
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/oauth/start"),
+    context,
+  );
+  const { status, body } = await jsonOf(response);
+  assertEquals(status, 501);
+  assertEquals(body.ok, false);
+  assertEquals(body.error?.code, "INVALID_STATE");
+});
+
+Deno.test("portal oauth start redirects to github when configured", async () => {
+  const context = await seededContext();
+  const github = {
+    config: {
+      enabled: true as const,
+      clientId: "test-client-id",
+      clientSecret: "test-secret",
+      callbackUrl: "https://portico.example.test/oauth/callback",
+      allowlist: ["jamiesun"],
+    },
+    exchange: () => Promise.reject(new Error("not used")),
+  };
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/oauth/start"),
+    { ...context, github },
+  );
+  assertEquals(response.status, 303);
+  const location = response.headers.get("location") ?? "";
+  assert(
+    location.startsWith("https://github.com/login/oauth/authorize"),
+    "should redirect to github",
+  );
+  assert(location.includes("client_id=test-client-id"), "should include client_id");
+  const stateCookie = response.headers.get("set-cookie") ?? "";
+  assert(stateCookie.includes("portico_oauth_state="), "should set state cookie");
+  assert(stateCookie.includes("Path=/oauth/callback"), "state cookie should have correct path");
+});
+
+Deno.test("portal oauth callback returns 501 when github is not configured", async () => {
+  const context = await seededContext();
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/oauth/callback?code=test&state=test"),
+    context,
+  );
+  const { status, body } = await jsonOf(response);
+  assertEquals(status, 501);
+  assertEquals(body.ok, false);
+  assertEquals(body.error?.code, "INVALID_STATE");
+});
+
+Deno.test("portal oauth callback rejects mismatched state", async () => {
+  const context = await seededContext();
+  const github = {
+    config: {
+      enabled: true as const,
+      clientId: "test-client-id",
+      clientSecret: "test-secret",
+      callbackUrl: "https://portico.example.test/oauth/callback",
+      allowlist: ["jamiesun"],
+    },
+    exchange: () =>
+      Promise.resolve({ login: "jamiesun", email: "jamiesun@example.com", emails: [] }),
+  };
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/oauth/callback?code=test&state=wrong", {
+      headers: { cookie: "portico_oauth_state=expected" },
+    }),
+    { ...context, github },
+  );
+  assertEquals(response.status, 400);
+  const html = await response.text();
+  assert(html.includes("回调校验失败"), "should show error message");
+});
+
+Deno.test("portal oauth callback rejects user not in allowlist", async () => {
+  const context = await seededContext();
+  const github = {
+    config: {
+      enabled: true as const,
+      clientId: "test-client-id",
+      clientSecret: "test-secret",
+      callbackUrl: "https://portico.example.test/oauth/callback",
+      allowlist: ["jamiesun"],
+    },
+    exchange: () => Promise.resolve({ login: "mallory", email: "mallory@example.com", emails: [] }),
+  };
+  const state = "test-state";
+  const response = await handlePortalRequest(
+    new Request(`http://portico.local/oauth/callback?code=test&state=${state}`, {
+      headers: { cookie: `portico_oauth_state=${state}` },
+    }),
+    { ...context, github },
+  );
+  assertEquals(response.status, 403);
+  const html = await response.text();
+  assert(html.includes("不在 allowlist"), "should show allowlist error");
+});
+
+Deno.test("portal oauth callback mints session for roster human via email", async () => {
+  const context = await seededContext();
+  await context.access.grant(auditor, {
+    id: "human:github-user",
+    kind: "human",
+    role: "reader",
+    email: "jamiesun@example.com",
+  });
+  const sessions: string[] = [];
+  const contextWithSession = {
+    ...context,
+    access: {
+      ...context.access,
+      createBrowserSession: (email: string) => {
+        sessions.push(email);
+        return Promise.resolve({
+          sessionId: "ses-1",
+          token: "pst1_test",
+          actor: { id: "human:github-user", kind: "human", role: "reader" },
+          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        });
+      },
+    },
+  };
+  const github = {
+    config: {
+      enabled: true as const,
+      clientId: "test-client-id",
+      clientSecret: "test-secret",
+      callbackUrl: "https://portico.example.test/oauth/callback",
+      allowlist: ["jamiesun"],
+    },
+    exchange: () =>
+      Promise.resolve({
+        login: "jamiesun",
+        email: "jamiesun@example.com",
+        emails: ["jamiesun@example.com"],
+      }),
+  };
+  const state = "test-state";
+  const response = await handlePortalRequest(
+    new Request(`http://portico.local/oauth/callback?code=test&state=${state}`, {
+      headers: { cookie: `portico_oauth_state=${state}` },
+    }),
+    { ...contextWithSession, github } as never,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(response.headers.get("location"), "/internal");
+  assertEquals(sessions, ["jamiesun@example.com"]);
+  const cookies = response.headers.getSetCookie();
+  assert(
+    cookies.some((c) => c.startsWith("portico_session=pst1_test")),
+    "should set session cookie",
+  );
+  assert(cookies.some((c) => c.includes("Path=/")), "session cookie should have root path");
+});
+
+Deno.test("portal oauth callback rejects user not in roster", async () => {
+  const context = await seededContext();
+  const github = {
+    config: {
+      enabled: true as const,
+      clientId: "test-client-id",
+      clientSecret: "test-secret",
+      callbackUrl: "https://portico.example.test/oauth/callback",
+      allowlist: ["jamiesun"],
+    },
+    exchange: () =>
+      Promise.resolve({
+        login: "jamiesun",
+        email: "jamiesun@example.com",
+        emails: ["jamiesun@example.com"],
+      }),
+  };
+  const state = "test-state";
+  const response = await handlePortalRequest(
+    new Request(`http://portico.local/oauth/callback?code=test&state=${state}`, {
+      headers: { cookie: `portico_oauth_state=${state}` },
+    }),
+    { ...context, github },
+  );
+  assertEquals(response.status, 403);
+  const html = await response.text();
+  assert(html.includes("名册里没有"), "should show roster miss error");
 });

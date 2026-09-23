@@ -864,7 +864,11 @@ Deno.test("the pending queue filters pending_public candidates by channel as rea
     new Request("http://portico.local/internal/pending?channel=cli"),
     context,
   );
-  assertEquals(anonResponse.status, 303, "anonymous /internal/pending with filter must redirect to login");
+  assertEquals(
+    anonResponse.status,
+    303,
+    "anonymous /internal/pending with filter must redirect to login",
+  );
   assert(
     anonResponse.headers.get("location")?.startsWith("/login"),
     "anonymous redirect must go to /login",

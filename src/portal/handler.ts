@@ -674,7 +674,9 @@ function loginSecurityHeaders(contentType: string): HeadersInit {
 }
 
 function loginRedirect(next?: string): Response {
-  const target = next && isSafeNextPath(next) ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  const target = next && isSafeNextPath(next)
+    ? `/login?next=${encodeURIComponent(next)}`
+    : "/login";
   return new Response(null, { status: 303, headers: { location: target } });
 }
 
@@ -754,7 +756,10 @@ async function handleLogout(request: Request, context: PortalContext): Promise<R
   }
 
   const headers = new Headers({ location: "/" });
-  headers.append("set-cookie", "portico_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0");
+  headers.append(
+    "set-cookie",
+    "portico_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+  );
   return new Response(null, { status: 303, headers });
 }
 
