@@ -7,6 +7,7 @@
  * detail that the public surface must never receive.
  */
 
+import { reviewHref } from "../../review-entry.ts";
 import type {
   Actor,
   AgentSurface,
@@ -371,7 +372,7 @@ function renderReader(
     readingMinutes(surface.description)
   } 分钟阅读 · <span class="tk-id">${esc(surface.id)}</span></span>
             <span class="int-actions">
-              ${governanceActions(ctx.actor, surface)}
+              ${governanceActions(ctx, surface)}
               <a class="tk-btn tk-btn--quiet" href="/api/catalog/${esc(surface.id)}">JSON</a>
             </span>
           </div>
@@ -442,7 +443,16 @@ ${timeline.map(renderTimelineItem).join("\n")}
       </main>`;
 }
 
-function governanceActions(actor: Actor, surface: AgentSurface): string {
+function governanceActions(ctx: ViewContext, surface: AgentSurface): string {
+  // The write goes to the Review process, never to this one: the Portal holds no
+  // catalog write permission, and these forms are only the browser door to it.
+  // A deployment that serves no Review entrance must therefore render no
+  // control — an approve button posting into a 404 is a control that lies about
+  // what this deployment can do, and `PORTICO_REVIEW_ORIGIN=off` names exactly
+  // that deployment (the rule lives in `src/portal/review-entry.ts`).
+  const entry = reviewHref(ctx.reviewEntry, true);
+  if (entry === undefined) return "";
+  const actor = ctx.actor;
   const forms: string[] = [];
   const note =
     `<input class="int-action__note" name="note" maxlength="500" placeholder="备注（可选）" aria-label="备注">`;
@@ -451,13 +461,19 @@ function governanceActions(actor: Actor, surface: AgentSurface): string {
   const submittedBy = surface.publicSubmission?.submittedBy.id;
   if (auditor && surface.governanceState === "pending_public" && actor.id !== submittedBy) {
     forms.push(
-      `<form method="post" action="/review/approve">${hidden}${note}<button class="tk-btn" type="submit">通过</button></form>`,
-      `<form method="post" action="/review/reject">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">驳回</button></form>`,
+      `<form method="post" action="${
+        esc(entry)
+      }/approve">${hidden}${note}<button class="tk-btn" type="submit">通过</button></form>`,
+      `<form method="post" action="${
+        esc(entry)
+      }/reject">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">驳回</button></form>`,
     );
   }
   if (auditor && surface.governanceState === "approved_public") {
     forms.push(
-      `<form method="post" action="/review/withdraw">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">撤回</button></form>`,
+      `<form method="post" action="${
+        esc(entry)
+      }/withdraw">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">撤回</button></form>`,
     );
   }
   const removable = surface.governanceState === "draft" ||
@@ -465,7 +481,9 @@ function governanceActions(actor: Actor, surface: AgentSurface): string {
     surface.governanceState === "rejected";
   if (removable && (actor.role === "maintainer" || auditor)) {
     forms.push(
-      `<form method="post" action="/review/remove">${hidden}<button class="tk-btn tk-btn--quiet" type="submit">删除</button></form>`,
+      `<form method="post" action="${
+        esc(entry)
+      }/remove">${hidden}<button class="tk-btn tk-btn--quiet" type="submit">删除</button></form>`,
     );
   }
   if (forms.length === 0) return "";

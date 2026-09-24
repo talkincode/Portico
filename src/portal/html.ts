@@ -1013,6 +1013,37 @@ const MAGAZINE_CSS = `
       .auth-login:hover {
         text-decoration: underline;
       }
+      /* The way back into the workbench. A signed-in reader who followed
+         "发现" out of /internal had no link home: the only way back was the
+         browser's Back button or typing the path. */
+      .auth-workbench {
+        align-items: center;
+        color: var(--text);
+        display: inline-flex;
+        font-weight: 500;
+        gap: 0.35rem;
+        text-decoration: none;
+      }
+      .auth-workbench:hover {
+        color: var(--accent);
+      }
+      .auth-workbench__count {
+        background: var(--accent);
+        border-radius: 999px;
+        color: #fff;
+        font-size: 0.68rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0.15rem 0.4rem;
+        text-decoration: none;
+      }
+      .auth-public {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .auth-public:hover {
+        color: var(--accent);
+      }
 
       @media (max-width: 1180px) {
         .reading { grid-template-columns: 280px minmax(0, 1fr); }
@@ -1075,13 +1106,20 @@ export function renderMagazinePage(input: MagazinePageInput): string {
 export function renderNotFoundPage(
   theme: ThemeMode = "system",
   reviewEntry?: ReviewEntry,
+  reader: { signedInId?: string; showInternal?: boolean; pendingPublic?: number } = {},
 ): string {
+  // The reader's own identity survives a 404. Dropping it turned a signed-in
+  // operator's typo into an anonymous shell offering 登录 — a link that, when
+  // followed, redirected them back into the workbench they came from.
   return renderChrome({
     theme,
     channel: null,
     path: "/",
     title: "Portico",
     reviewEntry,
+    signedInId: reader.signedInId,
+    showInternal: reader.showInternal,
+    pendingPublic: reader.pendingPublic,
     body: `<div class="frame"><p class="empty">没有这个入口，或你无权看见。</p></div>`,
   });
 }
@@ -1130,11 +1168,30 @@ function renderChrome(input: {
   const miraRadioActive = category === "mira-radio" ? " active" : "";
   const uncategorizedActive = category === "uncategorized" ? " active" : "";
 
-  const authChrome = input.signedInId
-    ? `<span class="auth-user">${
-      escapeHtml(input.signedInId)
-    }</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
-    : `<a class="auth-login" href="/login">登录</a>`;
+  // `docs/roadmap.md`「Portal 发现与仪表盘」says what this chrome owes a
+  // reader: the magazine links to `/public` for everyone, only a signed-in
+  // identity links to `/internal`, and the *unfiltered* `pending_public` count
+  // is a link to `/internal/pending` — a read-only entrance, never an approve
+  // button. The parameters were threaded in and then never read, so a signed-in
+  // operator who followed 发现 out of the workbench had no way back except the
+  // browser's Back button.
+  const pending = input.pendingPublic ?? 0;
+  const workbench = input.showInternal === true
+    ? `<a class="auth-workbench" href="/internal">内部工作台</a>${
+      pending > 0
+        ? `<a class="auth-workbench__count" href="/internal/pending" title="${pending} 项待审公开">${pending}</a>`
+        : ""
+    }`
+    : "";
+  const authChrome = `${
+    input.signedInId ? workbench : ""
+  }<a class="auth-public" href="/public">公开面</a>${
+    input.signedInId
+      ? `<span class="auth-user">${
+        escapeHtml(input.signedInId)
+      }</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
+      : `<a class="auth-login" href="/login">登录</a>`
+  }`;
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>

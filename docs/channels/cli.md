@@ -13,9 +13,12 @@
   "description": "本地执行静态检查与 Agent 自动评审的 CLI 客户端",
   "channels": ["cli"],
   "entry": {
-    "package": "jsr:@tools/reviewer@1.1.0"
+    "kind": "package",
+    "value": "jsr:@tools/reviewer@1.1.0"
   },
-  "version": "1.1.0"
+  "version": "1.1.0",
+  "visibility": "internal",
+  "maintainers": [{ "id": "agent:review-bot", "kind": "agent" }]
 }
 ```
 

@@ -50,14 +50,15 @@
 PORTICO_DATA_DIR=./data deno task up
 ```
 
-终端会输出一行机读 JSON，给出三个本地访问地址：
+终端会输出一行机读 JSON，给出四个本地访问地址：
 
 ```json
-{"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"}}}
+{"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"},"review":{"url":"http://127.0.0.1:8791"}}}
 ```
 
 - **公开发布大厅**：打开浏览器访问 `http://127.0.0.1:8788/public` 即可直接体验！
-- **内部笔记台**：访问 `http://127.0.0.1:8788/internal`（需登录会话）。
+- **内部工作台**：访问 `http://127.0.0.1:8788/internal`（需登录会话）。登录后页眉里有「内部工作台」入口，不需要记路径。
+- **审核入口**：`http://127.0.0.1:8791/review`。本地 `up` 没有反向代理，工作台上的审批按钮要指向这个地址才能提交，启动前设 `PORTICO_REVIEW_ORIGIN=http://127.0.0.1:8791/review`（声明的是表单挂载的基址，`/review` 前缀要写进去）；未声明时（默认同源）按钮只在 `/review` 被代理到同一 origin 的部署里可用。
 
 ---
 
@@ -74,10 +75,12 @@ deno task cli -- identity grant --identities ./data/identities.json --id human:a
 deno task cli -- identity credential issue --identities ./data/identities.json --sessions ./data/sessions.json --id human:admin
 
 # 3. 登录换取会话令牌（Session）
+# 输出：{"ok":true,"data":{"sessionId":"ses-...","token":"pst1_...","actor":{...},"expiresAt":"..."}}
+# 会话令牌在 data.token 里，不是 data.session
 deno task cli -- identity login --identities ./data/identities.json --sessions ./data/sessions.json --id human:admin --token pct1_...
 ```
 
-> **注**：拿到 `pst1_...` 会话令牌后，系统初始模式永久关闭，后续所有操作均需出示 `--session` 证明身份！
+> **注**：拿到 `data.token` 里的 `pst1_...` 会话令牌后，系统初始模式永久关闭，后续所有操作均需出示 `--session` 证明身份！
 
 ### 2. 登记一个内部 Agent
 由维护者 Agent 或开发者将自己的服务登记在册：
@@ -98,8 +101,10 @@ deno task cli -- catalog register \
 # 维护者提交公开申请（进入 pending_public 待审状态）
 deno task cli -- catalog publish --id my-agent --visibility public ...
 
-# 独立人类安全员审核通过（写入 approvals.json 并正式对全网公开）
+# 独立人类安全员审核通过（写入审批轨迹并正式对全网公开）
 deno task cli -- catalog approve --id my-agent ...
+
+# 同一件事在浏览器里做：登录后打开 /internal?state=pending_public，点「通过」
 
 # 人类安全员写下独立的安全结论（追加式，与维护轨迹分开存储）
 deno task cli -- audit conclude --id my-agent --scope public_boundary \

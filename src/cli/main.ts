@@ -733,6 +733,18 @@ function parseArgs(args: string[]): {
       flags.help = "true";
       continue;
     }
+    // A bare `--` is the argument separator, never a flag. Every documented
+    // invocation goes through it (`deno task cli -- catalog list --catalog ...`),
+    // and the task runner hands it to this process verbatim. Reading it as a flag
+    // named "" made it swallow the next token, so the documented form lost its
+    // command group and answered `unknown command 'list'`.
+    //
+    // It is dropped rather than ending flag parsing: every command here takes its
+    // flags after the positionals and no positional can hold a literal `--`, so a
+    // separator that turned later flags into positionals would break the
+    // invocations the separator exists for. Words after it read exactly like
+    // words before it.
+    if (arg === "--") continue;
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
       const value = args[i + 1];

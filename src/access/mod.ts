@@ -40,5 +40,6 @@ export type {
   SessionAuditView,
   SessionRecord,
   SessionView,
+  SignInBlocker,
 } from "./types.ts";
 export type { Actor, ActorKind, ActorRole } from "../catalog/types.ts";

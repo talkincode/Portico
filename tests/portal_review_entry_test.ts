@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "./assert.ts";
 import { type RosterFixture, signedInRoster } from "./fixtures.ts";
 import { CatalogService, MemoryCatalogStore } from "../src/catalog/mod.ts";
+import type { RegisterInput } from "../src/catalog/mod.ts";
 import { handlePortalRequest, parseReviewEntry, reviewHref } from "../src/portal/mod.ts";
 import type { ReviewEntry } from "../src/portal/mod.ts";
 
@@ -115,4 +116,93 @@ Deno.test("a declared origin is not advertised as primary chrome", async () => {
   assert(!home.includes('href="/review'), "no relative review link survives");
   const public_ = await page("/public", context);
   assert(!public_.includes("review.example.test"), "the public plane does not point at review");
+});
+
+Deno.test("a signed-in reader has a way back to the workbench, an anonymous one does not", async () => {
+  const context = await portalContext();
+  const signedIn = { headers: roster.headersFor(AUDITOR) } as const;
+  const planes = ["/", "/public"];
+
+  for (const path of planes) {
+    const response = await handlePortalRequest(
+      new Request(`http://portico.local${path}`, signedIn),
+      context as never,
+    );
+    const body = await response.text();
+    assert(
+      body.includes('<a class="auth-workbench" href="/internal">') ||
+        body.includes('<a class="pub-nav__link" href="/internal">'),
+      `${path} must lead a signed-in reader back to /internal`,
+    );
+    assert(body.includes("内部工作台"), `${path} must name the workbench entrance`);
+
+    // The same page for an anonymous caller must not advertise the console it
+    // answers 404/redirect to.
+    const anonymous = await handlePortalRequest(
+      new Request(`http://portico.local${path}`),
+      context as never,
+    );
+    const anonymousBody = await anonymous.text();
+    assert(
+      !anonymousBody.includes('href="/internal"'),
+      `${path} must not point an anonymous caller at /internal`,
+    );
+  }
+});
+
+Deno.test("the workbench only offers governance controls the declared entrance can submit", async () => {
+  const pending = {
+    id: "docs-writer",
+    name: "Docs Writer",
+    description: "writes docs",
+    channels: ["cli"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "package", value: "jsr:@scope/tools" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  } satisfies RegisterInput;
+
+  for (
+    const [entry, expected] of [
+      [undefined, "/review/approve"],
+      [{ kind: "same-origin" } as ReviewEntry, "/review/approve"],
+      [
+        { kind: "origin", origin: "http://127.0.0.1:8791" } as ReviewEntry,
+        "http://127.0.0.1:8791/approve",
+      ],
+    ] as const
+  ) {
+    const context = await portalContext(entry);
+    await context.catalog.register(
+      { id: "agent:docs-bot", kind: "agent", role: "maintainer" },
+      pending,
+    );
+    await context.catalog.publish(
+      { id: "agent:docs-bot", kind: "agent", role: "maintainer" },
+      { id: "docs-writer", visibility: "public" },
+    );
+    const body = await page("/internal?id=docs-writer", context);
+    assert(
+      body.includes(`action="${expected}"`),
+      `the approve form must post to ${expected}, got: ${
+        body.slice(body.indexOf("int-actions"), body.indexOf("int-actions") + 400)
+      }`,
+    );
+  }
+
+  // A deployment that serves no Review must render no control at all: the
+  // button used to post into the Portal's own 405.
+  const none = await portalContext({ kind: "none" });
+  await none.catalog.register(
+    { id: "agent:docs-bot", kind: "agent", role: "maintainer" },
+    pending,
+  );
+  await none.catalog.publish(
+    { id: "agent:docs-bot", kind: "agent", role: "maintainer" },
+    { id: "docs-writer", visibility: "public" },
+  );
+  const body = await page("/internal?id=docs-writer", none);
+  assert(!body.includes(">通过<"), "no approve control without a Review entrance");
+  assert(!body.includes(">驳回<"), "no reject control without a Review entrance");
+  assert(!body.includes('action="/review/'), "no review action without a Review entrance");
 });

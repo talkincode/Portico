@@ -56,8 +56,13 @@ interface PublicShellInput {
 function renderPublicPage(input: PublicShellInput): string {
   const { ctx } = input;
   const signedIn = ctx.actor.role !== "anonymous";
+  // A signed-in reader gets the way back into the workbench. Without it the
+  // editorial plane was a cul-de-sac: the header showed who you are and how to
+  // log out, and nothing pointed at the console that manages the records this
+  // page is a projection of. Anonymous callers still see no such link, and
+  // `/internal` keeps answering them 404/redirect rather than advertising.
   const session = signedIn
-    ? `<span class="tk-meta">${
+    ? `<a class="pub-nav__link" href="/internal">内部工作台</a><span class="tk-meta">${
       esc(ctx.actor.id)
     }</span><form method="post" action="/logout" class="int-logout"><button type="submit">登出</button></form>`
     : `<a class="pub-nav__link" href="/login">登录</a>`;

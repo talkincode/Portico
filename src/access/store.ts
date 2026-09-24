@@ -8,6 +8,7 @@ import type {
   Identity,
   RevokeRecord,
   SessionRecord,
+  SignInBlocker,
 } from "./types.ts";
 
 export interface IdentityStore {
@@ -274,6 +275,11 @@ export class FileIdentityStore implements IdentityStore {
 }
 
 export interface SessionStore {
+  /**
+   * Why this store cannot be written, or `undefined` when it can. A file store
+   * asks the runtime about its own path; an in-memory store is always writable.
+   */
+  writeBlocked(): Promise<SignInBlocker | undefined>;
   listCredentials(): Promise<CredentialRecord[]>;
   commitCredential(record: CredentialRecord): Promise<void>;
   revokeCredential(id: string, revokedAt: string): Promise<void>;
@@ -293,6 +299,10 @@ function cloneSession(record: SessionRecord): SessionRecord {
 export class MemorySessionStore implements SessionStore {
   #credentials: CredentialRecord[] = [];
   #sessions: SessionRecord[] = [];
+
+  writeBlocked(): Promise<SignInBlocker | undefined> {
+    return Promise.resolve(undefined);
+  }
 
   listCredentials(): Promise<CredentialRecord[]> {
     return Promise.resolve(this.#credentials.map(cloneCredential));
@@ -348,6 +358,17 @@ interface SessionFile {
 
 export class FileSessionStore implements SessionStore {
   constructor(private readonly path: string) {}
+
+  /**
+   * The grant is scoped to this one file and its `.tmp` sibling, so the answer
+   * is exact: either this process may write the session store, or browser login
+   * cannot mint a session here.
+   */
+  async writeBlocked(): Promise<SignInBlocker | undefined> {
+    const write = await Deno.permissions.query({ name: "write", path: this.path });
+    if (write.state === "granted") return undefined;
+    return { code: "sessions_not_writable", path: this.path };
+  }
 
   async listCredentials(): Promise<CredentialRecord[]> {
     const file = await this.#load();

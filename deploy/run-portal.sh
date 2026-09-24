@@ -5,10 +5,18 @@
 # allow-list is reviewable and testable. `tests/deploy_contract_test.ts` fails
 # if it drifts from `src/perms.ts`.
 #
-# The read-only entrances must never be granted write access: an unconditional
-# `mkdir` in the store layer once turned every Gateway audit append into a 500
-# on the live deployment, because the deployed grant covers two files and not
-# the directory. Keeping this list in the repo is what makes that visible.
+# This entrance is granted no write access at all, and the data directory is
+# mounted read-only: an unconditional `mkdir` in the store layer once turned
+# every Gateway audit append into a 500 on the live deployment, because the
+# deployed grant covers two files and not the directory. Keeping this list in
+# the repo is what makes that visible.
+#
+# The consequence is stated rather than hidden: without a write grant on
+# `sessions.json`, this process cannot mint a browser session, so `/login` says
+# so instead of failing a valid credential. `src/up/main.ts` does grant exactly
+# that one file (see `portalPerms`), which is why the documented browser login
+# works in the supervised deployment. A deployment that wants browser login here
+# must add that scoped grant and make the session file writable in the mount.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

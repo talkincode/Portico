@@ -23,6 +23,7 @@ import {
   ErrorCode,
   parseCatalogQuery,
 } from "../catalog/mod.ts";
+import type { SignInBlocker } from "../access/mod.ts";
 import { type GatewayService, listGatewayAudit } from "../gateway/mod.ts";
 import { type PageService } from "../ui/mod.ts";
 import {
@@ -322,7 +323,14 @@ export async function handlePortalRequest(
           }));
         } catch (error) {
           if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-            return html(renderNotFoundPage(theme, context.reviewEntry), 404);
+            return html(
+              renderNotFoundPage(theme, context.reviewEntry, {
+                signedInId: actor.role !== "anonymous" ? actor.id : undefined,
+                showInternal: actor.role !== "anonymous",
+                pendingPublic,
+              }),
+              404,
+            );
           }
           throw error;
         }
@@ -745,6 +753,24 @@ function loginSecurityHeaders(contentType: string): HeadersInit {
   };
 }
 
+/**
+ * Why this process cannot sign a browser session in, or `undefined` when it can.
+ *
+ * `POST /login` writes one row to the session store, so the answer is a property
+ * of the running process rather than of the deployment document: a Portal
+ * started without that scoped write — the read-only container in
+ * `deploy/run-portal.sh`, or any hand-started process that forgot it — answered
+ * `403 登录失败` and left the reader guessing between "wrong credential" and
+ * "this deployment cannot do this at all". The AccessService answers for its own
+ * store, and the page says which one it is.
+ */
+function signInBlockerText(blocker: SignInBlocker): string {
+  if (blocker.code === "sessions_not_configured") {
+    return "这个部署没有给 Portal 配置会话存储（PORTICO_SESSIONS_PATH）。";
+  }
+  return `这个部署的 Portal 进程没有 ${blocker.path} 的写权限（它只写这一个文件：目录、名册与审计都不写）。`;
+}
+
 function loginRedirect(next?: string): Response {
   const target = next && isSafeNextPath(next)
     ? `/login?next=${encodeURIComponent(next)}`
@@ -774,7 +800,9 @@ async function handleLogin(request: Request, context: PortalContext): Promise<Re
       return postLoginRedirect(actor, safeNext);
     }
     return new Response(
-      renderLoginPage(request, context.github !== undefined, safeNext),
+      renderLoginPage(request, context.github !== undefined, safeNext, undefined, {
+        blocked: await context.access.signInBlocked(),
+      }),
       { status: 200, headers: loginSecurityHeaders("text/html; charset=utf-8") },
     );
   }
@@ -790,8 +818,20 @@ async function handleLogin(request: Request, context: PortalContext): Promise<Re
 
   if (typeof body.id !== "string" || typeof body.token !== "string") {
     return new Response(
-      renderLoginPage(request, context.github !== undefined, safeNext, "身份和凭证都是必填项"),
+      renderLoginPage(request, context.github !== undefined, safeNext, "身份和凭证都是必填项", {
+        blocked: await context.access.signInBlocked(),
+      }),
       { status: 400, headers: loginSecurityHeaders("text/html; charset=utf-8") },
+    );
+  }
+
+  // Refused before the attempt, so a deployment that cannot mint a session says
+  // so instead of reporting a permission denial as a bad credential.
+  const blocked = await context.access.signInBlocked();
+  if (blocked) {
+    return new Response(
+      renderLoginPage(request, context.github !== undefined, safeNext, undefined, { blocked }),
+      { status: 403, headers: loginSecurityHeaders("text/html; charset=utf-8") },
     );
   }
 
@@ -835,10 +875,14 @@ async function handleLogout(request: Request, context: PortalContext): Promise<R
   return new Response(null, { status: 303, headers });
 }
 
-function handleOauthStart(_request: Request, context: PortalContext): Response {
+async function handleOauthStart(_request: Request, context: PortalContext): Promise<Response> {
   if (!context.github) {
     return jsonError(501, ErrorCode.INVALID_STATE, "github login is not configured");
   }
+  // The callback mints a session, so a deployment that cannot write the session
+  // store must refuse before sending the reader through GitHub and back.
+  const blocked = await context.access.signInBlocked();
+  if (blocked) return jsonError(403, ErrorCode.INVALID_STATE, signInBlockerText(blocked));
   const state = randomState();
   return new Response(null, {
     status: 303,
@@ -975,13 +1019,35 @@ function renderLoginPage(
   githubEnabled: boolean,
   next: string | null,
   error?: string,
+  options: { blocked?: SignInBlocker } = {},
 ): string {
-  const github = githubEnabled
-    ? `<a class="login-github" href="/oauth/start">使用 GitHub 登录</a><div class="login-div"><span>或一次性凭证</span></div>`
-    : "";
   const alert = error ? `<p class="tk-note" role="alert">${esc(error)}</p>` : "";
   const nextField = next ? `<input type="hidden" name="next" value="${esc(next)}">` : "";
   const formAction = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  const unavailable = options.blocked !== undefined;
+
+  // A login form that cannot succeed is a lie about the deployment, so it is
+  // not rendered: the reason and the entrances that do work take its place.
+  const signIn = unavailable
+    ? `<div class="tk-note" role="alert" data-login="unavailable">
+        <p><strong>这个部署无法在浏览器里登录。</strong>${
+      esc(signInBlockerText(options.blocked!))
+    }</p>
+        <p>可选：用 CLI 换取会话（<code>deno task cli -- identity login …</code>）；把请求发给提供
+        <code>/review</code> 的入口；或让运维给 Portal 进程补上会话存储的写权限后重启。</p>
+      </div>`
+    : `${
+      githubEnabled
+        ? `<a class="login-github" href="/oauth/start">使用 GitHub 登录</a><div class="login-div"><span>或一次性凭证</span></div>`
+        : ""
+    }
+      <form method="post" action="${esc(formAction)}">
+        ${nextField}
+        <div class="login-field"><label for="login-id">身份</label><input id="login-id" name="id" autocomplete="username" required></div>
+        <div class="login-field"><label for="login-token">一次性凭证</label><input id="login-token" name="token" type="password" autocomplete="current-password" required></div>
+        <button class="tk-btn" type="submit">登录</button>
+      </form>
+      <p class="tk-note" style="margin-top:16px">登录后可访问内部工作台。仅 allowlisted 账号可通过 GitHub 登录；能看到什么由名册决定。</p>`;
 
   return renderShell({
     title: "登录",
@@ -990,18 +1056,11 @@ function renderLoginPage(
     path: "/login",
     head: `<style>${LOGIN_CSS}</style>`,
     body: `  <main class="login-wrap">
-    <div class="tk-panel login-card">
+    <div class="tk-panel login-card"${unavailable ? ' data-login="unavailable"' : ""}>
       <p class="tk-meta">PORTICO · 门户登录</p>
       <h1>登录</h1>
       ${alert}
-      ${github}
-      <form method="post" action="${esc(formAction)}">
-        ${nextField}
-        <div class="login-field"><label for="login-id">身份</label><input id="login-id" name="id" autocomplete="username" required></div>
-        <div class="login-field"><label for="login-token">一次性凭证</label><input id="login-token" name="token" type="password" autocomplete="current-password" required></div>
-        <button class="tk-btn" type="submit">登录</button>
-      </form>
-      <p class="tk-note" style="margin-top:16px">登录后可访问内部工作台。仅 allowlisted 账号可通过 GitHub 登录；能看到什么由名册决定。</p>
+      ${signIn}
     </div>
   </main>`,
   });

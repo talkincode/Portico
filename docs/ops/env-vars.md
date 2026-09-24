@@ -15,10 +15,12 @@ Portico 支持通过环境变量对各进程的监听地址、端口与数据文
 | **`PORTICO_MCP_PORT`** | MCP | `8790` | MCP Protocol Server 的 HTTP 监听端口。 |
 | **`PORTICO_CATALOG_PATH`**| Portal/GW/MCP | `${DATA_DIR}/catalog.json` | 目录服务数据文件的绝对或相对路径。 |
 | **`PORTICO_IDENTITIES_PATH`**| 全局 | `${DATA_DIR}/identities.json`| 身份名册数据文件路径。 |
-| **`PORTICO_SESSIONS_PATH`** | 全局 | `${DATA_DIR}/sessions.json` | 凭证与会话数据文件路径。 |
+| **`PORTICO_SESSIONS_PATH`** | 全局 | `${DATA_DIR}/sessions.json` | 凭证与会话数据文件路径。Portal 需要对这个文件（及 `.tmp`）有写权限才能签发浏览器会话（`POST /login` 与 GitHub 回调）；没有这份授权时 `/login` 会直接说明本部署无法在浏览器里登录，而不是把权限拒绝报成「凭证错」。 |
 | **`PORTICO_GATEWAY_AUDIT_PATH`**| GW/Portal/MCP| `${DATA_DIR}/gateway-audit.json`| 网关访问流水文件路径。若给 Portal/MCP 配置，则其审计视图会并入网关流水。 |
 | **`PORTICO_CONCLUSIONS_PATH`**| CLI/Portal/MCP | `${DATA_DIR}/conclusions.json` | 追加式安全结论文件路径。CLI `audit conclude` / `audit conclusions` / `audit standings` / `audit verify` 与 Portal `GET /api/conclusions`（及派生视图 `GET /api/conclusions/standings`）、MCP `portico_conclusions` / `portico_conclusion_standings` 读同一文件；写入口只有 CLI。 |
 | **`PORTICO_SEAL_ANCHORS_PATH`**| CLI/Portal/MCP | `${DATA_DIR}/seal-anchors.json` | 封条检查点（外部锚定）文件路径。Portal `GET /api/seal-anchors`、MCP `portico_seal_anchors` 与 CLI `audit anchor` / `audit anchors` 读同一文件；钉检查点只有 CLI。未配置时各入口按空集合处理，`audit verify` 报告 `anchored: 0`（未校验），不会失败。 |
+| **`PORTICO_REVIEW_PORT`** | Review | `8791` | Review 进程（浏览器审批入口）的监听端口。`up` 会同时起动它，但**不做反向代理**：入口在自己的端口上。 |
+| **`PORTICO_REVIEW_ORIGIN`** | Portal | （空 = 同源） | 本部署实际提供的审核入口，决定工作台「通过 / 驳回 / 撤回 / 删除」表单提交到哪、以及它们出不出现。空 = 同源 `/review/*`（隧道/反代把 `/review*` 转发到 Review 端口时成立）；`off` = 本部署不提供审核入口，按钮不渲染；绝对 `http(s)` 基址 = 提交到那里（本地 `deno task up` 想在浏览器里点审批就设 `http://127.0.0.1:8791/review`；路径前缀要写进去，末尾斜杠可有可无）。无法解析的值按「不提供」处理，宁可少一个入口也不挂一个必然 404 的链接。 |
 | **`PORTICO_PAGE_PATH`** | Portal/CLI/MCP | `${DATA_DIR}/page.json` | 自定义门户组件盒布局配置文件路径（可选）。Portal `GET /api/page` 与 MCP `portico_page` 读同一文件；缺省则组合结果为空。 |
 | **`PORTICO_CF_ACCESS_ENABLED`** | Portal | 关闭 | 是否启用 Cloudflare Access JWT 映射。未设为 `true`/`yes`/`on`/`1` 时忽略 JWT，现有会话路径不变。 |
 | **`PORTICO_CF_ACCESS_TEAM`** | Portal | （无） | Cloudflare Access team 名，只允许 `[a-z0-9-]`。用于拼 ISS 与默认 JWKS URL。缺省则功能保持关闭。 |

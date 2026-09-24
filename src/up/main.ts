@@ -253,11 +253,12 @@ if (import.meta.main) {
   // so an intranet `PORTICO_BIND` does not produce a startup failure.
   const envObj = Deno.env.toObject();
   const githubEnabled = parseGithubEnv(envObj).enabled;
-  const portalPerms = portalPermsFor(
-    setup.hostname,
-    githubEnabled,
-    githubEnabled ? { sessions: setup.sessions } : undefined,
-  );
+  // The Portal always gets the one scoped write it needs to mint browser
+  // sessions; see `portalPerms`. Without it the documented browser login (and
+  // the GitHub callback) is a 403 in every deployment that runs through `up`.
+  const portalPerms = portalPermsFor(setup.hostname, githubEnabled, {
+    sessions: setup.sessions,
+  });
   const gatewayPerms = gatewayPermsFor(setup.hostname);
   const mcpPerms = readOnlyHttpPerms(setup.hostname);
   const reviewPermsFor = reviewPerms(setup.hostname, {

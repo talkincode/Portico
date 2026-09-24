@@ -14,9 +14,12 @@
   "description": "实时查看多 Agent 交互拓扑与任务状态的 Web 前端",
   "channels": ["web"],
   "entry": {
-    "url": "https://dashboard.example.internal/workspace"
+    "kind": "url",
+    "value": "https://dashboard.example.internal/workspace"
   },
-  "version": "2.0.0"
+  "version": "2.0.0",
+  "visibility": "internal",
+  "maintainers": [{ "id": "agent:dashboard-bot", "kind": "agent" }]
 }
 ```
 

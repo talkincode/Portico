@@ -916,3 +916,54 @@ Deno.test("null category shows all surfaces regardless of their category", async
   assert(html.includes("Miscellaneous Tool"), "uncategorized must be visible");
   assert(html.includes("Legacy Tool"), "no-category must be visible");
 });
+
+Deno.test("the magazine shell leads to the public face and, when signed in, to the workbench", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, internalCli());
+  await context.catalog.register(maintainer, publicWeb());
+  await context.catalog.publish(maintainer, { id: "docs-web", visibility: "public" });
+  await context.catalog.approve(auditor, { id: "docs-web" });
+
+  // Anonymous: the public face is advertised, the console is not — it answers
+  // a redirect to login, and the shell must not pretend otherwise.
+  const anonymous = await (await handlePortalRequest(
+    new Request("http://portico.local/"),
+    context,
+  )).text();
+  assert(anonymous.includes('href="/public"'), "the magazine links to the public face");
+  assert(!anonymous.includes('href="/internal'), "anonymous chrome must not link to /internal");
+  assert(!anonymous.includes("内部工作台"), "anonymous chrome must not name the workbench");
+
+  // Signed in: the way back into the workbench, and the unfiltered pending
+  // count as a link to the queue (a read-only entrance, not an approve button).
+  const signedIn = await (await handlePortalRequest(
+    new Request("http://portico.local/", { headers: actorHeaders(auditor) }),
+    context,
+  )).text();
+  assert(
+    signedIn.includes('<a class="auth-workbench" href="/internal">内部工作台</a>'),
+    "a signed-in reader must have a link back into the workbench",
+  );
+  assert(signedIn.includes('href="/public"'), "the public face stays reachable when signed in");
+  assert(!signedIn.includes('href="/internal/pending"'), "nothing is pending, so no queue link");
+
+  // One pending candidate: the count appears, and it is a link to the queue.
+  await context.catalog.register(maintainer, {
+    ...internalCli(),
+    id: "pending-writer",
+    name: "Pending Writer",
+  });
+  await context.catalog.publish(maintainer, { id: "pending-writer", visibility: "public" });
+  const withPending = await (await handlePortalRequest(
+    new Request("http://portico.local/?q=Writer", { headers: actorHeaders(auditor) }),
+    context,
+  )).text();
+  assert(
+    withPending.includes('<a class="auth-workbench__count" href="/internal/pending"'),
+    "the pending count must link to /internal/pending",
+  );
+  assert(
+    withPending.includes(">1</a>"),
+    "the count is the unfiltered pending_public total, not the filtered list length",
+  );
+});

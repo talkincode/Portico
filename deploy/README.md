@@ -6,7 +6,7 @@
 
 每份脚本都用 `docker run ... deno run <权限> src/<入口>/main.ts` 的形式启动一个入口。那些权限参数是**代码的运行时契约**，不是运维细节：
 
-- Portal 与 MCP 是只读入口，**不得**持有 `--allow-write`。
+- Portal 与 MCP 是只读入口，**不得**持有 `--allow-write`。Portal 唯一被允许写的文件是 `sessions.json`（它要签发浏览器会话，见 `src/perms.ts` 的 `portalPerms`）；这两份脚本不给这份授权，因此这里的 `/login` 会明说本部署无法在浏览器里登录，而不是把一次权限拒绝报成「凭证错」。
 - Gateway 的写权限只覆盖审计文件与它的临时兄弟 `gateway-audit.json.tmp`，**不覆盖目录**。`src/fs.ts` 之所以先 `stat` 父目录、只在确实缺失时才 `mkdir`，就是因为 `mkdir` 需要目录写权限，而无条件调用会让每次审计追加都以 `Requires write access to "/app/data"` 失败——上一次把脚本留在服务器上，这个回归就是这样漏到生产上的。
 - 三个入口都拿到同一个 `PORTICO_GATEWAY_AUDIT_PATH`，否则 Portal 与 MCP 的审计时间线会静默缺少 Gateway 访问事件，而 `audit list --audit` 有。
 - Portal 与 MCP 都拿到同一个 `PORTICO_CONCLUSIONS_PATH`，否则 `GET /api/conclusions` / `portico_conclusions` 静默返回空结论，而 `audit conclusions` 有结论。该文件只由 CLI 写（Portal 与 MCP 无写权限），Gateway 不读它，因此不注入。
@@ -22,7 +22,7 @@
 | `PORTICO_DEPLOY_PORT` | 8788 / 8789 / 8790 | 各入口端口 |
 | `PORTICO_DENO_IMAGE` | `denoland/deno:2.9.6` | 运行镜像（部分宿主 glibc 过旧，跑不了官方二进制） |
 | `PORTICO_DOCKER` | `/usr/bin/docker` | docker 可执行文件 |
-| `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 保留给 Review 进程的 origin 声明。发现页与内部工作台不再把审核做成页眉入口；日常审批在内容详情上，写操作仍走 Review API。未设置按「不提供」处理。 |
+| `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 保留给 Review 进程的 origin 声明。发现页与内部工作台不再把审核做成页眉入口；日常审批在内容详情上，写操作仍走 Review API。未设置按「不提供」处理。`off` 同时让内容详情上的「通过 / 驳回 / 撤回 / 删除」不出现——这个部署没有 Review 进程，渲染一个必然 404 的按钮等于撒谎。同源部署（隧道把 `/review*` 转发到 8791，见 `macos/config.yml`）保持默认，或显式声明绝对 origin。 |
 
 数据目录固定为检出目录下的 `data/`，只有 Gateway 以可写方式挂载它。
 
