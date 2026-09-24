@@ -14,9 +14,12 @@ Model Context Protocol (MCP) 是当前连接 AI 智能体与外部工具、知�
   "description": "提供仓库分支、Issue 与 PR 自动分析的 MCP 服务",
   "channels": ["mcp"],
   "entry": {
-    "mcp_endpoint": "https://mcp.example.internal/sse"
+    "kind": "mcp_endpoint",
+    "value": "https://mcp.example.internal/sse"
   },
-  "version": "1.2.0"
+  "version": "1.2.0",
+  "visibility": "internal",
+  "maintainers": [{ "id": "agent:github-bot", "kind": "agent" }]
 }
 ```
 

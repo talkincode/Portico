@@ -22,6 +22,7 @@ import type {
   SessionAuditView,
   SessionRecord,
   SessionView,
+  SignInBlocker,
 } from "./types.ts";
 
 const SECRET_KEYS = new Set([
@@ -570,6 +571,17 @@ export class AccessService {
       );
     }
     return { id: record.id, kind: record.kind, role: record.role };
+  }
+
+  /**
+   * Why this process cannot sign a browser session in, or `undefined` when it
+   * can. Read-only callers ask this before offering a login form, so a
+   * deployment that cannot mint a session says so instead of failing the login
+   * and reporting it as a bad credential.
+   */
+  async signInBlocked(): Promise<SignInBlocker | undefined> {
+    if (!this.sessions) return { code: "sessions_not_configured" };
+    return await this.sessions.writeBlocked();
   }
 
   #requireSessions(): SessionStore {

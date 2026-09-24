@@ -148,3 +148,16 @@ export interface CredentialAuditView {
   issuedAt: string;
   revokedAt?: string;
 }
+
+/**
+ * Why this process cannot sign a browser session in.
+ *
+ * `POST /login` writes one row to the session store, so whether it can work is
+ * a property of the running process and not of the deployment document: a Portal
+ * started without that scoped write answers `403`, and the reader cannot tell a
+ * wrong credential from a deployment that cannot do this at all. The reason is
+ * reported as a fact so the page that renders it can say which one it is.
+ */
+export type SignInBlocker =
+  | { code: "sessions_not_configured" }
+  | { code: "sessions_not_writable"; path: string };

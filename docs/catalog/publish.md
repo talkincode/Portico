@@ -17,9 +17,12 @@ cat << 'EOF' > draft-agent.json
   "description": "分析复杂 SQL 执行计划并输出重写建议",
   "channels": ["cli"],
   "entry": {
-    "package": "jsr:@tools/sql-optimizer@0.1.0"
+    "kind": "package",
+    "value": "jsr:@tools/sql-optimizer@0.1.0"
   },
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "visibility": "internal",
+  "maintainers": [{ "id": "agent:sql-bot", "kind": "agent" }]
 }
 EOF
 

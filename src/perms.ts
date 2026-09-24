@@ -39,13 +39,19 @@ export function readOnlyHttpPerms(hostname: string = LOOPBACK_HOSTNAME): readonl
  * When `enableGithub` is true, adds `github.com` and `api.github.com` to the
  * net allow list for OAuth token exchange and user lookup.
  *
- * Portal is read-only for the catalog and identities — it never rewrites those
- * governance pillars. When GitHub OAuth is enabled and `paths.sessions` is
- * provided, the Portal needs scoped write access to mint browser sessions for
- * verified GitHub users, mirroring the scope Review already holds. Without
- * this grant, `createBrowserSession` fails with a Deno permission denial that
- * the catch block swallows, logging a misleading "roster miss" for humans who
- * do exist.
+ * Portal is read-only for the catalog, identities, audit trail and
+ * conclusions — it never rewrites those governance pillars. It does write
+ * `sessions.json`, and only that: `POST /login` (one-time credential, and the
+ * GitHub callback) mints a browser session, which is a row in the session
+ * store and nothing else. The grant is scoped to that file and its `.tmp`
+ * sibling, exactly like Review's.
+ *
+ * It is granted whenever a session store is configured, not only when GitHub
+ * OAuth is on. Gating it on GitHub is what made `POST /login` answer `403
+ * 登录失败` in every deployment without OAuth: the write was denied, the catch
+ * reported it as a bad credential, and the one documented way for a human to
+ * reach `/internal` from a browser was dead while every test passed (the
+ * tests call `listenPortal` in-process, where no file permission applies).
  */
 export function portalPerms(
   hostname: string = LOOPBACK_HOSTNAME,
@@ -62,7 +68,7 @@ export function portalPerms(
     hosts.push(...githubNetHosts());
   }
   const perms = [...base, `--allow-net=${hosts.join(",")}`];
-  if (enableGithub && paths?.sessions) {
+  if (paths?.sessions) {
     perms.push(`--allow-write=${paths.sessions},${paths.sessions}.tmp`);
   }
   return perms;
