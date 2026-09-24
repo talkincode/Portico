@@ -701,7 +701,10 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
     assert(asWeb.body.includes("Docs Web"), "auditor web filter must keep the web candidate");
     assert(!asWeb.body.includes("Docs Writer"), "auditor web filter must hide the cli candidate");
     assert(!asWeb.body.includes("Docs MCP"), "auditor web filter must hide the mcp candidate");
-    assert(!asWeb.body.includes('action="/review/'), "auditor must not approve from a filtered queue");
+    assert(
+      !asWeb.body.includes('action="/review/'),
+      "auditor must not approve from a filtered queue",
+    );
 
     await assertLoginRedirect(
       `${base}/internal/pending?channel=cli`,
