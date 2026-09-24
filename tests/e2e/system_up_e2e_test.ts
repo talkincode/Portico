@@ -129,11 +129,13 @@ Deno.test("E2E: `up` brings the system live on an empty machine and survives a r
     assertEquals(anonReview.status, 401, "the review queue is not anonymous");
     const auditorReview = await fetch(`${reviewBase}/review`, {
       headers: { "x-portico-session": sessionFor("human:security-auditor")! },
+      redirect: "manual",
     });
-    assertEquals(auditorReview.status, 200);
-    assert(
-      (await auditorReview.text()).includes("人工审核"),
-      "the review entrance must serve the pending queue",
+    assertEquals(auditorReview.status, 303);
+    assertEquals(
+      auditorReview.headers.get("location"),
+      "/internal?state=pending_public",
+      "the review entrance redirects into the content workbench",
     );
 
     const publicPage = await fetch(`${portalUrl}/public`);

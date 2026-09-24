@@ -1,7 +1,7 @@
 import type { AgentSurface, Channel, ContentCategory } from "../catalog/mod.ts";
 import type { DashboardView } from "../catalog/dashboard.ts";
 import { CATEGORY_LABEL, CHANNEL_LABEL } from "./design/tokens.ts";
-import { type ReviewEntry, reviewHref } from "./review-entry.ts";
+import type { ReviewEntry } from "./review-entry.ts";
 
 export type { DashboardView };
 
@@ -556,7 +556,7 @@ const MAGAZINE_CSS = `
       /* Reading 3-Column Layout */
       .reading {
         display: grid;
-        grid-template-columns: 200px 310px minmax(0, 1fr);
+        grid-template-columns: 320px minmax(0, 1fr);
         gap: 2rem;
         align-items: start;
       }
@@ -1015,8 +1015,7 @@ const MAGAZINE_CSS = `
       }
 
       @media (max-width: 1180px) {
-        .reading { grid-template-columns: 260px minmax(0, 1fr); }
-        .read-rail { display: none; }
+        .reading { grid-template-columns: 280px minmax(0, 1fr); }
         .hero { grid-template-columns: 1fr; }
       }
       @media (max-width: 850px) {
@@ -1131,21 +1130,11 @@ function renderChrome(input: {
   const miraRadioActive = category === "mira-radio" ? " active" : "";
   const uncategorizedActive = category === "uncategorized" ? " active" : "";
 
-  const review = reviewHref(input.reviewEntry, input.showInternal === true);
-  const reviewLabel = input.showInternal === true
-    ? (input.pendingPublic !== undefined && input.pendingPublic > 0
-      ? `审核 (${input.pendingPublic})`
-      : "审核")
-    : "审核登录";
-  const reviewLink = review
-    ? `<a class="auth-review" href="${escapeHtml(review)}">${escapeHtml(reviewLabel)}</a>`
-    : "";
-
   const authChrome = input.signedInId
-    ? `${reviewLink}<span class="auth-user">${
+    ? `<span class="auth-user">${
       escapeHtml(input.signedInId)
     }</span><form method="post" action="/logout" class="auth-logout"><button type="submit">登出</button></form>`
-    : `${reviewLink}<a class="auth-login" href="/login">登录</a>`;
+    : `<a class="auth-login" href="/login">登录</a>`;
   return `<!DOCTYPE html>
 <html lang="zh-CN"${themeAttr}>
   <head>
@@ -1240,8 +1229,6 @@ function renderReading(
   q?: string,
 ): string {
   const contentHref = withCategoryQuery("/", theme, category, null, q);
-  const crumbChannel = readingChannel(selected, channel);
-  const crumbHref = withCategoryQuery("/", theme, category, crumbChannel, q);
   const cards = surfaces.map((surface, idx) =>
     renderCard(surface, theme, channel, category, {
       compact: true,
@@ -1251,47 +1238,9 @@ function renderReading(
   ).join("");
 
   return `
-    <!-- Column 1: Left Rail Navigation -->
-    <aside class="read-rail">
-      <div class="rail-header">
-        <span class="rail-heading">服务渠道</span>
-      </div>
-      <nav class="rail-nav">
-        <a class="rail-link${channel === null ? " active" : ""}" href="${
-    escapeHtml(withCategoryQuery("/", theme, category, null, q))
-  }">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-          <span>全部服务</span>
-        </a>
-        <a class="rail-link${channel === "web" ? " active" : ""}" href="${
-    escapeHtml(withCategoryQuery("/", theme, category, "web", q))
-  }">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          <span>${escapeHtml(CHANNEL_LABEL.web)}</span>
-        </a>
-        <a class="rail-link${channel === "cli" ? " active" : ""}" href="${
-    escapeHtml(withCategoryQuery("/", theme, category, "cli", q))
-  }">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
-          <span>${escapeHtml(CHANNEL_LABEL.cli)}</span>
-        </a>
-        <a class="rail-link${channel === "mcp" ? " active" : ""}" href="${
-    escapeHtml(withCategoryQuery("/", theme, category, "mcp", q))
-  }">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          <span>${escapeHtml(CHANNEL_LABEL.mcp)}</span>
-        </a>
-      </nav>
-      <div class="rail-promo-card">
-        <strong>PORTICO</strong>
-        <span>受控的 Agent 治理门户。Agent 在外部独立运行，此处仅做登记、发布、发现、授权与审计，不代理流量，不代跑 Agent。</span>
-      </div>
-    </aside>
-
-    <!-- Column 2: Middle Stream List -->
     <section class="list-compact">
       <div class="list-compact-header">
-        <h3>已登记服务</h3>
+        <h3>内容</h3>
         <span class="count-badge">${surfaces.length} 个入口</span>
       </div>
       ${cards || `<p class="empty">没有可见的 Agent 表面。</p>`}
@@ -1302,13 +1251,8 @@ function renderReading(
     escapeHtml(selected.governanceState)
   }">
       <nav class="breadcrumbs">
-        <a href="${escapeHtml(contentHref)}">首页</a> &gt; <a href="${escapeHtml(crumbHref)}">${
-    escapeHtml(CHANNEL_LABEL[crumbChannel])
-  }</a> &gt; <span>${escapeHtml(selected.name)}</span>
+        <a href="${escapeHtml(contentHref)}">首页</a> &gt; <span>${escapeHtml(selected.name)}</span>
       </nav>
-      <p class="reading-exit"><a class="back-to-list" href="${
-    escapeHtml(withCategoryQuery("/", theme, category, channel, q))
-  }">返回列表</a></p>
 
       <div class="detail-header">
         <div class="detail-kicker-row">
@@ -1339,7 +1283,7 @@ function renderReading(
             <dd><code>${escapeHtml(selected.id)}</code></dd>
           </div>
           <div class="gov-item">
-            <dt>服务渠道</dt>
+            <dt>渠道</dt>
             <dd>${escapeHtml(channelLabel(selected.channels))}</dd>
           </div>
           <div class="gov-item">
@@ -1504,7 +1448,7 @@ function renderSidebar(
   _path: string,
 ): string {
   const pickHtml = picks.map((pick, index) => {
-    const href = withCategoryQuery(`/s/${encodeURIComponent(pick.id)}`, theme, category, channel);
+    const href = contentLink(theme, category, channel, undefined, pick.id);
     const num = (index + 1).toString().padStart(2, "0");
     return `        <article class="pick-item" data-kind="catalog_card" data-id="${
       escapeHtml(pick.id)
@@ -1539,7 +1483,7 @@ function renderHero(
   channel: ChannelFilter,
   category: CategoryFilter,
 ): string {
-  const href = withCategoryQuery(`/s/${encodeURIComponent(surface.id)}`, theme, category, channel);
+  const href = contentLink(theme, category, channel, undefined, surface.id);
   return `<section class="hero" data-hero data-id="${escapeHtml(surface.id)}" data-governance="${
     escapeHtml(surface.governanceState)
   }">
@@ -1580,7 +1524,7 @@ function renderCard(
   category: CategoryFilter,
   opts: { compact?: boolean; currentId?: string; index?: number } = {},
 ): string {
-  const href = withCategoryQuery(`/s/${encodeURIComponent(surface.id)}`, theme, category, channel);
+  const href = contentLink(theme, category, channel, undefined, surface.id);
   const current = opts.currentId === surface.id ? " current" : "";
 
   if (opts.compact) {
@@ -1690,11 +1634,6 @@ function governanceLabel(state: string): string {
   return escapeHtml(state);
 }
 
-function readingChannel(selected: AgentSurface, channel: ChannelFilter): Channel {
-  if (channel && selected.channels.includes(channel)) return channel;
-  return selected.channels[0] ?? "web";
-}
-
 function channelLabel(channels: string[]): string {
   return channels.map((item) => CHANNEL_LABEL[item as Channel] ?? item).join(" · ");
 }
@@ -1792,6 +1731,23 @@ function withQuery(
 ): string {
   const query = queryOf(theme, channel, q).toString();
   return query ? `${path}?${query}` : path;
+}
+
+/** Same-page content selection. Back restores `?id=`, it does not leave the magazine. */
+function contentLink(
+  theme: ThemeMode,
+  category: CategoryFilter,
+  channel: ChannelFilter,
+  q: string | undefined,
+  id: string,
+): string {
+  const params = new URLSearchParams();
+  if (theme !== "system") params.set("theme", theme);
+  if (category) params.set("category", category);
+  if (channel) params.set("channel", channel);
+  if (q) params.set("q", q);
+  params.set("id", id);
+  return `/?${params.toString()}`;
 }
 
 function withCategoryQuery(

@@ -38,6 +38,17 @@ export const PUBLIC_CSS = `
   border-bottom-color: var(--tk-accent);
 }
 .pub-masthead__tools { display: flex; align-items: center; gap: var(--tk-s3); margin-left: auto; }
+.int-logout { display: inline; margin: 0; }
+.int-logout button {
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--tk-muted);
+  background: transparent;
+  border: 1px solid var(--tk-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
 
 .pub-notice {
   background: var(--tk-sunken);

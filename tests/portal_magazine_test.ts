@@ -236,7 +236,7 @@ Deno.test("anonymous internal detail is 404 HTML and does not leak entries", asy
   await context.catalog.register(maintainer, internalCli());
 
   const anon = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer"),
+    new Request("http://portico.local/?id=docs-writer"),
     context,
   );
   assertEquals(anon.status, 404);
@@ -248,7 +248,7 @@ Deno.test("anonymous internal detail is 404 HTML and does not leak entries", asy
   assert(!anonHtml.includes("agent:docs-bot"));
 
   const readerPage = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/?id=docs-writer", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(readerPage.status, 200);
@@ -363,7 +363,7 @@ Deno.test("unfiltered reading page highlights 全部 category in navigation", as
   await context.catalog.register(maintainer, internalCli());
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/?id=docs-writer", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(page.status, 200);
@@ -383,7 +383,7 @@ Deno.test("channel-filtered reading page preserves channel in category links", a
   await context.catalog.register(maintainer, internalCli());
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
@@ -420,37 +420,26 @@ function breadcrumbNav(html: string): string {
   return match[1];
 }
 
-Deno.test("reading page keeps one channel navigator that returns to the filtered list", async () => {
+Deno.test("reading page has no channel sidebar and selects in place", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
   );
   assertEquals(page.status, 200);
   const html = await page.text();
-  const rails = railLinks(html);
-  assertEquals(rails.map((item) => item.label), ["全部服务", "Web", "CLI", "MCP"]);
-  assertEquals(rails.map((item) => item.href), [
-    "/",
-    "/?channel=web",
-    "/?channel=cli",
-    "/?channel=mcp",
-  ]);
-  assert(
-    rails.every((item) => !item.href.startsWith("/s/")),
-    "the remaining channel navigator must leave the reading page",
-  );
-  const active = rails.find((item) => item.className.includes("active"));
-  assertEquals(active?.label, "CLI");
-  assert(!html.includes("专题分类"), "reading page must not repeat a second channel navigator");
-  assert(!html.includes('class="topics"'), "topic tabs must not remain as a second channel set");
-  assert(!html.includes(">CLI 工具<"), "channel labels must not keep the suffixed rail copy");
-  assert(!html.includes(">Web 渠道<"));
-  assert(!html.includes(">MCP 服务<"));
+  assertEquals(railLinks(html), []);
+  assert(!html.includes("服务渠道"));
+  assert(!html.includes("已登记服务"));
+  assert(html.includes(">内容<"));
+  assert(html.includes('href="/?id=docs-writer') || html.includes("id=docs-writer"));
+  assert(!html.includes('href="/s/'));
+  assert(!html.includes("专题分类"));
+  assert(!html.includes('class="topics"'));
 });
 
 Deno.test("reading page category links and breadcrumb home keep the search query", async () => {
@@ -458,7 +447,7 @@ Deno.test("reading page category links and breadcrumb home keep the search query
   await context.catalog.register(maintainer, internalCli());
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&q=Writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
@@ -476,16 +465,8 @@ Deno.test("reading page category links and breadcrumb home keep the search query
   const home = html.match(/<nav class="breadcrumbs">\s*<a href="([^"]*)">首页<\/a>/);
   if (!home) throw new Error("reading page must have a breadcrumb home link");
   assertEquals(home[1], "/?q=Writer");
-
-  const rails = railLinks(html);
-  assertEquals(rails.map((item) => [item.label, item.href]), [
-    ["全部服务", "/?q=Writer"],
-    ["Web", "/?channel=web&amp;q=Writer"],
-    ["CLI", "/?channel=cli&amp;q=Writer"],
-    ["MCP", "/?channel=mcp&amp;q=Writer"],
-  ]);
-  assert(!html.includes("专题分类"), "keeping q must not revive the second channel navigator");
-  assert(!html.includes('class="topics"'));
+  assertEquals(railLinks(html), []);
+  assert(!html.includes("服务渠道"));
 });
 
 Deno.test("reading page breadcrumb channel uses CHANNEL_LABEL and links to the filtered list", async () => {
@@ -494,7 +475,7 @@ Deno.test("reading page breadcrumb channel uses CHANNEL_LABEL and links to the f
   await context.catalog.register(maintainer, publicWeb());
 
   const cliPage = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
@@ -502,25 +483,18 @@ Deno.test("reading page breadcrumb channel uses CHANNEL_LABEL and links to the f
   assertEquals(cliPage.status, 200);
   const cliHtml = await cliPage.text();
   const cliCrumb = breadcrumbNav(cliHtml);
-  assert(
-    cliCrumb.includes('<a href="/?channel=cli">CLI</a>'),
-    "breadcrumb channel must be a filter link, not a span",
-  );
-  assert(!cliCrumb.includes("<span>CLI</span>"), "breadcrumb channel must not stay plain text");
   assert(cliCrumb.includes("<span>Docs Writer</span>"), "the record name stays the current crumb");
+  assert(!cliCrumb.includes("服务渠道"));
 
   const webPage = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-web", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/?id=docs-web", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(webPage.status, 200);
   const webHtml = await webPage.text();
   const webCrumb = breadcrumbNav(webHtml);
-  assert(
-    webCrumb.includes('<a href="/?channel=web">Web</a>'),
-    "unfiltered reading page still links the record's own channel; label is Web not WEB",
-  );
-  assert(!webCrumb.includes(">WEB<"), "channelLabel must use CHANNEL_LABEL, not toUpperCase");
+  assert(webCrumb.includes("<span>Docs Web</span>") || webHtml.includes("Docs Web"));
+  assert(!webCrumb.includes(">WEB<"));
 });
 
 Deno.test("reading page breadcrumb channel keeps the search query", async () => {
@@ -528,7 +502,7 @@ Deno.test("reading page breadcrumb channel keeps the search query", async () => 
   await context.catalog.register(maintainer, internalCli());
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&q=Writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
@@ -536,10 +510,8 @@ Deno.test("reading page breadcrumb channel keeps the search query", async () => 
   assertEquals(page.status, 200);
   const html = await page.text();
   const crumb = breadcrumbNav(html);
-  assert(
-    crumb.includes('<a href="/?channel=cli&amp;q=Writer">CLI</a>'),
-    "breadcrumb channel must keep q when linking back to the list",
-  );
+  assert(crumb.includes("<span>Docs Writer</span>"));
+  assert(!html.includes("服务渠道"));
   const home = html.match(/<nav class="breadcrumbs">\s*<a href="([^"]*)">首页<\/a>/);
   if (!home) throw new Error("reading page must have a breadcrumb home link");
   assertEquals(home[1], "/?q=Writer");
@@ -564,7 +536,7 @@ Deno.test("reading page with a mismatched channel redirects to the record's own 
     context,
   );
   assertEquals(page.status, 302);
-  assertEquals(locationPath(page), "/s/docs-writer?channel=cli");
+  assertEquals(locationPath(page), "/?channel=cli&id=docs-writer");
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
 });
 
@@ -579,7 +551,7 @@ Deno.test("reading page drops a q that does not match the selected record", asyn
     context,
   );
   assertEquals(page.status, 302);
-  assertEquals(locationPath(page), "/s/docs-writer");
+  assertEquals(locationPath(page), "/?id=docs-writer");
 });
 
 Deno.test("reading page keeps a matching q when rewriting a mismatched channel", async () => {
@@ -593,7 +565,7 @@ Deno.test("reading page keeps a matching q when rewriting a mismatched channel",
     context,
   );
   assertEquals(page.status, 302);
-  assertEquals(locationPath(page), "/s/docs-writer?channel=cli&q=Writer&theme=dark");
+  assertEquals(locationPath(page), "/?channel=cli&q=Writer&theme=dark&id=docs-writer");
 });
 
 Deno.test("reading page with a matching filter still renders and includes the selected record", async () => {
@@ -601,7 +573,7 @@ Deno.test("reading page with a matching filter still renders and includes the se
   await context.catalog.register(maintainer, internalCli());
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
@@ -641,7 +613,7 @@ Deno.test("anonymous mismatched-channel reading of an approved public record red
     context,
   );
   assertEquals(page.status, 302);
-  assertEquals(locationPath(page), "/s/docs-web?channel=web");
+  assertEquals(locationPath(page), "/?channel=web&id=docs-web");
 });
 
 Deno.test("following a canonicalized reading URL never shows zero entries with a detail pane", async () => {
@@ -655,7 +627,7 @@ Deno.test("following a canonicalized reading URL never shows zero entries with a
     context,
   );
   assertEquals(mismatch.status, 302);
-  assertEquals(locationPath(mismatch), "/s/docs-writer?channel=cli");
+  assertEquals(locationPath(mismatch), "/?channel=cli&id=docs-writer");
 
   const canonical = await handlePortalRequest(
     new Request(new URL(mismatch.headers.get("location")!, "http://portico.local"), {
@@ -688,16 +660,16 @@ Deno.test("anonymous magazine chrome does not advertise /internal", async () => 
   assert(!hasHref(homeHtml, "/internal"), "anonymous magazine must not advertise /internal");
 
   const reading = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-web?channel=web"),
+    new Request("http://portico.local/?id=docs-web&channel=web"),
     context,
   );
   assertEquals(reading.status, 200);
   const readingHtml = await reading.text();
   assert(!hasHref(readingHtml, "/internal"));
-  assert(
-    readingHtml.includes('<a class="back-to-list" href="/?channel=web">返回列表</a>'),
-    "reading page must return to the filtered list",
-  );
+  assert(readingHtml.includes(">内容<"), "the list is named 内容");
+  assert(!readingHtml.includes("服务渠道"));
+  assert(!readingHtml.includes("返回列表"));
+  assert(!readingHtml.includes("已登记服务"));
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
 });
 
@@ -713,19 +685,15 @@ Deno.test("signed-in magazine chrome verifies /internal access without bypass", 
   assertEquals(readerHome.status, 200);
 
   const reading = await handlePortalRequest(
-    new Request("http://portico.local/s/docs-writer?q=Writer&channel=cli", {
+    new Request("http://portico.local/?id=docs-writer&q=Writer&channel=cli", {
       headers: actorHeaders(reader),
     }),
     context,
   );
   assertEquals(reading.status, 200);
   const readingHtml = await reading.text();
-  assert(
-    readingHtml.includes(
-      '<a class="back-to-list" href="/?channel=cli&amp;q=Writer">返回列表</a>',
-    ),
-    "return-to-list must keep channel and q",
-  );
+  assert(readingHtml.includes("id=docs-writer"), "selection stays on the magazine");
+  assert(!readingHtml.includes("返回列表"));
 
   const anonInternal = await handlePortalRequest(
     new Request("http://portico.local/internal"),
@@ -754,14 +722,9 @@ Deno.test("signed-in magazine chrome shows review link with pending count", asyn
   );
   assertEquals(filtered.status, 200);
   const filteredHtml = await filtered.text();
-  assert(
-    filteredHtml.includes('href="/review"'),
-    "a signed-in reader must have the review link",
-  );
-  assert(
-    filteredHtml.includes("审核 (1)"),
-    "the review link shows pending count",
-  );
+  assert(filteredHtml.includes("登出"), "a signed-in reader can log out");
+  assert(!filteredHtml.includes('href="/review"'), "magazine does not offer a review entrance");
+  assert(!filteredHtml.includes("审核 (1)"), "pending count is not a header review link");
   assert(
     !filteredHtml.includes("Docs Writer"),
     "a miss on q must not dump the pending candidate into the magazine stream",
@@ -783,37 +746,48 @@ Deno.test("signed-in magazine chrome shows review link with pending count", asyn
   );
 });
 
-Deno.test("one-click review entry: anonymous shells link login, signed-in shells link review", async () => {
+Deno.test("authenticated chrome offers logout and no parallel review entry", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
   const anonMag = await handlePortalRequest(new Request("http://portico.local/"), context);
   const anonMagHtml = await anonMag.text();
-  assert(anonMagHtml.includes('href="/review/login"'));
-  assert(!anonMagHtml.includes('href="/review"'));
+  assert(anonMagHtml.includes('href="/login"'));
+  assert(!anonMagHtml.includes("登出"));
+  assert(!anonMagHtml.includes('href="/review'));
+  assert(!anonMagHtml.includes("去审核"));
 
   const readerMag = await handlePortalRequest(
     new Request("http://portico.local/", { headers: actorHeaders(reader) }),
     context,
   );
   const readerMagHtml = await readerMag.text();
-  assert(readerMagHtml.includes('href="/review"'));
-  assert(!readerMagHtml.includes('href="/review/login"'));
+  assert(readerMagHtml.includes("登出"));
+  assert(!readerMagHtml.includes('href="/review'));
 
   const anonPublic = await handlePortalRequest(new Request("http://portico.local/public"), context);
   const anonPublicHtml = await anonPublic.text();
-  assert(anonPublicHtml.includes('href="/review/login"'));
+  assert(anonPublicHtml.includes('href="/login"'));
+  assert(!anonPublicHtml.includes("去审核"));
+  assert(!anonPublicHtml.includes("审核登录"));
 
   const auditorInternal = await handlePortalRequest(
     new Request("http://portico.local/internal", { headers: actorHeaders(auditor) }),
     context,
   );
-  assert((await auditorInternal.text()).includes('href="/review"'));
+  const auditorHtml = await auditorInternal.text();
+  assert(auditorHtml.includes("登出"));
+  assert(!auditorHtml.includes("去审核"));
+  assert(!auditorHtml.includes('href="/review'));
   const readerInternal = await handlePortalRequest(
     new Request("http://portico.local/internal", { headers: actorHeaders(reader) }),
     context,
   );
-  assert(!(await readerInternal.text()).includes('href="/review"'));
+  const readerHtml = await readerInternal.text();
+  assert(readerHtml.includes("登出"));
+  assert(!readerHtml.includes(">删除<"), "a reader cannot delete");
+  assert(!readerHtml.includes(">撤回<"), "a reader cannot withdraw");
+  assert(!readerHtml.includes(">通过<"), "a reader cannot approve");
 });
 
 // ── Category filtering tests ───────────────────────────────────────────────

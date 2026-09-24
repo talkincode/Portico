@@ -252,22 +252,19 @@ Deno.test(
       );
 
       const cookie = cookieValue(setCookie);
-      const queue = await fetch(`${base}/review`, { headers: { cookie } });
-      assertEquals(queue.status, 200);
-      const queueHtml = await queue.text();
-      assert(queueHtml.includes("Docs Writer"), "the auditor must see the candidate");
-      assert(
-        queueHtml.includes(`action="/review/approve"`),
-        "the queue must offer the decision, not just describe it",
+      const queue = await fetch(`${base}/review`, { headers: { cookie }, redirect: "manual" });
+      assertEquals(queue.status, 303);
+      assertEquals(
+        queue.headers.get("location"),
+        "/internal?state=pending_public",
+        "the old review queue redirects into the content workbench",
       );
 
-      // A reader may look at the queue, but the queue grants nothing: the
-      // decision is refused above, and this is the same list for a different
-      // role, not a different boundary.
       const readerQueue = await fetch(`${base}/review`, {
         headers: { "x-portico-session": sessionFor("human:reader")! },
+        redirect: "manual",
       });
-      assertEquals(readerQueue.status, 200);
+      assertEquals(readerQueue.status, 303);
 
       // ── the independent auditor approves, from the browser form ────────
       const approved = await fetch(`${base}/review/approve`, {

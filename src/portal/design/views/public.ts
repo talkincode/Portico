@@ -28,7 +28,7 @@ import {
 } from "../components.ts";
 import { renderShell, themeSwitch } from "../page.ts";
 import { CHANNEL_LABEL, CHANNEL_NOTE } from "../tokens.ts";
-import { type ReviewEntry, reviewHref } from "../../review-entry.ts";
+import type { ReviewEntry } from "../../review-entry.ts";
 import type { PageTheme } from "./types.ts";
 
 export interface PublicContext {
@@ -55,8 +55,12 @@ interface PublicShellInput {
 
 function renderPublicPage(input: PublicShellInput): string {
   const { ctx } = input;
-  const review = reviewHref(ctx.reviewEntry, ctx.actor.role !== "anonymous");
-  const reviewLabel = ctx.actor.role === "anonymous" ? "审核登录" : "去审核";
+  const signedIn = ctx.actor.role !== "anonymous";
+  const session = signedIn
+    ? `<span class="tk-meta">${
+      esc(ctx.actor.id)
+    }</span><form method="post" action="/logout" class="int-logout"><button type="submit">登出</button></form>`
+    : `<a class="pub-nav__link" href="/login">登录</a>`;
   const body = `    <header class="pub-masthead">
       <div class="tk-shell pub-masthead__inner">
         <a class="tk-brand" href="/public">
@@ -76,9 +80,7 @@ function renderPublicPage(input: PublicShellInput): string {
   }>报告</a>
         </nav>
         <div class="pub-masthead__tools">
-          ${
-    review === undefined ? "" : `<a class="pub-nav__link" href="${esc(review)}">${reviewLabel}</a>`
-  }
+          ${session}
           <span class="tk-search" aria-hidden="true">
             <span>⌕</span><span>搜索文章、专题或关键词</span>
             <kbd class="tk-search__key">/</kbd>
@@ -380,7 +382,7 @@ export function renderPublicArticle(input: PublicArticleInput): string | null {
         <span class="int-crumb__sep">›</span>
         <span>${esc(surface.id)}</span>
         <span class="int-crumb__sep">›</span>
-        <a href="/s/${esc(surface.id)}">杂志详情</a>
+        <a href="/?id=${esc(surface.id)}">杂志详情</a>
       </nav>
 
       <header class="pub-article__head">

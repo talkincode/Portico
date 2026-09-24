@@ -283,6 +283,10 @@ class DamagedApprovalStore implements CatalogStore {
     return this.inner.commitApproval(record, approval);
   }
 
+  commitRemoval(id: string, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitRemoval(id, change);
+  }
+
   async listApprovals(): Promise<ApprovalRecord[]> {
     const records = await this.inner.listApprovals();
     // An approval that lost its reviewer, its subject and its timestamp: the

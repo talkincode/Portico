@@ -13,6 +13,8 @@ export interface CatalogStore {
   listSeal(): Promise<SealEntry[]>;
   commitChange(record: AgentSurface, change: CatalogChangeRecord): Promise<void>;
   commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void>;
+  /** Drop the surface and append the change. Approvals stay; the trail is not rewritten. */
+  commitRemoval(id: string, change: CatalogChangeRecord): Promise<void>;
 }
 
 function cloneRecord(record: AgentSurface): AgentSurface {
@@ -81,6 +83,18 @@ export class MemoryCatalogStore implements CatalogStore {
     this.#records.set(record.id, cloneRecord(record));
     this.#approvals.push(cloneApproval(approval));
     this.#seal = await sealRecord(this.#seal, "catalog", "approval", approval.id, approval);
+  }
+
+  async commitRemoval(id: string, change: CatalogChangeRecord): Promise<void> {
+    if (this.#changes.some((item) => item.id === change.id)) {
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `catalog change '${change.id}' already exists`,
+      );
+    }
+    this.#records.delete(id);
+    this.#changes.push(cloneChange(change));
+    this.#seal = await sealRecord(this.#seal, "catalog", "change", change.id, change);
   }
 }
 
@@ -169,6 +183,24 @@ export class FileCatalogStore implements CatalogStore {
     else file.records.push(cloneRecord(record));
     file.approvals.push(cloneApproval(approval));
     file.seal = await sealRecord(file.seal, "catalog", "approval", approval.id, approval);
+    await this.#save(file);
+  }
+
+  commitRemoval(id: string, change: CatalogChangeRecord): Promise<void> {
+    return serialize(this.path, () => this.#commitRemovalImpl(id, change));
+  }
+
+  async #commitRemovalImpl(id: string, change: CatalogChangeRecord): Promise<void> {
+    const file = await this.#load();
+    if (file.changes.some((item) => item.id === change.id)) {
+      throw new CatalogError(
+        ErrorCode.ALREADY_EXISTS,
+        `catalog change '${change.id}' already exists`,
+      );
+    }
+    file.records = file.records.filter((item) => item.id !== id);
+    file.changes.push(cloneChange(change));
+    file.seal = await sealRecord(file.seal, "catalog", "change", change.id, change);
     await this.#save(file);
   }
 

@@ -47,7 +47,7 @@ import {
 } from "../components.ts";
 import { renderShell, themeSwitch } from "../page.ts";
 import { CHANNEL_LABEL, STATE_LABEL } from "../tokens.ts";
-import { type ReviewEntry, reviewHref } from "../../review-entry.ts";
+import type { ReviewEntry } from "../../review-entry.ts";
 import type { PageTheme } from "./types.ts";
 
 /** Everything a view needs that is not catalog data. */
@@ -98,6 +98,7 @@ function identityBlock(actor: Actor): string {
         <span class="int-byline__avatar">${esc(initial)}</span>
         <span class="int-identity__role">${esc(role)}</span>
         <span class="int-identity__id">${esc(actor.id)}</span>
+        <form method="post" action="/logout" class="int-logout"><button type="submit">登出</button></form>
       </div>`;
 }
 
@@ -178,7 +179,7 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
     { id: "catalog", href: "/internal/c", label: "目录", count: ctx.counts.total },
     {
       id: "pending",
-      href: "/internal/pending",
+      href: "/internal?state=pending_public",
       label: "待审",
       count: ctx.counts.byState.pending_public,
     },
@@ -201,11 +202,8 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
 }
 
 function renderRail(ctx: ViewContext, screen: InternalScreen): string {
-  const { byState, byChannel, total } = ctx.counts;
+  const { byState, total } = ctx.counts;
   const contentActive = screen === "content" || screen === "surface";
-  // The auditor's review queue, or nothing when this deployment serves no
-  // Review entrance behind the chrome.
-  const review = reviewHref(ctx.reviewEntry, true);
   const group = (heading: string, entries: string) =>
     `<div class="tk-rail__group"><p class="tk-rail__heading">${esc(heading)}</p>${entries}</div>`;
   const item = (
@@ -222,14 +220,7 @@ function renderRail(ctx: ViewContext, screen: InternalScreen): string {
 
   const states = (Object.keys(STATE_LABEL) as GovernanceState[])
     .map((state) =>
-      item("·", STATE_LABEL[state], `/internal/c?state=${state}`, { count: byState[state] })
-    ).join("");
-
-  const channels = (Object.keys(CHANNEL_LABEL) as Channel[])
-    .map((channel) =>
-      item(channelGlyph(channel), CHANNEL_LABEL[channel], `/internal/c?channel=${channel}`, {
-        count: byChannel[channel],
-      })
+      item("·", STATE_LABEL[state], `/internal?state=${state}`, { count: byState[state] })
     ).join("");
 
   return `      <nav class="int-rail tk-rail" aria-label="治理导航">
@@ -237,18 +228,10 @@ ${
     group(
       "工作台",
       item("▤", "全部内容", "/internal", { active: contentActive, count: total }) +
-        item("◉", "待审队列", "/internal/pending", {
-          active: screen === "pending",
-          count: byState.pending_public,
-        }) +
-        (ctx.actor.kind === "human" && ctx.actor.role === "auditor" && review !== undefined
-          ? item("◈", "去审核", review, {})
-          : "") +
         item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }),
     )
   }
-${group("治理状态", states)}
-${group("渠道", channels)}${
+${group("治理状态", states)}${
     ctx.actor.kind === "human" && ctx.actor.role === "auditor"
       ? `\n${
         group("审计", item("◎", "审计时间线", "/internal/audit", { active: screen === "audit" }))
@@ -274,6 +257,10 @@ export interface ContentViewInput {
   surfaces: AgentSurface[];
   /** Audit events when the actor is an auditor; otherwise undefined. */
   recentEvents?: AuditEvent[];
+  /** `?id=` selection. Absent selects the newest visible record. */
+  selectedId?: string;
+  /** Governance-status filter from the rail. Unknown values show every record. */
+  state?: GovernanceState;
 }
 
 export function renderContentView(input: ContentViewInput): string {
@@ -290,8 +277,23 @@ export function renderContentView(input: ContentViewInput): string {
     });
   }
 
-  const ordered = [...surfaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const [lead] = ordered;
+  const state = input.state;
+  const filtered = state
+    ? surfaces.filter((surface) => surface.governanceState === state)
+    : surfaces;
+  const ordered = [...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const lead = ordered.find((surface) => surface.id === input.selectedId) ?? ordered[0];
+  if (!lead) {
+    return renderInternalPage({
+      ctx,
+      screen: "content",
+      panes: "two",
+      title: "内容",
+      body: `      <main class="int-page">
+        ${emptyState("没有匹配的登记记录。", "换一个治理状态，或当前身份没有可见范围。")}
+      </main>`,
+    });
+  }
 
   return renderInternalPage({
     ctx,
@@ -300,19 +302,22 @@ export function renderContentView(input: ContentViewInput): string {
     title: "内容",
     body: `      <section class="int-list" aria-label="记录列表">
         <div class="int-list__head">
-          <h2 class="int-list__title">全部内容</h2>
+          <h2 class="int-list__title">${state ? esc(STATE_LABEL[state]) : "全部内容"}</h2>
           <span class="int-list__sort">按更新时间 ↓</span>
         </div>
         <div class="int-list__items">
-${ordered.map((surface) => renderRow(surface, surface.id === lead.id)).join("\n")}
+${ordered.map((surface) => renderRow(surface, surface.id === lead.id, state)).join("\n")}
         </div>
       </section>
-${renderReader(lead, input.recentEvents)}`,
+${renderReader(lead, ctx, input.recentEvents)}`,
   });
 }
 
-function renderRow(surface: AgentSurface, current: boolean): string {
-  return `          <a class="int-row" href="/internal/s/${esc(surface.id)}"${
+function renderRow(surface: AgentSurface, current: boolean, state?: GovernanceState): string {
+  const params = new URLSearchParams();
+  if (state) params.set("state", state);
+  params.set("id", surface.id);
+  return `          <a class="int-row" href="/internal?${params.toString()}"${
     current ? ' aria-current="true"' : ""
   }>
             ${thumb(surface)}
@@ -329,6 +334,7 @@ function renderRow(surface: AgentSurface, current: boolean): string {
 
 function renderReader(
   surface: AgentSurface,
+  ctx: ViewContext,
   recentEvents?: AuditEvent[],
 ): string {
   const publicReachable = surface.governanceState === "approved_public";
@@ -365,8 +371,8 @@ function renderReader(
     readingMinutes(surface.description)
   } 分钟阅读 · <span class="tk-id">${esc(surface.id)}</span></span>
             <span class="int-actions">
+              ${governanceActions(ctx.actor, surface)}
               <a class="tk-btn tk-btn--quiet" href="/api/catalog/${esc(surface.id)}">JSON</a>
-              <a class="tk-btn tk-btn--quiet" href="/internal/c">目录</a>
             </span>
           </div>
 
@@ -436,6 +442,36 @@ ${timeline.map(renderTimelineItem).join("\n")}
       </main>`;
 }
 
+function governanceActions(actor: Actor, surface: AgentSurface): string {
+  const forms: string[] = [];
+  const note =
+    `<input class="int-action__note" name="note" maxlength="500" placeholder="备注（可选）" aria-label="备注">`;
+  const hidden = `<input type="hidden" name="id" value="${esc(surface.id)}">`;
+  const auditor = actor.kind === "human" && actor.role === "auditor";
+  const submittedBy = surface.publicSubmission?.submittedBy.id;
+  if (auditor && surface.governanceState === "pending_public" && actor.id !== submittedBy) {
+    forms.push(
+      `<form method="post" action="/review/approve">${hidden}${note}<button class="tk-btn" type="submit">通过</button></form>`,
+      `<form method="post" action="/review/reject">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">驳回</button></form>`,
+    );
+  }
+  if (auditor && surface.governanceState === "approved_public") {
+    forms.push(
+      `<form method="post" action="/review/withdraw">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">撤回</button></form>`,
+    );
+  }
+  const removable = surface.governanceState === "draft" ||
+    surface.governanceState === "internal" ||
+    surface.governanceState === "rejected";
+  if (removable && (actor.role === "maintainer" || auditor)) {
+    forms.push(
+      `<form method="post" action="/review/remove">${hidden}<button class="tk-btn tk-btn--quiet" type="submit">删除</button></form>`,
+    );
+  }
+  if (forms.length === 0) return "";
+  return `<span class="int-actionbar">${forms.join("")}</span>`;
+}
+
 function boundaryNoteFor(surface: AgentSurface): string {
   if (surface.governanceState === "pending_public") {
     return "已提交公开候选，等待独立人类审计者审批。对匿名与组织外主体不可见、不可达。";
@@ -476,20 +512,6 @@ export function renderCatalogView(input: CatalogViewInput): string {
     return true;
   });
 
-  const tabs = [
-    { label: "全部", href: "/internal/c", active: !filters.state && !filters.channel },
-    ...(Object.keys(STATE_LABEL) as GovernanceState[]).map((state) => ({
-      label: STATE_LABEL[state],
-      href: `/internal/c?state=${state}`,
-      active: filters.state === state,
-    })),
-    ...(Object.keys(CHANNEL_LABEL) as Channel[]).map((channel) => ({
-      label: CHANNEL_LABEL[channel],
-      href: `/internal/c?channel=${channel}`,
-      active: filters.channel === channel,
-    })),
-  ];
-
   const body = `      <main class="int-page">
         <div class="int-page__head">
           <h1 class="int-page__title">目录</h1>
@@ -497,18 +519,13 @@ export function renderCatalogView(input: CatalogViewInput): string {
         </div>
         <div class="tk-stats">
           ${statBlock(String(ctx.counts.total), "当前可见")}${
-    statBlock(String(ctx.counts.byState.pending_public), "待审公开", "/internal/pending")
+    statBlock(
+      String(ctx.counts.byState.pending_public),
+      "待审公开",
+      "/internal?state=pending_public",
+    )
   }${statBlock(String(ctx.counts.byState.approved_public), "已公开")}${
     statBlock(String(ctx.counts.byState.draft), "草稿")
-  }
-        </div>
-        <div class="int-filters tk-tabs" role="group" aria-label="筛选">
-          ${
-    tabs.map((tab) =>
-      `<a class="tk-tab" href="${tab.href}"${tab.active ? ' aria-current="true"' : ""}>${
-        esc(tab.label)
-      }</a>`
-    ).join("")
   }
         </div>
         ${
@@ -633,7 +650,9 @@ function renderPendingRow(surface: AgentSurface): string {
     "—";
   return `              <tr data-state="${esc(surface.governanceState)}">
                 <td>
-                  <a class="tk-label" href="/internal/s/${esc(surface.id)}">${esc(surface.name)}</a>
+                  <a class="tk-label" href="/internal?id=${esc(surface.id)}">${
+    esc(surface.name)
+  }</a>
                   <div class="tk-id">${esc(surface.id)}</div>
                 </td>
                 <td>${stateChip(surface.governanceState, { compact: true })}</td>
@@ -656,11 +675,9 @@ export function renderApprovalsView(input: ApprovalsViewInput): string {
   const body = `      <main class="int-page">
         <div class="int-page__head">
           <h1 class="int-page__title">审批记录</h1>
-          <p class="int-page__sub">通过、驳回与撤回。与 CLI catalog approvals、Portal GET /api/approvals、MCP portico_approvals 同一批记录。只读，不可改写；备注不能事后修改。待审候选在 <a class="tk-link" href="/internal/pending">待审队列</a>。</p>
+          <p class="int-page__sub">通过、驳回与撤回的只读历史。与 CLI catalog approvals、Portal GET /api/approvals、MCP portico_approvals 同一批记录。日常通过、驳回、撤回和删除在内容详情上，按当前身份显示。备注不能事后修改。</p>
         </div>
-        ${
-    boundaryNote("Portal 不能批准或驳回。公开边界上的决定只出现在这份轨迹里，待审候选不会出现。")
-  }
+        ${boundaryNote("这里只回放已经作出的决定。待审候选不出现在这份轨迹里。")}
         ${
     records.length === 0
       ? emptyState(
@@ -695,7 +712,7 @@ function renderApprovalRow(record: ApprovalRecord): string {
   const note = record.note ? esc(record.note) : "—";
   return `              <tr data-decision="${esc(record.decision)}">
                 <td>
-                  <a class="tk-label" href="/internal/s/${esc(record.surfaceId)}">${
+                  <a class="tk-label" href="/internal?id=${esc(record.surfaceId)}">${
     esc(record.name)
   }</a>
                   <div class="tk-id">${esc(record.surfaceId)}</div>
@@ -714,7 +731,9 @@ function renderCatalogRow(surface: AgentSurface): string {
   const publicReachable = surface.governanceState === "approved_public";
   return `              <tr>
                 <td>
-                  <a class="tk-label" href="/internal/s/${esc(surface.id)}">${esc(surface.name)}</a>
+                  <a class="tk-label" href="/internal?id=${esc(surface.id)}">${
+    esc(surface.name)
+  }</a>
                   <div class="tk-id">${esc(surface.id)}</div>
                 </td>
                 <td>${stateChip(surface.governanceState, { compact: true })}</td>
@@ -1151,6 +1170,6 @@ export function renderSurfaceView(input: SurfaceViewInput): string {
     screen: "surface",
     panes: "two",
     title: input.surface.name,
-    body: renderReader(input.surface, input.events),
+    body: renderReader(input.surface, input.ctx, input.events),
   });
 }

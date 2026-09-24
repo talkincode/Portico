@@ -195,22 +195,12 @@ else
   bad portal-product-page "HTTP $code is not the discovery shell (title or category nav missing)"
 fi
 
-# The Portal may only advertise a Review entrance this deployment serves. This
-# deployment ships three entrances and no Review behind them, so a `/review`
-# link here is a 404 dressed up as a governance path. When the operator
-# declares an origin instead, the page must link to that origin.
-review_origin="${PORTICO_DEPLOY_REVIEW_ORIGIN:-off}"
-review_origin="$(printf '%s' "${review_origin%/}" | tr '[:upper:]' '[:lower:]')"
-if [ "$review_origin" = "off" ]; then
-  if contains "$payload" 'href="/review'; then
-    bad portal-review-entry "the page links to /review but this deployment serves no Review entrance"
-  else
-    ok portal-review-entry
-  fi
-elif contains "$payload" "href=\"${review_origin}"; then
-  ok portal-review-entry
+# Day-to-day review lives on the internal content workbench. The discovery
+# page must not advertise a parallel /review or external review chrome.
+if contains "$payload" 'href="/review' || contains "$payload" '>审核<' || contains "$payload" '去审核'; then
+  bad portal-review-entry "the discovery page still advertises a separate review entrance"
 else
-  bad portal-review-entry "the page does not link to the declared Review origin"
+  ok portal-review-entry
 fi
 
 expect_status portal-public-plane "$PORTAL/public" 200

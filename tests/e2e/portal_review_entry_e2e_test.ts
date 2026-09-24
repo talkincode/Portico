@@ -34,17 +34,15 @@ Deno.test("E2E: a Portal deployed without a Review entrance serves no review lin
   }
 });
 
-Deno.test("E2E: a Portal deployed with a declared Review origin links to it", async () => {
+Deno.test("E2E: a declared Review origin is not primary discovery chrome", async () => {
   const server = await bootPortal({ PORTICO_REVIEW_ORIGIN: "https://review.example.test" });
   try {
     const response = await fetch(`${server.body.data.url}/`);
     const body = await response.text();
     assert(response.status === 200, `the discovery page still renders (got ${response.status})`);
-    assert(
-      body.includes('href="https://review.example.test/login"'),
-      "an anonymous caller gets the login entry on the declared origin",
-    );
-    assert(!body.includes('href="/review'), "the relative link must be replaced, not duplicated");
+    assert(!body.includes("review.example.test"), "discovery does not advertise the review origin");
+    assert(!body.includes('href="/review'), "discovery does not advertise /review");
+    assert(!body.includes("审核登录"), "discovery does not offer 审核登录");
   } finally {
     await server.stop();
   }
