@@ -1,14 +1,8 @@
 import { AccessService } from "../access/mod.ts";
 import { readSessionToken } from "../access/session-header.ts";
 import { CatalogError, CatalogService, ErrorCode } from "../catalog/mod.ts";
-import type { Actor, AgentSurface, RegisterInput } from "../catalog/mod.ts";
-import {
-  esc,
-  prefersDark,
-  renderShell,
-  resolvePageTheme,
-  stateChip,
-} from "../portal/design/mod.ts";
+import type { Actor, RegisterInput } from "../catalog/mod.ts";
+import { esc, prefersDark, renderShell, resolvePageTheme } from "../portal/design/mod.ts";
 import {
   type ExchangeGithubCode,
   githubAuthorizeUrl,
@@ -56,6 +50,7 @@ export async function handleReviewRequest(
     if (
       url.pathname !== "/review" && url.pathname !== "/review/" &&
       url.pathname !== "/review/approve" && url.pathname !== "/review/reject" &&
+      url.pathname !== "/review/withdraw" && url.pathname !== "/review/remove" &&
       url.pathname !== "/review/api/submit"
     ) return new Response("Not found", { status: 404 });
     const actor = await resolveActor(request, context);
@@ -73,15 +68,19 @@ export async function handleReviewRequest(
         if (wantsHtml(request)) {
           return new Response(null, {
             status: 303,
-            headers: { "location": "/login?next=/review" },
+            headers: {
+              "location": `/login?next=${encodeURIComponent("/internal?state=pending_public")}`,
+            },
           });
         }
         return jsonError(401, "authentication required");
       }
-      const records = (await context.catalog.list(actor)).filter((item) =>
-        item.governanceState === "pending_public"
-      );
-      return html(renderReviewPage(request, actor, records));
+      // The review queue is no longer a second workbench. Day-to-day
+      // approve / withdraw / delete lives on the internal content detail.
+      return new Response(null, {
+        status: 303,
+        headers: { "location": "/internal?state=pending_public" },
+      });
     }
     if (request.method !== "POST") return jsonError(405, "method not allowed");
     if (actor.role === "anonymous") return forbidden(401, "authentication required");
@@ -113,18 +112,30 @@ export async function handleReviewRequest(
     if (actor.kind !== "human" || actor.role !== "auditor") {
       return forbidden(403, "only a human auditor may review");
     }
-    if (url.pathname !== "/review/approve" && url.pathname !== "/review/reject") {
-      return jsonError(405, "POST only at /review/approve or /review/reject");
+    const action = reviewAction(url.pathname);
+    if (!action) {
+      return jsonError(
+        405,
+        "POST only at /review/approve, /review/reject, /review/withdraw or /review/remove",
+      );
     }
     const contentType = request.headers.get("content-type") ?? "";
-    const body = contentType.includes("application/json")
-      ? await request.json() as { id?: unknown }
-      : Object.fromEntries((await request.formData()).entries()) as { id?: unknown };
-    const action = url.pathname.endsWith("/approve") ? "approve" : "reject";
+    const jsonBody = contentType.includes("application/json");
+    const body = jsonBody
+      ? await request.json() as { id?: unknown; note?: unknown }
+      : Object.fromEntries((await request.formData()).entries()) as {
+        id?: unknown;
+        note?: unknown;
+      };
     if (typeof body.id !== "string") return jsonError(400, "expected {id}");
-    const result = action === "approve"
-      ? await context.catalog.approve(actor, { id: body.id })
-      : await context.catalog.reject(actor, { id: body.id });
+    const note = typeof body.note === "string" && body.note !== "" ? body.note : undefined;
+    const result = await dispatchReview(context, actor, action, body.id, note);
+    if (!jsonBody && wantsHtml(request)) {
+      const back = action === "remove"
+        ? "/internal?state=pending_public"
+        : `/internal?id=${encodeURIComponent(body.id)}`;
+      return new Response(null, { status: 303, headers: { location: back } });
+    }
     return new Response(JSON.stringify({ ok: true, data: result }), {
       headers: securityHeaders("application/json; charset=utf-8"),
     });
@@ -305,6 +316,29 @@ async function handleLogin(request: Request, context: ReviewContext): Promise<Re
     },
   });
 }
+type ReviewAction = "approve" | "reject" | "withdraw" | "remove";
+
+function reviewAction(pathname: string): ReviewAction | undefined {
+  if (pathname === "/review/approve") return "approve";
+  if (pathname === "/review/reject") return "reject";
+  if (pathname === "/review/withdraw") return "withdraw";
+  if (pathname === "/review/remove") return "remove";
+  return undefined;
+}
+
+async function dispatchReview(
+  context: ReviewContext,
+  actor: Actor,
+  action: ReviewAction,
+  id: string,
+  note: string | undefined,
+): Promise<unknown> {
+  if (action === "approve") return await context.catalog.approve(actor, { id, note });
+  if (action === "reject") return await context.catalog.reject(actor, { id, note });
+  if (action === "withdraw") return await context.catalog.withdraw(actor, { id, note });
+  return await context.catalog.remove(actor, { id });
+}
+
 function statusFor(code: string): number {
   if (code === ErrorCode.FORBIDDEN) return 403;
   if (code === ErrorCode.SELF_APPROVAL) return 409;
@@ -402,41 +436,6 @@ function renderLoginPage(request: Request, githubEnabled: boolean, error?: strin
       </form>
       <p class="tk-note" style="margin-top:16px">仅 allowlisted 账号可登录；能审批什么由名册决定。</p>
     </div>
-  </main>`,
-  );
-}
-
-function renderReviewPage(
-  request: Request,
-  actor: Actor,
-  records: AgentSurface[],
-): string {
-  const rows = records.map((record) =>
-    `<tr><td><strong>${esc(record.name)}</strong><br><span class="tk-id">${
-      esc(record.id)
-    }</span></td><td><span class="tk-meta">${
-      esc(record.version ?? "—")
-    }</span></td><td><span class="tk-meta">${
-      esc(record.publicSubmission?.submittedBy.id ?? "—")
-    }</span></td><td>${
-      stateChip(record.governanceState)
-    }</td><td class="rv-table"><form method="post" action="/review/approve"><input type="hidden" name="id" value="${
-      esc(record.id)
-    }"><button class="tk-btn tk-btn--accent" type="submit">通过</button></form><form method="post" action="/review/reject"><input type="hidden" name="id" value="${
-      esc(record.id)
-    }"><button class="tk-btn" type="submit">驳回</button></form></td></tr>`
-  ).join("");
-  const table = records.length === 0
-    ? `<p class="rv-empty">暂无待审公开候选。</p>`
-    : `<div class="tk-panel"><table class="tk-table"><thead><tr><th>名称</th><th>版本</th><th>提交者</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  return shell(
-    request,
-    "人工审核",
-    `  <main class="rv-main">
-    <p class="tk-meta">PORTICO · 人工审核</p>
-    <h1>待审公开</h1>
-    <p class="tk-meta">登录身份：${esc(actor.id)} · 提交者不能审批自己的候选</p>
-    ${table}
   </main>`,
   );
 }

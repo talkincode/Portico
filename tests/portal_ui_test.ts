@@ -201,8 +201,8 @@ Deno.test("a reader sees the console but no audit trail entry or reset of it", a
     "a reader is offered the public-decision trail",
   );
   assert(
-    asReader.html.includes("/internal/pending"),
-    "a reader is offered the pending-public queue",
+    asReader.html.includes("/internal?state=pending_public"),
+    "a reader is offered the pending filter on the content workbench",
   );
 
   const asAuditor = await get(context, "/internal", auditor);
@@ -212,8 +212,8 @@ Deno.test("a reader sees the console but no audit trail entry or reset of it", a
     "an auditor is offered the public-decision trail",
   );
   assert(
-    asAuditor.html.includes("/internal/pending"),
-    "an auditor is offered the pending-public queue",
+    asAuditor.html.includes("/internal?state=pending_public"),
+    "an auditor is offered the pending filter on the content workbench",
   );
 });
 
@@ -268,6 +268,10 @@ class EditedTrailStore implements CatalogStore {
 
   commitApproval(record: AgentSurface, approval: ApprovalRecord): Promise<void> {
     return this.inner.commitApproval(record, approval);
+  }
+
+  commitRemoval(id: string, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitRemoval(id, change);
   }
 
   async listChanges(): Promise<CatalogChangeRecord[]> {
@@ -584,8 +588,7 @@ Deno.test("the pending queue hides drafts, internal records, and approved_public
     assert(!page.html.includes("Internal One"), "internal-only records are not pending public");
     assert(!page.html.includes("Public One"), "approved_public is a decision, not a candidate");
     assert(!/<script/i.test(page.html), "the queue must not ship script");
-    assert(!/<form/i.test(page.html), "the queue must not ship a form");
-    assert(!/<button/i.test(page.html), "the queue must not ship a button");
+    assert(!page.html.includes('action="/review/'), "the queue must not decide a candidate");
   }
 
   const before = JSON.stringify(await context.catalog.list(maintainer));
@@ -607,13 +610,13 @@ Deno.test("the catalog board links the pending_public count to the pending queue
   const page = await get(context, "/internal/c", reader);
   assertEquals(page.status, 200);
   assert(
-    page.html.includes('<a class="tk-stat" href="/internal/pending">'),
-    "the pending count must be a link to the queue",
+    page.html.includes('<a class="tk-stat" href="/internal?state=pending_public">'),
+    "the pending count opens the content workbench filter",
   );
   assert(page.html.includes("待审公开"), "the catalog board still labels the pending count");
   assert(
-    !/<form/i.test(page.html),
-    "linking the count must not turn the catalog board into a write form",
+    !page.html.includes('action="/review/'),
+    "linking the count must not turn the catalog board into a decision form",
   );
   assertEquals(
     JSON.stringify(await context.catalog.list(maintainer)),
@@ -733,8 +736,8 @@ Deno.test("the pending queue labels entry kinds as text and never links them", a
     !page.html.includes('href="jsr:@example/pending-cli"'),
     "a package pending entry must not be a clickable target",
   );
-  assert(!/<form/i.test(page.html), "labeling kinds must not add a write form");
-  assert(!/<button/i.test(page.html), "labeling kinds must not add an approve button");
+  assert(!page.html.includes('action="/review/'), "labeling kinds must not add a decision");
+  assert(!page.html.includes(">通过<"), "labeling kinds must not add an approve button");
 
   const anonResponse = await handlePortalRequest(
     new Request("http://portico.local/internal/pending"),
@@ -825,8 +828,8 @@ Deno.test("the pending queue filters pending_public candidates by channel as rea
     all.html.includes('aria-label="筛选"'),
     "queue must name the channel filter as a read-only group",
   );
-  assert(!/<form/i.test(all.html), "channel filter must not add a write form");
-  assert(!/<button/i.test(all.html), "channel filter must not add an approve button");
+  assert(!all.html.includes('action="/review/'), "channel filter must not add a decision");
+  assert(!all.html.includes(">通过<"), "channel filter must not add an approve button");
   assert(!/<script/i.test(all.html), "channel filter must not ship script");
 
   const asCli = await get(context, "/internal/pending?channel=cli", reader);
@@ -852,7 +855,7 @@ Deno.test("the pending queue filters pending_public candidates by channel as rea
   assert(asWeb.html.includes("Pending Web"), "auditor web filter must keep the web candidate");
   assert(!asWeb.html.includes("Pending CLI"), "auditor web filter must hide the cli candidate");
   assert(!asWeb.html.includes("Pending MCP"), "auditor web filter must hide the mcp candidate");
-  assert(!/<button/i.test(asWeb.html), "auditor must not get an approve button after filtering");
+  assert(!asWeb.html.includes(">通过<"), "auditor must not get an approve button after filtering");
 
   const unknown = await get(context, "/internal/pending?channel=ftp", reader);
   assertEquals(unknown.status, 200, "an unknown channel must not 500 the HTML queue");
@@ -962,8 +965,8 @@ Deno.test("the pending queue channel tabs show pending counts and ignore interna
     ),
     "mcp tab must count one pending candidate",
   );
-  assert(!/<form/i.test(all.html), "pending counts must not add a write form");
-  assert(!/<button/i.test(all.html), "pending counts must not add an approve button");
+  assert(!all.html.includes('action="/review/'), "pending counts must not add a decision");
+  assert(!all.html.includes(">通过<"), "pending counts must not add an approve button");
 
   const asCli = await get(context, "/internal/pending?channel=cli", auditor);
   assertEquals(asCli.status, 200);
@@ -981,7 +984,7 @@ Deno.test("the pending queue channel tabs show pending counts and ignore interna
     ),
     "filtered web tab must still show its pending count",
   );
-  assert(!/<button/i.test(asCli.html), "auditor must not get an approve button after counting");
+  assert(!asCli.html.includes(">通过<"), "auditor must not get an approve button after counting");
 
   const anonResponse = await handlePortalRequest(
     new Request("http://portico.local/internal/pending?channel=cli"),
@@ -1087,7 +1090,7 @@ Deno.test("published pages and consoles ship no script", async () => {
       ["/internal/audit", auditor],
       ["/internal/approvals", reader],
       ["/internal/pending", reader],
-      ["/internal/s/draft-one", maintainer],
+      ["/internal?id=draft-one", maintainer],
     ] as const
   ) {
     const { status, html } = await get(context, path, actor);
@@ -1276,8 +1279,8 @@ Deno.test("public and internal planes link back to magazine discovery without le
   const article = await get(context, "/public/s/docs-web");
   assertEquals(article.status, 200);
   assert(
-    article.html.includes('href="/s/docs-web"'),
-    "an approved public article may point at the magazine reading page",
+    article.html.includes('href="/?id=docs-web"'),
+    "an approved public article points at the magazine workbench",
   );
   assert(!article.html.includes('href="/internal"'));
 
@@ -1301,4 +1304,44 @@ Deno.test("public and internal planes link back to magazine discovery without le
   const anonInternalBody = await anonInternalResponse.text();
   assert(!anonInternalBody.includes("Docs Web"), "anonymous redirect must not leak internal data");
   assertEquals(JSON.stringify(await context.catalog.list(maintainer)), before);
+});
+
+Deno.test("content selection stays on the workbench and actions follow the role", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface({ id: "draft-one", name: "Draft One" }));
+  await context.catalog.register(maintainer, surface({ id: "live-one", name: "Live One" }));
+  await context.catalog.publish(maintainer, { id: "live-one", visibility: "internal" });
+  await context.catalog.publish(maintainer, { id: "live-one", visibility: "public" });
+
+  const list = await get(context, "/internal", auditor);
+  assert(list.html.includes('href="/internal?id=draft-one"'), "a row selects in place");
+  assert(!list.html.includes('href="/internal/s/'), "rows do not leave for a detail page");
+  assert(!list.html.includes("去审核"));
+  assert(!list.html.includes(">渠道</p>"), "channels are not a navigation group");
+  assert(list.html.includes("登出"));
+
+  const pending = await get(context, "/internal?state=pending_public&id=live-one", auditor);
+  assert(pending.html.includes('action="/review/approve"'));
+  assert(pending.html.includes(">通过<"));
+  assert(pending.html.includes(">驳回<"));
+  assert(!pending.html.includes(">删除<"), "a pending candidate is not deleted in place");
+
+  const asMaintainer = await get(context, "/internal?id=live-one", maintainer);
+  assert(!asMaintainer.html.includes(">通过<"), "a maintainer cannot approve");
+  assert(!asMaintainer.html.includes(">删除<"), "pending public cannot be deleted");
+
+  const draft = await get(context, "/internal?id=draft-one", maintainer);
+  assert(draft.html.includes('action="/review/remove"'));
+  assert(draft.html.includes(">删除<"));
+  assert(!draft.html.includes(">通过<"));
+
+  const asReader = await get(context, "/internal?id=draft-one", reader);
+  assertEquals(asReader.status, 200);
+  assert(!asReader.html.includes(">删除<"));
+  assert(!asReader.html.includes(">撤回<"));
+
+  const catalog = await get(context, "/internal/c", reader);
+  assert(!catalog.html.includes('href="/internal/c?state='));
+  assert(!catalog.html.includes('href="/internal/c?channel='));
+  assert(catalog.html.includes('href="/internal?id='));
 });

@@ -89,7 +89,8 @@ export type CatalogChangeAction =
   | "draft"
   | "publish_internal"
   | "publish_public_candidate"
-  | "update";
+  | "update"
+  | "remove";
 
 export interface CatalogChangeRecord {
   id: string;

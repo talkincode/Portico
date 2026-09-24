@@ -94,29 +94,25 @@ Deno.test("a deployment that serves no Review advertises none on any plane", asy
   }
 });
 
-Deno.test("the same-origin default keeps the one-click Review entry", async () => {
+Deno.test("the same-origin default does not keep a parallel Review entry", async () => {
   const context = await portalContext();
   const home = await page("/", context);
-  assert(home.includes('href="/review"'), "a signed-in caller jumps to the queue");
-  assert(home.includes(">审核<") || home.includes("审核 ("), "the label matches the entry");
+  assert(!home.includes('href="/review"'), "discovery does not jump to a second review UI");
+  assert(!home.includes(">审核<"), "the header does not offer 审核");
+  assert(home.includes("登出"), "a signed-in caller can leave");
   const public_ = await page("/public", context);
-  assert(public_.includes('href="/review"'), "the public plane offers the same entrance");
+  assert(!public_.includes('href="/review"'), "the public plane does not offer review");
+  assert(public_.includes("登出"), "the public plane shows logout when signed in");
 });
 
-Deno.test("a declared origin moves every Review link to that deployment", async () => {
+Deno.test("a declared origin is not advertised as primary chrome", async () => {
   const context = await portalContext({
     kind: "origin",
     origin: "https://review.example.test/review",
   });
   const home = await page("/", context);
-  assert(
-    home.includes('href="https://review.example.test/review"'),
-    "the rail points at the origin",
-  );
+  assert(!home.includes("review.example.test"), "the magazine does not point at a review origin");
   assert(!home.includes('href="/review'), "no relative review link survives");
   const public_ = await page("/public", context);
-  assert(
-    public_.includes('href="https://review.example.test/review"'),
-    "the public plane points at the same origin",
-  );
+  assert(!public_.includes("review.example.test"), "the public plane does not point at review");
 });

@@ -38,6 +38,29 @@ export const INTERNAL_CSS = `
   font-weight: 600;
   color: var(--tk-ink);
 }
+.int-logout { display: inline; margin: 0; }
+.int-logout button {
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--tk-muted);
+  background: transparent;
+  border: 1px solid var(--tk-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.int-actionbar { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.int-actionbar form { display: inline-flex; gap: 6px; align-items: center; }
+.int-action__note {
+  font: inherit;
+  font-size: 0.75rem;
+  width: 8rem;
+  padding: 4px 6px;
+  border: 1px solid var(--tk-border);
+  border-radius: 6px;
+  background: var(--tk-sunken);
+  color: var(--tk-ink);
+}
 .int-identity__id {
   font-family: var(--tk-font-mono);
   font-size: 0.7rem;

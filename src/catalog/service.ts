@@ -477,6 +477,63 @@ export class CatalogService {
     return structuredClone(record);
   }
 
+  /**
+   * Removes a surface that is not on the public boundary.
+   *
+   * `pending_public` and `approved_public` stay until an auditor rejects or
+   * withdraws them. Deletion appends a `remove` change and leaves the approval
+   * trail untouched, so a later reader can still see who crossed the boundary.
+   * Maintainers and human auditors may remove; readers and anonymous callers
+   * may not. A record the caller cannot see is `NOT_FOUND`.
+   */
+  async remove(actor: Actor, input: { id: string }): Promise<{ id: string }> {
+    assertActor(actor);
+    const allowed = actor.role === "maintainer" ||
+      (actor.kind === "human" && actor.role === "auditor");
+    if (!allowed) {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a maintainer or a human auditor may remove a catalog surface",
+      );
+    }
+    if (!input || typeof input.id !== "string" || input.id === "") {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "id is required");
+    }
+    const existing = await this.store.get(input.id);
+    if (!existing) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${input.id}' was not found`);
+    }
+    const governed = await this.#underPublicGrant(existing);
+    if (!canSee(actor, governed)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `surface '${input.id}' was not found`);
+    }
+    if (
+      governed.governanceState === "pending_public" ||
+      governed.governanceState === "approved_public"
+    ) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "a pending public candidate or an approved public surface cannot be removed; " +
+          "reject or withdraw it first",
+      );
+    }
+    const now = new Date().toISOString();
+    const change: CatalogChangeRecord = {
+      id: changeId(governed.id, "remove", now),
+      surfaceId: governed.id,
+      action: "remove",
+      actor: { id: actor.id, kind: actor.kind, role: actor.role },
+      at: now,
+      governanceState: governed.governanceState,
+      visibility: governed.visibility,
+      entry: { ...governed.entry },
+      version: governed.version,
+      name: governed.name,
+    };
+    await this.store.commitRemoval(governed.id, change);
+    return { id: governed.id };
+  }
+
   async #decidePublic(
     actor: Actor,
     input: ApprovalDecisionInput,

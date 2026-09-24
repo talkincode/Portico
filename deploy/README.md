@@ -22,7 +22,7 @@
 | `PORTICO_DEPLOY_PORT` | 8788 / 8789 / 8790 | 各入口端口 |
 | `PORTICO_DENO_IMAGE` | `denoland/deno:2.9.6` | 运行镜像（部分宿主 glibc 过旧，跑不了官方二进制） |
 | `PORTICO_DOCKER` | `/usr/bin/docker` | docker 可执行文件 |
-| `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 本部署对外提供的审核入口：`off` 表示不提供（页眉不出现审核链接），也可写成审核服务的绝对 origin，页眉会链到那里。未设置按「不提供」处理，不外推 |
+| `PORTICO_DEPLOY_REVIEW_ORIGIN` | `off` | 保留给 Review 进程的 origin 声明。发现页与内部工作台不再把审核做成页眉入口；日常审批在内容详情上，写操作仍走 Review API。未设置按「不提供」处理。 |
 
 数据目录固定为检出目录下的 `data/`，只有 Gateway 以可写方式挂载它。
 

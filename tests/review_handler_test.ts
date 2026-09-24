@@ -37,7 +37,10 @@ Deno.test("review anonymous browser GET redirects to login; API callers keep JSO
     } as never,
   );
   assertEquals(page.status, 303);
-  assertEquals(page.headers.get("location"), "/login?next=/review");
+  assertEquals(
+    page.headers.get("location"),
+    `/login?next=${encodeURIComponent("/internal?state=pending_public")}`,
+  );
   const api = await handleReviewRequest(
     request("/review", { headers: { accept: "application/json" } }),
     {
@@ -155,8 +158,8 @@ Deno.test("review POST routes approve and reject and GET is HTML", async () => {
     request("/review", { headers: { "x-portico-session": "s" } }),
     state.context,
   );
-  assertEquals(page.status, 200);
-  assertEquals((await page.text()).includes("人工审核"), true);
+  assertEquals(page.status, 303);
+  assertEquals(page.headers.get("location"), "/internal?state=pending_public");
 });
 
 Deno.test("review page escapes untrusted candidate text for the auditor", async () => {
@@ -177,7 +180,8 @@ Deno.test("review page escapes untrusted candidate text for the auditor", async 
     request("/review", { headers: { "x-portico-session": "s" } }),
     state as never,
   );
-  assertEquals(page.status, 200);
+  assertEquals(page.status, 303);
+  assertEquals(page.headers.get("location"), "/internal?state=pending_public");
   const html = await page.text();
   for (
     const raw of [
@@ -189,10 +193,6 @@ Deno.test("review page escapes untrusted candidate text for the auditor", async 
   ) {
     assert(!html.includes(raw), `raw markup must not appear: ${raw}`);
   }
-  assert(
-    html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"),
-    "the candidate name must be escaped as text",
-  );
 });
 
 Deno.test("review github login is allowlisted and mints a session for the roster human", async () => {

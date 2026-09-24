@@ -38,7 +38,6 @@ import {
   renderPublicIndex,
   renderPublicTopic,
   renderShell,
-  renderSurfaceView,
   resolvePageTheme,
   summarize,
   type Tone,
@@ -271,6 +270,9 @@ export async function handlePortalRequest(
     const channel = parseChannel(url.searchParams.get("channel"));
     const category = parseCategory(url.searchParams.get("category"));
     const surfacePage = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/);
+    const queryId = url.pathname === "/" ? url.searchParams.get("id") : null;
+    const selectedId = surfacePage?.[1] ??
+      (queryId && /^[a-z][a-z0-9-]{1,62}$/.test(queryId) ? queryId : null);
     if (url.pathname === "/" || surfacePage) {
       const query = parseCatalogQuery({ q: url.searchParams.get("q") });
       if (channel) query.channel = channel;
@@ -293,14 +295,15 @@ export async function handlePortalRequest(
           version: item.version,
         }];
       });
-      if (surfacePage) {
+      if (selectedId) {
         try {
-          const selected = await context.catalog.get(actor, surfacePage[1]);
+          const selected = await context.catalog.get(actor, selectedId);
           const canonical = canonicalMagazineReadingUrl(url, selected, category);
-          if (canonical) {
+          const location = magazineSelectionUrl(url, selected, canonical);
+          if (surfacePage || canonical) {
             return new Response(null, {
               status: 302,
-              headers: { location: `${canonical.pathname}${canonical.search}` },
+              headers: { location },
             });
           }
           return html(renderMagazinePage({
@@ -351,6 +354,14 @@ export async function handlePortalRequest(
  * the caller can already see. Unknown or unauthorized ids still 404 before
  * this runs.
  */
+/** Old `/s/:id` and a stale filter both land on `/?id=` so Back stays in the magazine. */
+function magazineSelectionUrl(url: URL, selected: AgentSurface, canonical: URL | null): string {
+  const next = canonical ?? new URL(url);
+  next.pathname = "/";
+  next.searchParams.set("id", selected.id);
+  return `${next.pathname}${next.search}`;
+}
+
 function canonicalMagazineReadingUrl(
   url: URL,
   selected: AgentSurface,
@@ -540,7 +551,21 @@ async function internalPage(
 
   if (url.pathname === "/internal") {
     const events = await auditTrail(actor, context);
-    return html(renderContentView({ ctx: base, surfaces, recentEvents: events }));
+    const stateRaw = url.searchParams.get("state");
+    const state = stateRaw === "draft" || stateRaw === "internal" ||
+        stateRaw === "pending_public" || stateRaw === "approved_public" ||
+        stateRaw === "rejected"
+      ? stateRaw
+      : undefined;
+    const idRaw = url.searchParams.get("id");
+    const selectedId = idRaw && /^[a-z][a-z0-9-]{1,62}$/.test(idRaw) ? idRaw : undefined;
+    return html(renderContentView({
+      ctx: base,
+      surfaces,
+      recentEvents: events,
+      selectedId,
+      state,
+    }));
   }
 
   if (url.pathname === "/internal/c") {
@@ -596,16 +621,10 @@ async function internalPage(
 
   const surfaceMatch = url.pathname.match(/^\/internal\/s\/([a-z][a-z0-9-]{1,62})$/);
   if (surfaceMatch) {
-    try {
-      const surface = await context.catalog.get(actor, surfaceMatch[1]);
-      const events = await auditTrail(actor, context);
-      return html(renderSurfaceView({ ctx: base, surface, events }));
-    } catch (error) {
-      if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-        return htmlNotFound(request, context.reviewEntry);
-      }
-      throw error;
-    }
+    return new Response(null, {
+      status: 303,
+      headers: { location: `/internal?id=${encodeURIComponent(surfaceMatch[1])}` },
+    });
   }
 
   return htmlNotFound(request, context.reviewEntry);

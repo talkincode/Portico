@@ -247,9 +247,10 @@ Deno.test("E2E: reading-page chrome keeps all-channels and search query", async 
     assertEquals(searched.status, 200);
     const searchedHtml = await searched.text();
     assert(searchedHtml.includes('href="/?q=Writer">首页</a>'));
-    assert(searchedHtml.includes('href="/?channel=cli&amp;q=Writer">CLI</a>'));
-    assert(searchedHtml.includes('class="rail-link active" href="/?channel=cli&amp;q=Writer"'));
-    assert(searchedHtml.includes('class="rail-link" href="/?q=Writer"'));
+    assert(!searchedHtml.includes("服务渠道"));
+    assert(!searchedHtml.includes("已登记服务"));
+    assert(searchedHtml.includes(">内容<"));
+    assert(!searchedHtml.includes('class="rail-link"'));
     assert(!searchedHtml.includes("专题分类"));
     assert(!searchedHtml.includes('class="topics"'));
     assert(!searchedHtml.includes(">CLI 工具<"));
@@ -303,7 +304,7 @@ Deno.test("E2E: mismatched reading-page filters redirect instead of rendering ze
     const location = mismatch.headers.get("location");
     if (!location) throw new Error("mismatched channel must send Location");
     const redirected = new URL(location, base);
-    assertEquals(`${redirected.pathname}${redirected.search}`, "/s/docs-writer?channel=cli");
+    assertEquals(`${redirected.pathname}${redirected.search}`, "/?channel=cli&id=docs-writer");
 
     const canonical = await fetch(redirected, { headers: readerHeaders() });
     assertEquals(canonical.status, 200);
@@ -321,7 +322,7 @@ Deno.test("E2E: mismatched reading-page filters redirect instead of rendering ze
     const qLocation = qMismatch.headers.get("location");
     if (!qLocation) throw new Error("unmatched q must send Location");
     const qRedirected = new URL(qLocation, base);
-    assertEquals(`${qRedirected.pathname}${qRedirected.search}`, "/s/docs-writer");
+    assertEquals(`${qRedirected.pathname}${qRedirected.search}`, "/?id=docs-writer");
 
     const anon = await fetch(`${base}/s/docs-writer?channel=mcp`, { redirect: "manual" });
     assertEquals(anon.status, 404);
@@ -369,7 +370,7 @@ Deno.test("E2E: mismatched reading-page filters redirect instead of rendering ze
     const location = anon.headers.get("location");
     if (!location) throw new Error("anonymous may canonicalize an approved public record");
     const redirected = new URL(location, base);
-    assertEquals(`${redirected.pathname}${redirected.search}`, "/s/docs-web?channel=web");
+    assertEquals(`${redirected.pathname}${redirected.search}`, "/?channel=web&id=docs-web");
   });
 });
 
@@ -431,8 +432,8 @@ Deno.test("E2E: magazine and public surfaces reach each other; anonymous /intern
     assertEquals(readerHome.status, 200);
     const readerHomeHtml = await readerHome.text();
     assert(
-      readerHomeHtml.includes('href="/review"'),
-      "signed-in magazine chrome must offer the review entrance",
+      readerHomeHtml.includes("登出"),
+      "signed-in magazine chrome must offer logout",
     );
 
     const publicPage = await fetch(`${base}/public`);
@@ -446,16 +447,16 @@ Deno.test("E2E: magazine and public surfaces reach each other; anonymous /intern
     const article = await fetch(`${base}/public/s/docs-web`);
     assertEquals(article.status, 200);
     const articleHtml = await article.text();
-    assert(articleHtml.includes('href="/s/docs-web"'));
+    assert(articleHtml.includes('href="/?id=docs-web"'));
 
-    const reading = await fetch(`${base}/s/docs-web?channel=web&q=Docs`);
+    const reading = await fetch(`${base}/?id=docs-web&channel=web&q=Docs`);
     assertEquals(reading.status, 200);
     const readingHtml = await reading.text();
-    assert(
-      readingHtml.includes(
-        '<a class="back-to-list" href="/?channel=web&amp;q=Docs">返回列表</a>',
-      ),
-    );
+    assert(readingHtml.includes(">内容<"), "the list is 内容");
+    assert(!readingHtml.includes("已登记服务"));
+    assert(!readingHtml.includes("服务渠道"));
+    assert(!readingHtml.includes("返回列表"));
+    assert(readingHtml.includes("id=docs-web"));
 
     const list = await fetch(`${base}/?channel=web&q=Docs`);
     assertEquals(list.status, 200);

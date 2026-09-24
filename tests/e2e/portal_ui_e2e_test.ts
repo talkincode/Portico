@@ -512,11 +512,11 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
     });
     assertEquals(catalogBoard.status, 200);
     assert(
-      catalogBoard.body.includes('<a class="tk-stat" href="/internal/pending">'),
-      "catalog board pending count must link to the queue",
+      catalogBoard.body.includes('<a class="tk-stat" href="/internal?state=pending_public">'),
+      "catalog board pending count opens the content workbench",
     );
     assert(!/<script/i.test(asReader.body), "pending page must not ship script");
-    assert(!/<form/i.test(asReader.body), "pending page must not ship a form");
+    assert(!asReader.body.includes('action="/review/'), "pending page must not decide");
 
     const asAuditor = await fetchPage(`${base}/internal/pending`, {
       headers: headersFor("human:security-auditor"),
@@ -527,7 +527,8 @@ Deno.test("E2E: /internal/pending lists pending_public for signed-in roles; anon
       asAuditor.body.includes("jsr:@example/docs-writer"),
       "auditor must see where the pending entry points",
     );
-    assert(!/<button/i.test(asAuditor.body), "auditor must not get an approve button");
+    assert(!asAuditor.body.includes('action="/review/'), "auditor must not approve from the queue");
+    assert(asAuditor.body.includes("登出"), "auditor chrome offers logout");
 
     await assertLoginRedirect(`${base}/internal/pending`, "anonymous /internal/pending", (body) => {
       assert(!body.includes("Docs Writer"));
@@ -666,7 +667,7 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
       ),
       "mcp tab must count one pending candidate",
     );
-    assert(!/<form/i.test(asReader.body), "channel filter must not ship a form");
+    assert(!asReader.body.includes('action="/review/'), "channel filter must not decide");
     assert(!/<script/i.test(asReader.body), "channel filter must not ship script");
 
     const asCli = await fetchPage(`${base}/internal/pending?channel=cli`, {
@@ -700,7 +701,7 @@ Deno.test("E2E: /internal/pending?channel= filters pending_public; anonymous 404
     assert(asWeb.body.includes("Docs Web"), "auditor web filter must keep the web candidate");
     assert(!asWeb.body.includes("Docs Writer"), "auditor web filter must hide the cli candidate");
     assert(!asWeb.body.includes("Docs MCP"), "auditor web filter must hide the mcp candidate");
-    assert(!/<button/i.test(asWeb.body), "auditor must not get an approve button after filtering");
+    assert(!asWeb.body.includes('action="/review/'), "auditor must not approve from a filtered queue");
 
     await assertLoginRedirect(
       `${base}/internal/pending?channel=cli`,

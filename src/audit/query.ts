@@ -23,6 +23,7 @@ export const AUDIT_ACTIONS: readonly string[] = [
   "publish_internal",
   "publish_public_candidate",
   "update",
+  "remove",
   "approved",
   "rejected",
   "withdrawn",
