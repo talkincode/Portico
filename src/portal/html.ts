@@ -1277,6 +1277,20 @@ function renderHome(
     </main>`;
 }
 
+/**
+ * The reading page shows the whole description as body text. Each line break
+ * starts a new paragraph so a multi-paragraph piece stays readable; every
+ * paragraph is escaped on its own, so a line break never opens markup. Cards
+ * and the hero keep the single-line summary.
+ */
+export function renderBodyParagraphs(description: string): string {
+  const paragraphs = description.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (paragraphs.length === 0) return "";
+  return paragraphs.map((line) => `<p class="lead-paragraph">${escapeHtml(line)}</p>`).join(
+    "\n        ",
+  );
+}
+
 function renderReading(
   surfaces: AgentSurface[],
   selected: AgentSurface,
@@ -1321,7 +1335,7 @@ function renderReading(
           <span class="version-tag">v${escapeHtml(selected.version)}</span>
         </div>
         <h1>${escapeHtml(selected.name)}</h1>
-        <p class="lead-paragraph">${escapeHtml(selected.description)}</p>
+        ${renderBodyParagraphs(selected.description)}
         ${renderTagsDisplay(selected.tags)}
       </div>
 

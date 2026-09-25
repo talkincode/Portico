@@ -967,3 +967,25 @@ Deno.test("the magazine shell leads to the public face and, when signed in, to t
     "the count is the unfiltered pending_public total, not the filtered list length",
   );
 });
+
+Deno.test("reading page renders each description line as its own escaped paragraph", async () => {
+  const context = await seededContext();
+  await context.catalog.register(maintainer, {
+    ...infoAssassinSurface(),
+    description: "第一段：要点。\n\n第二段 <script>alert(1)</script>\r\n第三段。",
+  });
+
+  const page = await handlePortalRequest(
+    new Request("http://portico.local/?id=info-assassin-news", { headers: actorHeaders(reader) }),
+    context,
+  );
+  assertEquals(page.status, 200);
+  const html = await page.text();
+  const paragraphs = [...html.matchAll(/<p class="lead-paragraph">([^<]*)<\/p>/g)].map((m) => m[1]);
+  assertEquals(paragraphs, [
+    "第一段：要点。",
+    "第二段 &lt;script&gt;alert(1)&lt;/script&gt;",
+    "第三段。",
+  ]);
+  assert(!html.includes("<script>alert(1)"), "a line break must never open markup");
+});
