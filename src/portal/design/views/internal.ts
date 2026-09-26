@@ -262,6 +262,8 @@ export interface ContentViewInput {
   selectedId?: string;
   /** Governance-status filter from the rail. Unknown values show every record. */
   state?: GovernanceState;
+  /** One-shot Review result banner. Set from allowlisted `?review=` / `?reviewError=`. */
+  notice?: { kind: "ok" | "error"; text: string };
 }
 
 export function renderContentView(input: ContentViewInput): string {
@@ -310,7 +312,7 @@ export function renderContentView(input: ContentViewInput): string {
 ${ordered.map((surface) => renderRow(surface, surface.id === lead.id, state)).join("\n")}
         </div>
       </section>
-${renderReader(lead, ctx, input.recentEvents)}`,
+${renderReader(lead, ctx, input.recentEvents, input.notice)}`,
   });
 }
 
@@ -333,10 +335,19 @@ function renderRow(surface: AgentSurface, current: boolean, state?: GovernanceSt
           </a>`;
 }
 
+function renderNotice(notice: { kind: "ok" | "error"; text: string }): string {
+  const glyph = notice.kind === "ok" ? "●" : "○";
+  const tone = notice.kind === "ok" ? " tk-note--boundary" : " tk-note--error";
+  return `<p class="tk-note${tone}" role="status"><span class="tk-note__glyph">${glyph}</span><span>${
+    esc(notice.text)
+  }</span></p>`;
+}
+
 function renderReader(
   surface: AgentSurface,
   ctx: ViewContext,
   recentEvents?: AuditEvent[],
+  notice?: { kind: "ok" | "error"; text: string },
 ): string {
   const publicReachable = surface.governanceState === "approved_public";
   const timeline = (recentEvents ?? []).filter((event) => event.subjectId === surface.id).slice(
@@ -353,6 +364,7 @@ function renderReader(
           <span>${esc(surface.id)}</span>
         </nav>
         <article class="int-doc">
+          ${notice ? renderNotice(notice) : ""}
           <div class="int-doc__kicker">
             ${stateChip(surface.governanceState)}
             ${channelChips(surface.channels)}

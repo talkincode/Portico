@@ -1,5 +1,5 @@
 import { AccessService } from "../access/mod.ts";
-import { readSessionToken } from "../access/session-header.ts";
+import { BROWSER_SESSION_COOKIE_MAX_AGE, readSessionToken } from "../access/session-header.ts";
 import { CatalogError, CatalogService, ErrorCode } from "../catalog/mod.ts";
 import type { Actor, RegisterInput } from "../catalog/mod.ts";
 import { esc, prefersDark, renderShell, resolvePageTheme } from "../portal/design/mod.ts";
@@ -83,7 +83,33 @@ export async function handleReviewRequest(
       });
     }
     if (request.method !== "POST") return jsonError(405, "method not allowed");
-    if (actor.role === "anonymous") return forbidden(401, "authentication required");
+    const contentType = request.headers.get("content-type") ?? "";
+    const jsonBody = contentType.includes("application/json");
+    const browserForm = !jsonBody && wantsHtml(request);
+    if (actor.role === "anonymous") {
+      // A browser without proof goes back to login and returns afterwards;
+      // API callers keep the machine-readable 401.
+      if (browserForm) {
+        // The record id travels in the form body, which is still unread:
+        // peek at a clone so the later parse is unaffected.
+        let back = "/internal?state=pending_public";
+        try {
+          const probe = Object.fromEntries(
+            (await request.clone().formData()).entries(),
+          ) as { id?: unknown };
+          if (typeof probe.id === "string" && /^[a-z][a-z0-9-]{1,62}$/.test(probe.id)) {
+            back = `/internal?id=${probe.id}`;
+          }
+        } catch {
+          // Unreadable body: the pending queue is still a useful landing.
+        }
+        return new Response(null, {
+          status: 303,
+          headers: { "location": `/login?next=${encodeURIComponent(back)}` },
+        });
+      }
+      return forbidden(401, "authentication required");
+    }
     if (url.pathname === "/review/api/submit") {
       if (actor.role !== "maintainer") {
         return forbidden(403, "only an authenticated maintainer may submit");
@@ -119,8 +145,6 @@ export async function handleReviewRequest(
         "POST only at /review/approve, /review/reject, /review/withdraw or /review/remove",
       );
     }
-    const contentType = request.headers.get("content-type") ?? "";
-    const jsonBody = contentType.includes("application/json");
     const body = jsonBody
       ? await request.json() as { id?: unknown; note?: unknown }
       : Object.fromEntries((await request.formData()).entries()) as {
@@ -129,13 +153,27 @@ export async function handleReviewRequest(
       };
     if (typeof body.id !== "string") return jsonError(400, "expected {id}");
     const note = typeof body.note === "string" && body.note !== "" ? body.note : undefined;
-    const result = await dispatchReview(context, actor, action, body.id, note);
-    if (!jsonBody && wantsHtml(request)) {
-      const back = action === "remove"
-        ? "/internal?state=pending_public"
-        : `/internal?id=${encodeURIComponent(body.id)}`;
-      return new Response(null, { status: 303, headers: { location: back } });
+    const back = action === "remove"
+      ? "/internal?state=pending_public"
+      : `/internal?id=${encodeURIComponent(body.id)}`;
+    if (browserForm) {
+      try {
+        await dispatchReview(context, actor, action, body.id, note);
+      } catch (error) {
+        // The browser stays on the record and sees what failed; API callers
+        // keep the machine-readable error below.
+        const code = error instanceof CatalogError ? error.code : "INTERNAL";
+        return new Response(null, {
+          status: 303,
+          headers: { location: `${back}&reviewError=${encodeURIComponent(code)}` },
+        });
+      }
+      return new Response(null, {
+        status: 303,
+        headers: { location: `${back}&review=${action}` },
+      });
     }
+    const result = await dispatchReview(context, actor, action, body.id, note);
     return new Response(JSON.stringify({ ok: true, data: result }), {
       headers: securityHeaders("application/json; charset=utf-8"),
     });
@@ -155,8 +193,23 @@ export async function handleReviewRequest(
  * `Cf-Access-Authenticated-User-Email` header is never proof.
  */
 async function resolveActor(request: Request, context: ReviewContext): Promise<Actor> {
-  const token = readSessionToken(request) ?? readSessionCookie(request);
-  if (token) return await context.access.resolveSession(token);
+  const headerToken = readSessionToken(request);
+  if (headerToken) {
+    // API-style proof must throw on invalid sessions: the caller explicitly
+    // presented proof and it is wrong, so FORBIDDEN is the right answer.
+    return await context.access.resolveSession(headerToken);
+  }
+  const cookieToken = readSessionCookie(request);
+  if (cookieToken) {
+    // Browser flow parity with the Portal: a stale cookie from a previous
+    // login falls back instead of failing hard, so an expired session sends
+    // the browser back to login rather than answering FORBIDDEN.
+    try {
+      return await context.access.resolveSession(cookieToken);
+    } catch {
+      // Invalid or expired cookie session: fall through to anonymous or CF Access.
+    }
+  }
   if (context.cfAccess) {
     const assertion = request.headers.get("cf-access-jwt-assertion");
     if (assertion) {
@@ -270,7 +323,9 @@ function oauthSessionHeaders(sessionToken: string): Headers {
   const headers = new Headers({ "location": "/review" });
   headers.append(
     "set-cookie",
-    `portico_session=${encodeURIComponent(sessionToken)}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+    `portico_session=${
+      encodeURIComponent(sessionToken)
+    }; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${BROWSER_SESSION_COOKIE_MAX_AGE}`,
   );
   headers.append("set-cookie", "portico_oauth_state=; Path=/review/oauth/callback; Max-Age=0");
   return headers;
@@ -312,7 +367,7 @@ async function handleLogin(request: Request, context: ReviewContext): Promise<Re
       "location": "/review",
       "set-cookie": `portico_session=${
         encodeURIComponent(session.token)
-      }; Path=/; Secure; HttpOnly; SameSite=Lax`,
+      }; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${BROWSER_SESSION_COOKIE_MAX_AGE}`,
     },
   });
 }

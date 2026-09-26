@@ -1,5 +1,5 @@
 import { AccessService } from "../access/mod.ts";
-import { readSessionToken } from "../access/session-header.ts";
+import { BROWSER_SESSION_COOKIE_MAX_AGE, readSessionToken } from "../access/session-header.ts";
 import {
   AnchorService,
   type AnchorStore,
@@ -557,6 +557,30 @@ async function internalPage(
     reviewEntry: context.reviewEntry,
   };
 
+  /**
+   * One-shot result banner after a Review form POST redirects back here
+   * (`?review=<action>` on success, `?reviewError=<code>` on failure).
+   * Values are allowlisted: anything else is not our redirect and renders nothing.
+   */
+  function reviewNotice(url: URL): { kind: "ok" | "error"; text: string } | undefined {
+    const done = url.searchParams.get("review");
+    if (done === "approve" || done === "reject" || done === "withdraw" || done === "remove") {
+      return { kind: "ok", text: REVIEW_DONE_TEXT[done] };
+    }
+    const failed = url.searchParams.get("reviewError");
+    if (failed && /^[A-Z][A-Z0-9_]{1,31}$/.test(failed)) {
+      return { kind: "error", text: `操作没有完成（${failed}）。请检查登录状态后重试。` };
+    }
+    return undefined;
+  }
+
+  const REVIEW_DONE_TEXT = {
+    approve: "已通过审批，公开面可达。",
+    reject: "已驳回，该记录退回待审之外。",
+    withdraw: "已撤回公开，该记录回到内部可见。",
+    remove: "已删除该记录。",
+  } as const;
+
   if (url.pathname === "/internal") {
     const events = await auditTrail(actor, context);
     const stateRaw = url.searchParams.get("state");
@@ -573,6 +597,7 @@ async function internalPage(
       recentEvents: events,
       selectedId,
       state,
+      notice: reviewNotice(url),
     }));
   }
 
@@ -960,7 +985,9 @@ function postLoginResponse(actor: Actor, token: string, next: string | null): Re
   const headers = new Headers({ location: target });
   headers.append(
     "set-cookie",
-    `portico_session=${encodeURIComponent(token)}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+    `portico_session=${
+      encodeURIComponent(token)
+    }; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${BROWSER_SESSION_COOKIE_MAX_AGE}`,
   );
   return new Response(null, { status: 303, headers });
 }
@@ -970,7 +997,9 @@ function oauthSuccessResponse(actor: Actor, token: string): Response {
   const headers = new Headers({ location: target });
   headers.append(
     "set-cookie",
-    `portico_session=${encodeURIComponent(token)}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+    `portico_session=${
+      encodeURIComponent(token)
+    }; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${BROWSER_SESSION_COOKIE_MAX_AGE}`,
   );
   headers.append("set-cookie", "portico_oauth_state=; Path=/oauth/callback; Max-Age=0");
   return new Response(null, { status: 303, headers });

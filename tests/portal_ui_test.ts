@@ -1345,3 +1345,49 @@ Deno.test("content selection stays on the workbench and actions follow the role"
   assert(!catalog.html.includes('href="/internal/c?channel='));
   assert(catalog.html.includes('href="/internal?id='));
 });
+
+Deno.test("the internal record shows a one-shot review banner and ignores forged values", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  const ok = await get(context, "/internal?id=docs-writer&review=approve", maintainer);
+  assertEquals(ok.status, 200);
+  assert(ok.html.includes("已通过审批"), "a successful review must surface on the record");
+
+  const failed = await get(
+    context,
+    "/internal?id=docs-writer&reviewError=INVALID_STATE",
+    maintainer,
+  );
+  assertEquals(failed.status, 200);
+  assert(failed.html.includes("INVALID_STATE"), "a failed review must name its code on the record");
+
+  const forged = await get(
+    context,
+    "/internal?id=docs-writer&review=<script>alert(1)</script>",
+    maintainer,
+  );
+  assertEquals(forged.status, 200);
+  assert(!forged.html.includes("<script>alert(1)"), "banner values are allowlisted, never echoed");
+  assert(!forged.html.includes("已通过审批"), "an unknown review value renders no banner");
+});
+
+Deno.test("browser login sets a session cookie that does not outlive the session", async () => {
+  const context = await seeded();
+  const issued = await context.access.issueCredential(auditor, { id: "human:reader" });
+  const response = await handlePortalRequest(
+    new Request("http://portico.local/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "human:reader", token: issued.token }),
+    }),
+    context as never,
+  );
+  assertEquals(response.status, 303);
+  const cookie = response.headers.get("set-cookie") ?? "";
+  assert(cookie.includes("portico_session="), "login must mint the browser session cookie");
+  assert(
+    cookie.includes("Max-Age=28800"),
+    "the cookie must expire with the 8h browser session, not outlive it",
+  );
+});
