@@ -15,6 +15,7 @@ import type {
   Channel,
   GovernanceState,
   PublicDecision,
+  TrashedSurface,
 } from "../../../catalog/types.ts";
 import {
   type AnchorState,
@@ -67,9 +68,11 @@ export interface CountSummary {
   total: number;
   byState: Record<GovernanceState, number>;
   byChannel: Record<Channel, number>;
+  /** Soft-deleted surfaces waiting in the trash. */
+  trash: number;
 }
 
-export function summarize(surfaces: readonly AgentSurface[]): CountSummary {
+export function summarize(surfaces: readonly AgentSurface[], trashCount = 0): CountSummary {
   const byState: Record<GovernanceState, number> = {
     draft: 0,
     internal: 0,
@@ -82,7 +85,7 @@ export function summarize(surfaces: readonly AgentSurface[]): CountSummary {
     byState[surface.governanceState] += 1;
     for (const channel of surface.channels) byChannel[channel] += 1;
   }
-  return { total: surfaces.length, byState, byChannel };
+  return { total: surfaces.length, byState, byChannel, trash: trashCount };
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -128,6 +131,7 @@ export type InternalScreen =
   | "pending"
   | "approvals"
   | "audit"
+  | "trash"
   | "surface";
 
 interface ShellParts {
@@ -185,6 +189,15 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
       count: ctx.counts.byState.pending_public,
     },
     { id: "approvals", href: "/internal/approvals", label: "审批" },
+    ...((ctx.actor.role === "maintainer" ||
+        (ctx.actor.kind === "human" && ctx.actor.role === "auditor"))
+      ? [{
+        id: "trash" as const,
+        href: "/internal/trash",
+        label: "回收站",
+        count: ctx.counts.trash,
+      }]
+      : []),
   ];
   // The audit trail is not merely hidden by CSS for a non-auditor: it is absent
   // from the response, so the HTML never leaks that a trail exists.
@@ -229,7 +242,14 @@ ${
     group(
       "工作台",
       item("▤", "全部内容", "/internal", { active: contentActive, count: total }) +
-        item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }),
+        item("▣", "审批记录", "/internal/approvals", { active: screen === "approvals" }) +
+        (ctx.actor.role === "maintainer" ||
+            (ctx.actor.kind === "human" && ctx.actor.role === "auditor")
+          ? item("▦", "回收站", "/internal/trash", {
+            active: screen === "trash",
+            count: ctx.counts.trash,
+          })
+          : ""),
     )
   }
 ${group("治理状态", states)}${
@@ -606,6 +626,66 @@ export interface PendingViewInput {
   surfaces: readonly AgentSurface[];
   /** Read-only channel filter from `?channel=`. Unknown values are ignored. */
   channel?: Channel | null;
+}
+
+export interface TrashViewInput {
+  ctx: ViewContext;
+  entries: TrashedSurface[];
+  notice?: { kind: "ok" | "error"; text: string };
+}
+
+/* ── screen: 回收站 (soft-deleted records) ──────────────────────────────── */
+
+export function renderTrashView(input: TrashViewInput): string {
+  const { ctx, entries } = input;
+  const ordered = [...entries].sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+  // Review is the human-auditor surface: only auditors get buttons here.
+  // Maintainers restore through CLI `catalog restore`; purge is auditor-only
+  // everywhere. The server enforces both, so a forged form still fails closed.
+  const entry = reviewHref(ctx.reviewEntry, true);
+  const auditor = ctx.actor.kind === "human" && ctx.actor.role === "auditor";
+  const rows = ordered.map((item) => {
+    const hidden = `<input type="hidden" name="id" value="${esc(item.record.id)}">`;
+    const actions = entry === undefined || !auditor
+      ? ""
+      : `<form method="post" action="${
+        esc(entry)
+      }/restore">${hidden}<button class="tk-btn tk-btn--quiet" type="submit">恢复</button></form>` +
+        `<form method="post" action="${
+          esc(entry)
+        }/purge">${hidden}<button class="tk-btn tk-btn--quiet" type="submit">永久删除</button></form>`;
+    return `            <tr>
+              <td>${esc(item.record.name)}<br><span class="tk-id">${esc(item.record.id)}</span></td>
+              <td>${stateChip(item.previousState)}</td>
+              <td>${esc(item.deletedBy.id)}</td>
+              <td><span class="tk-num">${esc(item.deletedAt.slice(0, 10))}</span></td>
+              <td><span class="int-actionbar">${actions}</span></td>
+            </tr>`;
+  }).join("\n");
+  const body = `      <main class="int-page">
+        <div class="int-page__head">
+          <h1 class="int-page__title">回收站</h1>
+          <p class="int-page__sub">删除只进回收站：记录离开目录但保留内容，可恢复；永久删除只清内容，审批与变更轨迹保留。只有删除前不在公开边界的记录会出现在这里——已公开的先撤回才能删除。恢复与永久删除在工作台由人类审计者操作，维护者用 CLI <code>catalog restore</code> 恢复。</p>
+        </div>
+        ${input.notice ? renderNotice(input.notice) : ""}
+        ${
+    ordered.length === 0
+      ? emptyState("回收站是空的。", "删除目录、草稿或已驳回记录后会出现在这里，可恢复。")
+      : `<div class="tk-panel">
+          <table class="tk-table">
+            <thead>
+              <tr>
+                <th>名称</th><th>删除前状态</th><th>删除人</th><th>删除时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+${rows}
+            </tbody>
+          </table>
+        </div>`
+  }
+      </main>`;
+  return renderInternalPage({ ctx, screen: "trash", panes: "two", title: "回收站", body });
 }
 
 export function renderPendingView(input: PendingViewInput): string {

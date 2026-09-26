@@ -95,6 +95,18 @@ portico catalog reject --catalog <path> --identities <path> --sessions <path> --
 # 撤回已公开服务至内部 (仅限人类审计者；--note 可选)
 portico catalog withdraw --catalog <path> --identities <path> --sessions <path> --session <token> --id <id> [--note <text>]
 
+# 删除未公开记录进回收站 (维护者或人类审计者；已提交公开候选与已公开须先驳回/撤回)
+portico catalog remove --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+
+# 列出回收站 (仅维护者与人类审计者；只读)
+portico catalog trash --catalog <path> --identities <path> --sessions <path> --session <token>
+
+# 从回收站恢复到删除前状态 (维护者或人类审计者)
+portico catalog restore --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+
+# 永久删除回收站记录 (仅限人类审计者；审批与变更轨迹保留)
+portico catalog purge --catalog <path> --identities <path> --sessions <path> --session <token> --id <id>
+
 # 列出公开边界审批记录（通过 / 拒绝 / 撤回，含可选备注）；匿名为空列表
 portico catalog approvals --catalog <path> --identities <path> --sessions <path> --session <token>
 

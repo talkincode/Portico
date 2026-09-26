@@ -11,6 +11,7 @@ import {
   FileCatalogStore,
   MemoryCatalogStore,
   type RegisterInput,
+  TrashedSurface,
 } from "../src/catalog/mod.ts";
 import { GatewayService, MemoryGatewayAuditStore } from "../src/gateway/mod.ts";
 
@@ -285,6 +286,22 @@ class DamagedApprovalStore implements CatalogStore {
 
   commitRemoval(id: string, change: CatalogChangeRecord): Promise<void> {
     return this.inner.commitRemoval(id, change);
+  }
+
+  listTrash(): Promise<TrashedSurface[]> {
+    return this.inner.listTrash();
+  }
+
+  commitTrash(entry: TrashedSurface, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitTrash(entry, change);
+  }
+
+  commitRestore(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitRestore(record, change);
+  }
+
+  commitPurge(id: string, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitPurge(id, change);
   }
 
   async listApprovals(): Promise<ApprovalRecord[]> {

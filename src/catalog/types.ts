@@ -90,7 +90,9 @@ export type CatalogChangeAction =
   | "publish_internal"
   | "publish_public_candidate"
   | "update"
-  | "remove";
+  | "remove"
+  | "restore"
+  | "purge";
 
 export interface CatalogChangeRecord {
   id: string;
@@ -103,6 +105,19 @@ export interface CatalogChangeRecord {
   entry: EntryRef;
   version: string;
   name: string;
+}
+
+/**
+ * A soft-deleted surface. The record leaves the live catalog but stays in
+ * the same file, so it can be restored to its previous state or purged.
+ * Only surfaces off the public boundary can be trashed; the approval trail
+ * is untouched either way.
+ */
+export interface TrashedSurface {
+  record: AgentSurface;
+  previousState: GovernanceState;
+  deletedBy: { id: string; kind: "agent" | "human" };
+  deletedAt: string;
 }
 
 export interface McpConnectionInfo {

@@ -138,6 +138,7 @@ Deno.test("tools/list exposes the read-only governance tools", async () => {
     "portico_audit_verify",
     "portico_seal_anchors",
     "portico_approvals",
+    "portico_trash",
     "portico_identities",
     "portico_grants",
     "portico_revokes",
@@ -1224,4 +1225,46 @@ Deno.test("portico_list q filters visible records and does not search endpoints"
   });
   assertEquals(tooLong.body.result?.isError, true);
   assertEquals(envelope(tooLong.body).error?.code, "INVALID_INPUT");
+});
+
+Deno.test("portico_trash lists soft-deleted records to maintainers and auditors only", async () => {
+  const { context, catalog } = await seeded();
+  await catalog.register(maintainer, {
+    id: "trash-me",
+    name: "Trash Me",
+    description: "A record bound for the trash.",
+    channels: ["cli"],
+    version: "1.0.0",
+    visibility: "internal",
+    entry: { kind: "package", value: "jsr:@example/trash-me" },
+    maintainers: [{ id: "agent:docs-bot", kind: "agent" }],
+  });
+  await catalog.remove(maintainer, { id: "trash-me" });
+
+  const call = (token?: string) =>
+    rpc(
+      context,
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "portico_trash", arguments: {} },
+      },
+      token
+        ? { headers: { "content-type": "application/json", authorization: `Bearer ${token}` } }
+        : undefined,
+    );
+  const auditorCall = await call(SESSION_TOKENS.get("human:security-auditor"));
+  assertEquals(auditorCall.body.result?.isError, undefined);
+  const trashed = (envelope(auditorCall.body).data ?? []) as Array<{ record: { id: string } }>;
+  assertEquals(trashed.map((entry) => entry.record.id), ["trash-me"]);
+
+  const maintainerCall = await call(SESSION_TOKENS.get("agent:docs-bot"));
+  assertEquals(maintainerCall.body.result?.isError, undefined);
+
+  const readerCall = await call(SESSION_TOKENS.get("human:reader"));
+  assertEquals(envelope(readerCall.body).error?.code, "FORBIDDEN");
+
+  const anonCall = await call();
+  assertEquals(envelope(anonCall.body).error?.code, "FORBIDDEN");
 });

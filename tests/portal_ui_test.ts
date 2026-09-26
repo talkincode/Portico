@@ -18,6 +18,7 @@ import {
   type CatalogStore,
   MemoryCatalogStore,
   type RegisterInput,
+  type TrashedSurface,
 } from "../src/catalog/mod.ts";
 import { AnchorService, MemoryAnchorStore, SEAL_PILLARS, SealService } from "../src/audit/mod.ts";
 import { handlePortalRequest, type PortalContext } from "../src/portal/mod.ts";
@@ -272,6 +273,22 @@ class EditedTrailStore implements CatalogStore {
 
   commitRemoval(id: string, change: CatalogChangeRecord): Promise<void> {
     return this.inner.commitRemoval(id, change);
+  }
+
+  listTrash(): Promise<TrashedSurface[]> {
+    return this.inner.listTrash();
+  }
+
+  commitTrash(entry: TrashedSurface, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitTrash(entry, change);
+  }
+
+  commitRestore(record: AgentSurface, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitRestore(record, change);
+  }
+
+  commitPurge(id: string, change: CatalogChangeRecord): Promise<void> {
+    return this.inner.commitPurge(id, change);
   }
 
   async listChanges(): Promise<CatalogChangeRecord[]> {
@@ -1390,4 +1407,32 @@ Deno.test("browser login sets a session cookie that does not outlive the session
     cookie.includes("Max-Age=28800"),
     "the cookie must expire with the 8h browser session, not outlive it",
   );
+});
+
+Deno.test("the trash lists soft-deleted records to auditors, hides from readers", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+  await context.catalog.remove(maintainer, { id: "docs-writer" });
+
+  const auditorView = await get(context, "/internal/trash", auditor);
+  assertEquals(auditorView.status, 200);
+  assert(auditorView.html.includes("回收站"), "trash must render its title");
+  assert(auditorView.html.includes("Docs Writer"), "trash must name the deleted record");
+  assert(auditorView.html.includes("/review/restore"), "auditors get a restore control");
+  assert(auditorView.html.includes("/review/purge"), "auditors get a purge control");
+
+  const readerView = await get(context, "/internal/trash", reader);
+  assertEquals(readerView.status, 404);
+  assert(!readerView.html.includes("Docs Writer"), "readers must not learn trash contents");
+
+  const maintainerView = await get(context, "/internal/trash", maintainer);
+  assertEquals(maintainerView.status, 200);
+  assert(maintainerView.html.includes("Docs Writer"), "maintainers can read the trash");
+  assert(
+    !maintainerView.html.includes("/review/restore"),
+    "maintainers restore through the CLI, not the auditor surface",
+  );
+
+  const emptyAuditor = await get(context, "/internal/trash?review=purge", auditor);
+  assert(emptyAuditor.html.includes("已永久删除"), "purge lands back with a banner");
 });

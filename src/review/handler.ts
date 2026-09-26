@@ -51,6 +51,7 @@ export async function handleReviewRequest(
       url.pathname !== "/review" && url.pathname !== "/review/" &&
       url.pathname !== "/review/approve" && url.pathname !== "/review/reject" &&
       url.pathname !== "/review/withdraw" && url.pathname !== "/review/remove" &&
+      url.pathname !== "/review/restore" && url.pathname !== "/review/purge" &&
       url.pathname !== "/review/api/submit"
     ) return new Response("Not found", { status: 404 });
     const actor = await resolveActor(request, context);
@@ -142,7 +143,7 @@ export async function handleReviewRequest(
     if (!action) {
       return jsonError(
         405,
-        "POST only at /review/approve, /review/reject, /review/withdraw or /review/remove",
+        "POST only at /review/approve, /review/reject, /review/withdraw, /review/remove, /review/restore or /review/purge",
       );
     }
     const body = jsonBody
@@ -153,9 +154,11 @@ export async function handleReviewRequest(
       };
     if (typeof body.id !== "string") return jsonError(400, "expected {id}");
     const note = typeof body.note === "string" && body.note !== "" ? body.note : undefined;
-    const back = action === "remove"
-      ? "/internal?state=pending_public"
+    const backBase = action === "remove" || action === "purge"
+      ? "/internal/trash"
       : `/internal?id=${encodeURIComponent(body.id)}`;
+    const back = (suffix: string) =>
+      backBase.includes("?") ? `${backBase}&${suffix}` : `${backBase}?${suffix}`;
     if (browserForm) {
       try {
         await dispatchReview(context, actor, action, body.id, note);
@@ -165,12 +168,12 @@ export async function handleReviewRequest(
         const code = error instanceof CatalogError ? error.code : "INTERNAL";
         return new Response(null, {
           status: 303,
-          headers: { location: `${back}&reviewError=${encodeURIComponent(code)}` },
+          headers: { location: back(`reviewError=${encodeURIComponent(code)}`) },
         });
       }
       return new Response(null, {
         status: 303,
-        headers: { location: `${back}&review=${action}` },
+        headers: { location: back(`review=${action}`) },
       });
     }
     const result = await dispatchReview(context, actor, action, body.id, note);
@@ -371,13 +374,15 @@ async function handleLogin(request: Request, context: ReviewContext): Promise<Re
     },
   });
 }
-type ReviewAction = "approve" | "reject" | "withdraw" | "remove";
+type ReviewAction = "approve" | "reject" | "withdraw" | "remove" | "restore" | "purge";
 
 function reviewAction(pathname: string): ReviewAction | undefined {
   if (pathname === "/review/approve") return "approve";
   if (pathname === "/review/reject") return "reject";
   if (pathname === "/review/withdraw") return "withdraw";
   if (pathname === "/review/remove") return "remove";
+  if (pathname === "/review/restore") return "restore";
+  if (pathname === "/review/purge") return "purge";
   return undefined;
 }
 
@@ -391,6 +396,8 @@ async function dispatchReview(
   if (action === "approve") return await context.catalog.approve(actor, { id, note });
   if (action === "reject") return await context.catalog.reject(actor, { id, note });
   if (action === "withdraw") return await context.catalog.withdraw(actor, { id, note });
+  if (action === "restore") return await context.catalog.restore(actor, { id });
+  if (action === "purge") return await context.catalog.purge(actor, { id });
   return await context.catalog.remove(actor, { id });
 }
 

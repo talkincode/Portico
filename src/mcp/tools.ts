@@ -226,6 +226,12 @@ export const TOOLS: readonly McpTool[] = [
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "portico_trash",
+    description:
+      "列出回收站里的软删除记录（含删除人、删除时间与删除前状态）。等价于 CLI `catalog trash`。仅维护者与人类审计者可读；只读与匿名得到 FORBIDDEN。读操作不写目录。恢复走 CLI `catalog restore`，永久删除走 CLI `catalog purge`（仅人类审计者）；MCP 不提供写入。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "portico_identities",
     description:
       "列出当前名册中的身份（id / kind / role）。等价于 CLI `identity list` 与 Portal `GET /api/identities`。仅维护者与人类审计者可读；只读与匿名得到 FORBIDDEN。不返回凭证、会话或哈希。",
@@ -406,6 +412,8 @@ export async function callTool(
       return await deps.anchors.list(actor);
     case "portico_approvals":
       return await deps.catalog.listApprovals(actor);
+    case "portico_trash":
+      return await deps.catalog.trash(actor);
     case "portico_identities":
       return await deps.access.list(actor);
     case "portico_grants":

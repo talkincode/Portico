@@ -65,6 +65,10 @@ Commands:
   catalog approve   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
   catalog reject    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
   catalog withdraw  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path> [--note <text>]
+  catalog remove    --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog trash     --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog restore   --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
+  catalog purge     --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog approvals --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog dashboard --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog audience  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
@@ -80,7 +84,7 @@ Commands:
   gateway authorize --id <id> --catalog <path> --audit <path> --identities <path> --session <token> --sessions <path>
   gateway audit     --audit <path> --identities <path> --session <token> --sessions <path>
   audit verify      --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--conclusions <path>] [--anchors <path>]
-  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|remove|approved|rejected|withdrawn|allowed|denied] [--subject <id>] [--as-of <instant>]
+  audit list        --catalog <path> --identities <path> --session <token> --sessions <path> [--audit <path>] [--q <text>] [--kind catalog|grant|revoke|credential|approval|gateway] [--action grant|revoke|revoke_credential|register|draft|publish_internal|publish_public_candidate|update|remove|restore|purge|approved|rejected|withdrawn|allowed|denied] [--subject <id>] [--as-of <instant>]
   audit conclude    --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> --id <id> --scope ${SCOPE_ARG} --verdict cleared|flagged [--note <text>]
   audit conclusions --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged] [--as-of <instant>]
   audit standings   --conclusions <path> --catalog <path> --identities <path> --session <token> --sessions <path> [--subject <id>] [--scope ${SCOPE_ARG}] [--verdict cleared|flagged] [--as-of <instant>]
@@ -280,6 +284,25 @@ export async function runCli(
     if (action === "get") {
       if (!flags.id) throw new UsageError("missing --id");
       return ok(await service.get(actor, flags.id));
+    }
+
+    if (action === "remove") {
+      if (!flags.id) throw new UsageError("missing --id");
+      return ok(await service.remove(actor, { id: flags.id }));
+    }
+
+    if (action === "trash") {
+      return ok(await service.trash(actor));
+    }
+
+    if (action === "restore") {
+      if (!flags.id) throw new UsageError("missing --id");
+      return ok(await service.restore(actor, { id: flags.id }));
+    }
+
+    if (action === "purge") {
+      if (!flags.id) throw new UsageError("missing --id");
+      return ok(await service.purge(actor, { id: flags.id }));
     }
 
     throw new UsageError(action ? `unknown catalog action '${action}'` : "missing catalog action");
