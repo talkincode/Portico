@@ -444,6 +444,12 @@ a.tk-stat:hover .tk-stat__label { color: var(--tk-accent); }
   font-weight: 500;
 }
 .tk-note__glyph { font-family: var(--tk-font-mono); flex: none; }
+.tk-note--error {
+  border-color: var(--tk-accent-line);
+  background: var(--tk-accent-soft);
+  color: var(--tk-accent);
+  font-weight: 500;
+}
 
 /* ── timeline ──────────────────────────────────────────────────────────── */
 .tk-timeline { position: relative; padding-left: var(--tk-s5); }

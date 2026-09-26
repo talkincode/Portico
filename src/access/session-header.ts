@@ -13,6 +13,15 @@ import { CatalogError, ErrorCode } from "../catalog/errors.ts";
  * must present a session token; asserting an identity in a header is not
  * proof of it.
  */
+/**
+ * Browser session cookie lifetime. Browser logins mint the default 8h
+ * session, so the cookie must not outlive it: otherwise the browser keeps
+ * presenting an expired token forever, and every entrance that treats a
+ * presented token strictly answers FORBIDDEN instead of sending the user
+ * back to login.
+ */
+export const BROWSER_SESSION_COOKIE_MAX_AGE = 8 * 60 * 60;
+
 export function readSessionToken(request: Request): string | null {
   const named = request.headers.get("x-portico-session");
   const auth = request.headers.get("authorization");

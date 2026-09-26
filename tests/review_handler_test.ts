@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "./assert.ts";
+import { CatalogError, ErrorCode } from "../src/catalog/errors.ts";
 import { handleReviewRequest } from "../src/review/handler.ts";
 import { isAllowedGithubUser, parseAllowlist, parseGithubEnv } from "../src/review/github.ts";
 
@@ -393,4 +394,143 @@ Deno.test("review oauth start uses github directly when callback is at Review", 
   assertEquals(response.status, 303);
   const location = response.headers.get("location") ?? "";
   assertEquals(location.startsWith("https://github.com/login/oauth/authorize"), true);
+});
+
+Deno.test("review browser form POST without a session redirects to login and back", async () => {
+  const calls: string[] = [];
+  const noCallCatalog = {
+    approve: () => {
+      calls.push("approve");
+      return Promise.resolve(pending);
+    },
+  };
+  const form = (id?: string) => {
+    const body = new URLSearchParams();
+    if (id) body.set("id", id);
+    return {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html,application/xhtml+xml",
+      },
+      body: body.toString(),
+    };
+  };
+  const noId = await handleReviewRequest(request("/review/approve", form()), {
+    catalog: noCallCatalog,
+    access: {
+      resolveSession: () => Promise.resolve({ id: "anonymous", kind: "human", role: "anonymous" }),
+    },
+  } as never);
+  assertEquals(noId.status, 303);
+  assertEquals(
+    noId.headers.get("location"),
+    `/login?next=${encodeURIComponent("/internal?state=pending_public")}`,
+  );
+  const withId = await handleReviewRequest(
+    request("/review/approve", form("candidate")),
+    {
+      catalog: noCallCatalog,
+      access: {
+        resolveSession: () =>
+          Promise.resolve({ id: "anonymous", kind: "human", role: "anonymous" }),
+      },
+    } as never,
+  );
+  assertEquals(withId.status, 303);
+  assertEquals(
+    withId.headers.get("location"),
+    `/login?next=${encodeURIComponent("/internal?id=candidate")}`,
+  );
+  assertEquals(calls, [], "no catalog call without proof");
+});
+
+Deno.test("review browser form POST with a stale cookie redirects to login, not JSON", async () => {
+  const calls: string[] = [];
+  const stale = {
+    catalog: {
+      withdraw: () => {
+        calls.push("withdraw");
+        return Promise.resolve(pending);
+      },
+    },
+    access: {
+      resolveSession: () =>
+        Promise.reject(new CatalogError(ErrorCode.FORBIDDEN, "session is not valid")),
+    },
+  } as never;
+  const response = await handleReviewRequest(
+    request("/review/withdraw", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "text/html",
+        cookie: "portico_session=stale-token",
+      },
+      body: new URLSearchParams({ id: "candidate" }).toString(),
+    }),
+    stale,
+  );
+  assertEquals(response.status, 303);
+  assertEquals(
+    response.headers.get("location"),
+    `/login?next=${encodeURIComponent("/internal?id=candidate")}`,
+  );
+  assertEquals(calls, [], "a stale cookie must not reach the catalog");
+});
+
+Deno.test("review browser form POST surfaces action results back on the record", async () => {
+  const auditor = { id: "human:auditor", kind: "human", role: "auditor" } as const;
+  const formHeaders = {
+    "content-type": "application/x-www-form-urlencoded",
+    accept: "text/html",
+  };
+  const form = (id: string) => ({
+    method: "POST",
+    headers: { ...formHeaders, cookie: "portico_session=good" },
+    body: new URLSearchParams({ id }).toString(),
+  });
+  // Success lands back on the record with a result flag for the banner.
+  const calls: string[] = [];
+  const ok = await handleReviewRequest(request("/review/approve", form("candidate")), {
+    catalog: {
+      approve: () => {
+        calls.push("approve");
+        return Promise.resolve({ ...pending, governanceState: "approved_public" });
+      },
+    },
+    access: { resolveSession: () => Promise.resolve(auditor) },
+  } as never);
+  assertEquals(ok.status, 303);
+  assertEquals(ok.headers.get("location"), "/internal?id=candidate&review=approve");
+  // A failing action lands on the same record with a machine-readable code.
+  const failing = await handleReviewRequest(request("/review/withdraw", form("candidate")), {
+    catalog: {
+      withdraw: () => Promise.reject(new CatalogError(ErrorCode.INVALID_STATE, "already public")),
+    },
+    access: { resolveSession: () => Promise.resolve(auditor) },
+  } as never);
+  assertEquals(failing.status, 303);
+  assertEquals(failing.headers.get("location"), "/internal?id=candidate&reviewError=INVALID_STATE");
+  assertEquals(calls, ["approve"]);
+});
+
+Deno.test("review JSON callers keep machine errors for bad sessions", async () => {
+  const denied = await handleReviewRequest(
+    request("/review/approve", {
+      method: "POST",
+      headers: { "x-portico-session": "bad", "content-type": "application/json" },
+      body: JSON.stringify({ id: "candidate" }),
+    }),
+    {
+      catalog: { approve: () => Promise.resolve(pending) },
+      access: {
+        resolveSession: () =>
+          Promise.reject(new CatalogError(ErrorCode.FORBIDDEN, "session is not valid")),
+      },
+    } as never,
+  );
+  assertEquals(denied.status, 403);
+  const payload = await denied.json();
+  assertEquals(payload.ok, false);
 });
