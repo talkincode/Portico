@@ -508,9 +508,22 @@ function governanceActions(ctx: ViewContext, surface: AgentSurface): string {
       }/withdraw">${hidden}${note}<button class="tk-btn tk-btn--quiet" type="submit">撤回</button></form>`,
     );
   }
-  const removable = surface.governanceState === "draft" ||
+  const resubmittable = surface.governanceState === "draft" ||
     surface.governanceState === "internal" ||
     surface.governanceState === "rejected";
+  if (resubmittable && actor.role === "maintainer") {
+    forms.push(
+      `<form method="post" action="${
+        esc(entry)
+      }/api/submit">${hidden}<button class="tk-btn" type="submit">申请公开</button></form>`,
+    );
+  }
+  if (resubmittable && auditor) {
+    forms.push(
+      `<span class="tk-meta">重新公开需维护者提交申请；提交后等待独立审批。</span>`,
+    );
+  }
+  const removable = resubmittable;
   if (removable && (actor.role === "maintainer" || auditor)) {
     forms.push(
       `<form method="post" action="${

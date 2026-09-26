@@ -1436,3 +1436,26 @@ Deno.test("the trash lists soft-deleted records to auditors, hides from readers"
   const emptyAuditor = await get(context, "/internal/trash?review=purge", auditor);
   assert(emptyAuditor.html.includes("已永久删除"), "purge lands back with a banner");
 });
+
+Deno.test("the workbench offers resubmission to maintainers and a hint to auditors", async () => {
+  const context = await seeded();
+  await context.catalog.register(maintainer, surface());
+
+  const maintainerView = await get(context, "/internal?id=docs-writer", maintainer);
+  assertEquals(maintainerView.status, 200);
+  assert(
+    maintainerView.html.includes("/review/api/submit") && maintainerView.html.includes("申请公开"),
+    "maintainers get a resubmit control on internal records",
+  );
+
+  const auditorView = await get(context, "/internal?id=docs-writer", auditor);
+  assertEquals(auditorView.status, 200);
+  assert(
+    !auditorView.html.includes("/review/api/submit"),
+    "auditors cannot submit; no dead control is rendered",
+  );
+  assert(auditorView.html.includes("需维护者提交申请"), "auditors see where the path continues");
+
+  const submitted = await get(context, "/internal?id=docs-writer&review=submitted", maintainer);
+  assert(submitted.html.includes("已提交公开申请"), "resubmission lands back with a banner");
+});
