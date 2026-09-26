@@ -534,3 +534,40 @@ Deno.test("review JSON callers keep machine errors for bad sessions", async () =
   const payload = await denied.json();
   assertEquals(payload.ok, false);
 });
+
+Deno.test("review restore and purge redirect to the trash view for browser forms", async () => {
+  const auditor = { id: "human:auditor", kind: "human", role: "auditor" } as const;
+  const calls: string[] = [];
+  const catalog = {
+    restore: (_actor: unknown, input: { id: string }) => {
+      calls.push(`restore:${input.id}`);
+      return Promise.resolve({ ...pending, governanceState: "internal" });
+    },
+    purge: (_actor: unknown, input: { id: string }) => {
+      calls.push(`purge:${input.id}`);
+      return Promise.resolve({ id: input.id });
+    },
+  };
+  const form = (id: string) => ({
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+      cookie: "portico_session=good",
+    },
+    body: new URLSearchParams({ id }).toString(),
+  });
+  const restore = await handleReviewRequest(request("/review/restore", form("candidate")), {
+    catalog,
+    access: { resolveSession: () => Promise.resolve(auditor) },
+  } as never);
+  assertEquals(restore.status, 303);
+  assertEquals(restore.headers.get("location"), "/internal?id=candidate&review=restore");
+  const purge = await handleReviewRequest(request("/review/purge", form("candidate")), {
+    catalog,
+    access: { resolveSession: () => Promise.resolve(auditor) },
+  } as never);
+  assertEquals(purge.status, 303);
+  assertEquals(purge.headers.get("location"), "/internal/trash?review=purge");
+  assertEquals(calls, ["restore:candidate", "purge:candidate"]);
+});

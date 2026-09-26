@@ -25,6 +25,7 @@ Portico 对所有已发布的一级业务功能执行铁律级的质量保障，
 | **Approval 公开发布审批** | 高 | `tests/catalog_approval_test.ts`；`tests/e2e/cli_approval_e2e_test.ts`；`tests/e2e/catalog_approvals_e2e_test.ts` |
 | **公开审批记录只读查询** | 高 | `tests/catalog_approval_test.ts`；`tests/portal_handler_test.ts`；`tests/portal_ui_test.ts`；`tests/mcp_protocol_test.ts`；`tests/e2e/catalog_approvals_e2e_test.ts`；`tests/e2e/portal_ui_e2e_test.ts` |
 | **公开发布撤回** | 高 | `tests/catalog_withdraw_test.ts`；`tests/e2e/cli_withdrawal_e2e_test.ts` |
+| **删除回收站** | 高 | `tests/catalog_remove_test.ts`；`tests/e2e/cli_trash_e2e_test.ts` |
 | **公开可达性以审批轨迹为准** | 高 | `tests/catalog_public_grant_test.ts`；`tests/e2e/public_grant_e2e_test.ts` |
 | **公开边界与受众只读报告** | 高 | `tests/catalog_audience_test.ts`；`tests/e2e/catalog_audience_e2e_test.ts` |
 | **公开边界整库巡检** | 高 | `tests/catalog_boundary_sweep_test.ts`；`tests/e2e/catalog_boundary_e2e_test.ts` |

@@ -27,6 +27,7 @@ import type {
   PublicFaceEntry,
   PublishInput,
   RegisterInput,
+  TrashedSurface,
   UpdateInput,
   Visibility,
   WebConnectionInfo,
@@ -236,6 +237,7 @@ export class CatalogService {
         `surface '${parsed.id}' is already registered`,
       );
     }
+    await this.#rejectTrashedId(parsed.id);
 
     const now = new Date().toISOString();
     const record: AgentSurface = {
@@ -246,6 +248,20 @@ export class CatalogService {
       updatedAt: now,
     };
     return await this.#commitChange(record, "register", actor);
+  }
+
+  /**
+   * A trashed id is reserved until it is restored or purged: re-registering
+   * it would orphan the trash entry or collide on restore.
+   */
+  async #rejectTrashedId(id: string): Promise<void> {
+    const entries = await this.store.listTrash();
+    if (entries.some((item) => item.record.id === id)) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        `surface '${id}' is in the trash; restore or purge it first`,
+      );
+    }
   }
 
   async draft(actor: Actor, input: RegisterInput): Promise<AgentSurface> {
@@ -272,6 +288,7 @@ export class CatalogService {
         `surface '${parsed.id}' is already registered`,
       );
     }
+    await this.#rejectTrashedId(parsed.id);
 
     const now = new Date().toISOString();
     const record: AgentSurface = {
@@ -478,13 +495,14 @@ export class CatalogService {
   }
 
   /**
-   * Removes a surface that is not on the public boundary.
-   *
-   * `pending_public` and `approved_public` stay until an auditor rejects or
-   * withdraws them. Deletion appends a `remove` change and leaves the approval
-   * trail untouched, so a later reader can still see who crossed the boundary.
-   * Maintainers and human auditors may remove; readers and anonymous callers
-   * may not. A record the caller cannot see is `NOT_FOUND`.
+   * Soft-deletes a surface that is not on the public boundary: the record
+   * leaves the live catalog and waits in the trash, from where it can be
+   * restored or purged. `pending_public` and `approved_public` stay until an
+   * auditor rejects or withdraws them. Deletion appends a `remove` change
+   * and leaves the approval trail untouched, so a later reader can still
+   * see who crossed the boundary. Maintainers and human auditors may
+   * remove; readers and anonymous callers may not. A record the caller
+   * cannot see is `NOT_FOUND`.
    */
   async remove(actor: Actor, input: { id: string }): Promise<{ id: string }> {
     assertActor(actor);
@@ -530,8 +548,126 @@ export class CatalogService {
       version: governed.version,
       name: governed.name,
     };
-    await this.store.commitRemoval(governed.id, change);
+    await this.store.commitTrash(
+      {
+        record: structuredClone(governed),
+        previousState: governed.governanceState,
+        deletedBy: { id: actor.id, kind: actor.kind },
+        deletedAt: now,
+      },
+      change,
+    );
     return { id: governed.id };
+  }
+
+  /**
+   * Lists soft-deleted surfaces. The trash is not a discovery surface:
+   * only maintainers and human auditors may read it; readers and
+   * anonymous callers get `FORBIDDEN` rather than a hint of what is inside.
+   */
+  async trash(actor: Actor): Promise<TrashedSurface[]> {
+    assertActor(actor);
+    const allowed = actor.role === "maintainer" ||
+      (actor.kind === "human" && actor.role === "auditor");
+    if (!allowed) {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a maintainer or a human auditor may read the trash",
+      );
+    }
+    const entries = await this.store.listTrash();
+    return entries.map((entry) => structuredClone(entry));
+  }
+
+  /**
+   * Restores a trashed surface to the state it had when removed. Only
+   * off-boundary states can have been trashed, so a restore never
+   * re-publishes anything. Maintainers and human auditors may restore.
+   */
+  async restore(actor: Actor, input: { id: string }): Promise<AgentSurface> {
+    assertActor(actor);
+    const allowed = actor.role === "maintainer" ||
+      (actor.kind === "human" && actor.role === "auditor");
+    if (!allowed) {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a maintainer or a human auditor may restore a trashed surface",
+      );
+    }
+    if (!input || typeof input.id !== "string" || input.id === "") {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "id is required");
+    }
+    const entries = await this.store.listTrash();
+    const entry = entries.find((item) => item.record.id === input.id);
+    if (!entry) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `trashed surface '${input.id}' was not found`);
+    }
+    const now = new Date().toISOString();
+    const record: AgentSurface = {
+      ...structuredClone(entry.record),
+      governanceState: entry.previousState,
+      updatedAt: now,
+    };
+    if (
+      record.governanceState === "pending_public" || record.governanceState === "approved_public"
+    ) {
+      throw new CatalogError(
+        ErrorCode.INVALID_STATE,
+        "a trashed public-boundary state cannot be restored; withdraw it after restore",
+      );
+    }
+    const change: CatalogChangeRecord = {
+      id: changeId(record.id, "restore", now),
+      surfaceId: record.id,
+      action: "restore",
+      actor: { id: actor.id, kind: actor.kind, role: actor.role },
+      at: now,
+      governanceState: record.governanceState,
+      visibility: record.visibility,
+      entry: { ...record.entry },
+      version: record.version,
+      name: record.name,
+    };
+    await this.store.commitRestore(record, change);
+    return structuredClone(record);
+  }
+
+  /**
+   * Permanently drops a trashed surface. The `purge` change stays on the
+   * trail, so the deletion itself remains auditable. Purging destroys
+   * restorable content, so only a human auditor may do it.
+   */
+  async purge(actor: Actor, input: { id: string }): Promise<{ id: string }> {
+    assertActor(actor);
+    if (actor.kind !== "human" || actor.role !== "auditor") {
+      throw new CatalogError(
+        ErrorCode.FORBIDDEN,
+        "only a human auditor may permanently purge a trashed surface",
+      );
+    }
+    if (!input || typeof input.id !== "string" || input.id === "") {
+      throw new CatalogError(ErrorCode.INVALID_INPUT, "id is required");
+    }
+    const entries = await this.store.listTrash();
+    if (!entries.some((item) => item.record.id === input.id)) {
+      throw new CatalogError(ErrorCode.NOT_FOUND, `trashed surface '${input.id}' was not found`);
+    }
+    const now = new Date().toISOString();
+    const entry = entries.find((item) => item.record.id === input.id)!;
+    const change: CatalogChangeRecord = {
+      id: changeId(entry.record.id, "purge", now),
+      surfaceId: entry.record.id,
+      action: "purge",
+      actor: { id: actor.id, kind: actor.kind, role: actor.role },
+      at: now,
+      governanceState: entry.record.governanceState,
+      visibility: entry.record.visibility,
+      entry: { ...entry.record.entry },
+      version: entry.record.version,
+      name: entry.record.name,
+    };
+    await this.store.commitPurge(entry.record.id, change);
+    return { id: entry.record.id };
   }
 
   async #decidePublic(

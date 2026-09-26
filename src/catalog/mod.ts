@@ -44,6 +44,7 @@ export type {
   PublishInput,
   RegisterInput,
   SurfaceBoundary,
+  TrashedSurface,
   UpdateInput,
   Visibility,
   WebConnectionInfo,

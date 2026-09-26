@@ -84,6 +84,7 @@ export {
   renderContentView,
   renderPendingView,
   renderSurfaceView,
+  renderTrashView,
   summarize,
   type SurfaceViewInput,
   type ViewContext,

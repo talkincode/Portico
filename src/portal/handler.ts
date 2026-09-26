@@ -39,6 +39,7 @@ import {
   renderPublicIndex,
   renderPublicTopic,
   renderShell,
+  renderTrashView,
   resolvePageTheme,
   summarize,
   type Tone,
@@ -549,11 +550,14 @@ async function internalPage(
   const theme = pageTheme(request, url, "internal");
   const path = url.pathname + url.search;
   const surfaces = await context.catalog.list(actor);
+  const canSeeTrash = actor.role === "maintainer" ||
+    (actor.kind === "human" && actor.role === "auditor");
+  const trashed = canSeeTrash ? await context.catalog.trash(actor) : [];
   const base: ViewContext = {
     actor,
     path,
     theme,
-    counts: summarize(surfaces),
+    counts: summarize(surfaces, trashed.length),
     reviewEntry: context.reviewEntry,
   };
 
@@ -564,7 +568,10 @@ async function internalPage(
    */
   function reviewNotice(url: URL): { kind: "ok" | "error"; text: string } | undefined {
     const done = url.searchParams.get("review");
-    if (done === "approve" || done === "reject" || done === "withdraw" || done === "remove") {
+    if (
+      done === "approve" || done === "reject" || done === "withdraw" || done === "remove" ||
+      done === "restore" || done === "purge"
+    ) {
       return { kind: "ok", text: REVIEW_DONE_TEXT[done] };
     }
     const failed = url.searchParams.get("reviewError");
@@ -578,7 +585,9 @@ async function internalPage(
     approve: "已通过审批，公开面可达。",
     reject: "已驳回，该记录退回待审之外。",
     withdraw: "已撤回公开，该记录回到内部可见。",
-    remove: "已删除该记录。",
+    remove: "已删除该记录，进入回收站。",
+    restore: "已从回收站恢复。",
+    purge: "已永久删除。",
   } as const;
 
   if (url.pathname === "/internal") {
@@ -599,6 +608,11 @@ async function internalPage(
       state,
       notice: reviewNotice(url),
     }));
+  }
+
+  if (url.pathname === "/internal/trash") {
+    if (!canSeeTrash) return htmlNotFound(request, context.reviewEntry);
+    return html(renderTrashView({ ctx: base, entries: trashed, notice: reviewNotice(url) }));
   }
 
   if (url.pathname === "/internal/c") {

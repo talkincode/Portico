@@ -24,6 +24,8 @@ export const AUDIT_ACTIONS: readonly string[] = [
   "publish_public_candidate",
   "update",
   "remove",
+  "restore",
+  "purge",
   "approved",
   "rejected",
   "withdrawn",
