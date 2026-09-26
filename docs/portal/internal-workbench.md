@@ -39,8 +39,9 @@
 - 人类审计者，且不是提交者：待审公开可以 **通过 / 驳回**（可选备注）。
 - 人类审计者：已公开可以 **撤回**（可选备注）。
 - 维护者或人类审计者：草稿、内部、已拒绝可以 **删除**。待审公开和已公开不能直接删，必须先驳回或撤回，避免绕过公开边界。
+- 维护者：草稿、内部、已拒绝可以 **申请公开**（重新提交为公开候选，回到待审）。人类审计者不能提交——提交与审批必须是两个人，所以审计者界面只提示去向，不渲染这个按钮；维护者走 CLI `catalog publish` 也一样。
 
-这些按钮把表单交给 Review 进程（`POST /review/approve|reject|withdraw|remove`）。Portal 进程仍然不拿目录写权限（它只写 `sessions.json`，见 `docs/roadmap.md`「运行时边界」）。审批记录页只回放已经作出的决定。
+这些按钮把表单交给 Review 进程（`POST /review/approve|reject|withdraw|remove`，申请公开走 `POST /review/api/submit`，表单只带记录 id，意图恒为公开候选）。Portal 进程仍然不拿目录写权限（它只写 `sessions.json`，见 `docs/roadmap.md`「运行时边界」）。审批记录页只回放已经作出的决定。
 
 表单地址跟着部署声明的审核入口走（`PORTICO_REVIEW_ORIGIN`）：未声明按同源 `/review/*`，声明了绝对 origin 就提交到那个 origin，声明 `off` 时这些按钮**不出现**——这个部署没有 Review 进程，渲染一个必然 404 的按钮等于撒谎。本地 `deno task up` 不代理 `/review`，想在浏览器里点审批就设 `PORTICO_REVIEW_ORIGIN=http://127.0.0.1:8791/review`（表单挂在这个基址下，路径前缀要写进去）。
 

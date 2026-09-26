@@ -113,7 +113,49 @@ export async function handleReviewRequest(
     }
     if (url.pathname === "/review/api/submit") {
       if (actor.role !== "maintainer") {
+        // Maintainers submit; everyone else keeps the machine error, or a
+        // banner back on the queue for browser forms.
+        if (browserForm) {
+          return new Response(null, {
+            status: 303,
+            headers: {
+              location: "/internal?state=pending_public&reviewError=" +
+                encodeURIComponent("FORBIDDEN"),
+            },
+          });
+        }
         return forbidden(403, "only an authenticated maintainer may submit");
+      }
+      if (!jsonBody) {
+        // Browser workbench resubmission: the record already exists, so the
+        // form carries only its id and the intent is always a public
+        // candidacy. Registration stays a JSON-API operation.
+        const form = Object.fromEntries(
+          (await request.formData()).entries(),
+        ) as { id?: unknown };
+        if (typeof form.id !== "string" || !/^[a-z][a-z0-9-]{1,62}$/.test(form.id)) {
+          return new Response(null, {
+            status: 303,
+            headers: {
+              location: "/internal?state=pending_public&reviewError=" +
+                encodeURIComponent("INVALID_INPUT"),
+            },
+          });
+        }
+        const back = `/internal?id=${form.id}`;
+        try {
+          await context.catalog.publish(actor, { id: form.id, visibility: "public" });
+        } catch (error) {
+          const code = error instanceof CatalogError ? error.code : "INTERNAL";
+          return new Response(null, {
+            status: 303,
+            headers: { location: `${back}&reviewError=${encodeURIComponent(code)}` },
+          });
+        }
+        return new Response(null, {
+          status: 303,
+          headers: { location: `${back}&review=submitted` },
+        });
       }
       const body = await request.json() as
         & { input?: RegisterInput; action?: unknown }

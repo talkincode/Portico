@@ -570,7 +570,7 @@ async function internalPage(
     const done = url.searchParams.get("review");
     if (
       done === "approve" || done === "reject" || done === "withdraw" || done === "remove" ||
-      done === "restore" || done === "purge"
+      done === "restore" || done === "purge" || done === "submitted"
     ) {
       return { kind: "ok", text: REVIEW_DONE_TEXT[done] };
     }
@@ -588,6 +588,7 @@ async function internalPage(
     remove: "已删除该记录，进入回收站。",
     restore: "已从回收站恢复。",
     purge: "已永久删除。",
+    submitted: "已提交公开申请，等待独立审批。",
   } as const;
 
   if (url.pathname === "/internal") {

@@ -571,3 +571,55 @@ Deno.test("review restore and purge redirect to the trash view for browser forms
   assertEquals(purge.headers.get("location"), "/internal/trash?review=purge");
   assertEquals(calls, ["restore:candidate", "purge:candidate"]);
 });
+
+Deno.test("review submit accepts a browser resubmission from maintainers only", async () => {
+  const maintainer = { id: "agent:m", kind: "agent", role: "maintainer" } as const;
+  const auditor = { id: "human:auditor", kind: "human", role: "auditor" } as const;
+  const calls: string[] = [];
+  const catalog = {
+    publish: (_actor: unknown, input: { id: string; visibility: string }) => {
+      calls.push(`publish:${input.id}:${input.visibility}`);
+      return Promise.resolve({ id: input.id });
+    },
+  };
+  const form = (id: string) => ({
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      accept: "text/html",
+      cookie: "portico_session=good",
+    },
+    body: new URLSearchParams({ id }).toString(),
+  });
+  const ok = await handleReviewRequest(request("/review/api/submit", form("candidate")), {
+    catalog,
+    access: { resolveSession: () => Promise.resolve(maintainer) },
+  } as never);
+  assertEquals(ok.status, 303);
+  assertEquals(ok.headers.get("location"), "/internal?id=candidate&review=submitted");
+  assertEquals(calls, ["publish:candidate:public"]);
+
+  const denied = await handleReviewRequest(request("/review/api/submit", form("candidate")), {
+    catalog,
+    access: { resolveSession: () => Promise.resolve(auditor) },
+  } as never);
+  assertEquals(denied.status, 303);
+  assertEquals(
+    denied.headers.get("location"),
+    "/internal?state=pending_public&reviewError=FORBIDDEN",
+  );
+  assertEquals(calls, ["publish:candidate:public"], "auditors cannot submit");
+
+  const json = await handleReviewRequest(
+    request("/review/api/submit", {
+      method: "POST",
+      headers: { "x-portico-session": "s", "content-type": "application/json" },
+      body: JSON.stringify({ id: "candidate" }),
+    }),
+    {
+      catalog: { register: () => Promise.resolve({ id: "candidate" }) },
+      access: { resolveSession: () => Promise.resolve(auditor) },
+    } as never,
+  );
+  assertEquals(json.status, 403);
+});
