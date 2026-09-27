@@ -2,7 +2,7 @@
  * Public surface: the editorial page.
  *
  * Same tokens, opposite temperament — a masthead, a lead story, an asymmetric
- * two-column well, and a rail of topic indexes. Nothing here is authored by a
+ * two-column well, and a rail of picks and tags. Nothing here is authored by a
  * maintainer: every "article" is an approved catalog record rendered through a
  * fixed template, so the publication can never become a CMS.
  */
@@ -38,6 +38,42 @@ export const PUBLIC_CSS = `
   border-bottom-color: var(--tk-accent);
 }
 .pub-masthead__tools { display: flex; align-items: center; gap: var(--tk-s3); margin-left: auto; }
+/* A real GET search into 发现; no script, so the form is the whole control. */
+.pub-search {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--tk-r-sm);
+  background: var(--tk-sunken);
+  overflow: hidden;
+}
+.pub-search:focus-within { border-color: var(--tk-accent-line); }
+.pub-search input {
+  width: 200px;
+  height: 100%;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--tk-ink);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.pub-search input::placeholder { color: var(--tk-faint); }
+.pub-search input:focus { outline: none; }
+.pub-search button {
+  height: 100%;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--tk-border);
+  background: var(--tk-surface);
+  color: var(--tk-muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pub-search button:hover { color: var(--tk-accent); }
 .int-logout { display: inline; margin: 0; }
 .int-logout button {
   font: inherit;
@@ -307,6 +343,31 @@ export const PUBLIC_CSS = `
   margin-top: 5px;
 }
 
+/* ── tag index (rail) ─────────────────────────────────────────────────────── */
+.pub-tags { display: flex; flex-wrap: wrap; gap: var(--tk-s2); }
+.pub-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--tk-border);
+  border-radius: var(--tk-r-pill);
+  font-family: var(--tk-font-mono);
+  font-size: 0.74rem;
+  color: var(--tk-muted);
+}
+.pub-tag:hover { color: var(--tk-accent); border-color: var(--tk-accent-line); }
+.pub-tag[aria-current="page"] {
+  color: var(--tk-accent);
+  border-color: var(--tk-accent-line);
+  background: var(--tk-accent-soft);
+}
+.pub-tag__count { font-size: 0.66rem; color: var(--tk-faint); }
+
+/* ── media (approved record's mediaUrl) ───────────────────────────────────── */
+.pub-media { margin: var(--tk-s5) 0; }
+.pub-media audio, .pub-media video { width: 100%; border-radius: var(--tk-r-md); }
+
 .pub-card {
   padding: var(--tk-s4);
   border: 1px solid var(--tk-border);
@@ -496,10 +557,11 @@ body[data-page="article"] .tk-footer > .tk-shell {
   .pub-story { grid-template-columns: minmax(0, 1fr); }
   .pub-story__art { max-width: 220px; }
   .pub-nav { display: none; }
+  .pub-search input { width: 120px; }
   .pub-article { padding-inline: var(--tk-s4); }
 }
 @media print {
-  .pub-masthead, .pub-rail, .tk-themeswitch, .pub-notice { display: none; }
+  .pub-masthead, .pub-rail, .tk-themeswitch, .pub-notice, .pub-media { display: none; }
   body { background: #fff; }
   .pub-well { grid-template-columns: minmax(0, 1fr); }
   .pub-art { display: none; }

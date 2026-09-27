@@ -25,6 +25,20 @@ export interface CatalogStore {
   commitPurge(id: string, change: CatalogChangeRecord): Promise<void>;
 }
 
+/**
+ * Record fields the model no longer has. Files written before a field was
+ * retired still carry it; dropping it on load keeps every entrance from
+ * serving a key the schema no longer documents, and the next write persists
+ * the record without it. `category` (栏目) was replaced by `tags`.
+ */
+const RETIRED_RECORD_FIELDS = ["category"] as const;
+
+function withoutRetiredFields(record: AgentSurface): AgentSurface {
+  const loose = record as AgentSurface & Record<string, unknown>;
+  for (const field of RETIRED_RECORD_FIELDS) delete loose[field];
+  return record;
+}
+
 function cloneTrashed(entry: TrashedSurface): TrashedSurface {
   return structuredClone(entry);
 }
@@ -348,11 +362,15 @@ export class FileCatalogStore implements CatalogStore {
       const changes = Array.isArray(parsed.changes) ? parsed.changes : [];
       const trashed = Array.isArray(parsed.trashed) ? parsed.trashed : [];
       return {
-        records: parsed.records.map(cloneRecord),
+        records: parsed.records.map((record) => withoutRetiredFields(cloneRecord(record))),
         approvals: approvals.map(cloneApproval),
         changes: changes.map(cloneChange),
         seal: Array.isArray(parsed.seal) ? cloneSeal(parsed.seal) : [],
-        trashed: trashed.map(cloneTrashed),
+        trashed: trashed.map((entry) => {
+          const copy = cloneTrashed(entry);
+          copy.record = withoutRetiredFields(copy.record);
+          return copy;
+        }),
       };
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) {

@@ -183,25 +183,33 @@ else
   ok entrance-not-all-interfaces
 fi
 
-# The product page, not an error page. The live Portal answers a 404 with the
-# same `<title>Portico · Portico</title>` and the same shell, so a title check
-# alone accepts an error page: the category navigation only renders for a real
-# discovery page.
-probe "$PORTAL/"
-if [ "$code" = "200" ] && contains "$payload" '<title>Portico' &&
-  contains "$payload" 'class="nav"'; then
+# The product page, not an error page. The live Portal answers a 404 with
+# the same public shell and a `· Portico</title>`, so a title check alone
+# accepts an error page: `data-page="discover"` only renders on the real
+# 发现 page.
+probe "$PORTAL/public"
+# `data-page="discover"` is what the 404 page cannot carry (it renders
+# `data-page="not-found"` in the same shell), so the marker — not the shared
+# title — is the discriminator.
+if [ "$code" = "200" ] && contains "$payload" '<title>' &&
+  contains "$payload" 'data-page="discover"'; then
   ok portal-product-page
 else
-  bad portal-product-page "HTTP $code is not the discovery shell (title or category nav missing)"
+  bad portal-product-page "HTTP $code is not the 发现 shell (title or data-page missing)"
 fi
 
-# Day-to-day review lives on the internal content workbench. The discovery
-# page must not advertise a parallel /review or external review chrome.
+# Day-to-day review lives on the internal content workbench. The public page
+# must not advertise a parallel /review or external review chrome. ($payload is
+# still the product page: no probe may run between it and this read.)
 if contains "$payload" 'href="/review' || contains "$payload" '>审核<' || contains "$payload" '去审核'; then
   bad portal-review-entry "the discovery page still advertises a separate review entrance"
 else
   ok portal-review-entry
 fi
+
+# `/` is the retired magazine address: it forwards to the one public plane.
+# A root still answering 200 means a second public style is back.
+expect_status portal-root-forwards "$PORTAL/" 302
 
 expect_status portal-public-plane "$PORTAL/public" 200
 # Anonymous must not reach the internal plane: 404 (not found) or 303 (redirect

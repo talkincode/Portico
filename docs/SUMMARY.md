@@ -35,7 +35,7 @@
   - [双平面设计哲学](portal/dual-plane.md)
   - [内部工作台 (/internal)](portal/internal-workbench.md)
   - [公开发布目录 (/public)](portal/public-releases.md)
-  - [发现主页与详情栏 (/ & /s/:id)](portal/discovery.md)
+  - [发现与推荐 (/public · /public/picks)](portal/discovery.md)
   - [颜色主题系统与无脚本规范](portal/theme-spec.md)
   - [受约束的组件盒 (UI Components)](portal/components.md)
   - [Portal REST API 接口规范](portal/api.md)

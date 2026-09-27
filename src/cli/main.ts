@@ -73,7 +73,7 @@ Commands:
   catalog dashboard --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog audience  --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   catalog boundary  --catalog <path> --identities <path> --session <token> --sessions <path>
-  catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected]
+  catalog list      --catalog <path> --identities <path> --session <token> --sessions <path> [--q <text>] [--channel cli|mcp|web] [--state draft|internal|pending_public|approved_public|rejected] [--tag <tag>]
   catalog get       --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
   mcp list          --catalog <path> --identities <path> --session <token> --sessions <path>
   mcp describe      --id <id> --catalog <path> --identities <path> --session <token> --sessions <path>
@@ -277,6 +277,7 @@ export async function runCli(
         q: flags.q,
         channel: flags.channel,
         state: flags.state,
+        tag: flags.tag,
       });
       return ok(applyCatalogQuery(await service.list(actor), query));
     }

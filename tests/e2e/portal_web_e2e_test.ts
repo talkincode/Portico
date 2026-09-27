@@ -113,7 +113,8 @@ Deno.test("E2E: CLI web register is the same href on Portal for a reader, hidden
     assertEquals(described.href.value, "https://docs.example.test/portals/docs-writer");
     assertEquals(described.connect.mode, "direct");
 
-    const html = await fetch(`${base}/`, { headers: readerHeaders() });
+    // Internal records are read on the workbench; `/` is retired and forwards.
+    const html = await fetch(`${base}/internal?id=docs-web`, { headers: readerHeaders() });
     assertEquals(html.status, 200);
     const page = await html.text();
     assert(page.includes("Docs Web"), "portal HTML should show the web surface name");
@@ -121,9 +122,10 @@ Deno.test("E2E: CLI web register is the same href on Portal for a reader, hidden
       page.includes("https://docs.example.test/portals/docs-writer"),
       "portal HTML should show the authorized web href",
     );
+    // Shown, but not clickable: an internal record never hands out a link.
     assert(
-      page.includes('href="https://docs.example.test/portals/docs-writer"'),
-      "authorized web href must be a direct link, not a Portico proxy",
+      !page.includes('href="https://docs.example.test/portals/docs-writer"'),
+      "an unapproved web href must not be clickable",
     );
 
     const anon = await fetchJson(`${base}/api/web`);
@@ -133,7 +135,10 @@ Deno.test("E2E: CLI web register is the same href on Portal for a reader, hidden
     assertEquals(anonDescribe.status, 404);
     assertEquals(anonDescribe.body.ok, false);
     assertEquals(anonDescribe.body.error?.code, "NOT_FOUND");
-    const anonPage = await (await fetch(`${base}/`)).text();
+    const anonRoot = await fetch(`${base}/`, { redirect: "manual" });
+    assertEquals(anonRoot.status, 302, "the retired magazine address must forward");
+    assertEquals(anonRoot.headers.get("location"), "/public");
+    const anonPage = await (await fetch(`${base}/public`)).text();
     assert(!anonPage.includes("Docs Web"), "anonymous portal must not leak internal web names");
     assert(
       !anonPage.includes("https://docs.example.test/portals/docs-writer"),

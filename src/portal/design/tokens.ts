@@ -11,7 +11,7 @@
  * so a theme can never become a maintainer-authored style channel.
  */
 
-import type { Channel, ContentCategory, GovernanceState } from "../../catalog/types.ts";
+import type { Channel, GovernanceState } from "../../catalog/types.ts";
 
 /** Which product surface is being rendered. */
 export type Tone = "internal" | "public";
@@ -226,8 +226,14 @@ export interface ThemeRequest {
  *
  * Precedence: an explicit valid `?theme=` wins; an invalid one falls through to
  * the OS hint rather than erroring; the tone then supplies the default preset.
+ * A bare mode (`light` / `dark`) names no tone, so it means "this page, in that
+ * mode" on either plane.
  */
 export function resolveTheme(tone: Tone, request: ThemeRequest = {}): Theme {
+  const bare = request.requested?.trim().toLowerCase();
+  if (bare === "light" || bare === "dark") {
+    return { tone, mode: bare, preset: presetFor(tone, bare) };
+  }
   const explicit = findPreset(request.requested);
   if (explicit && THEME_PRESETS[explicit].tone === tone) {
     return { tone, mode: THEME_PRESETS[explicit].mode, preset: explicit };
@@ -306,25 +312,11 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
   web: "Web",
 };
 
-/** Long-form channel meaning, for the internal legend and public section notes. */
+/** Long-form channel meaning, for the internal legend and the public article. */
 export const CHANNEL_NOTE: Record<Channel, string> = {
   cli: "包坐标，客户端自行安装",
   mcp: "外部 MCP Server，客户端直连",
   web: "Web 入口，客户端直达页面",
-};
-
-/** Content category display labels (栏目). */
-export const CATEGORY_LABEL: Record<ContentCategory, string> = {
-  "info-assassin": "信息刺客",
-  "mira-radio": "Mira Radio",
-  uncategorized: "未分类",
-};
-
-/** Long-form category descriptions for section headers. */
-export const CATEGORY_NOTE: Record<ContentCategory, string> = {
-  "info-assassin": "极客/科技新闻风格内容",
-  "mira-radio": "音频与视频内容",
-  uncategorized: "其他内容",
 };
 
 export interface RGB {

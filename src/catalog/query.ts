@@ -17,6 +17,8 @@ export interface CatalogQuery {
   q?: string;
   channel?: Channel;
   governanceState?: GovernanceState;
+  /** Exact tag match, normalized the way tags are stored (trimmed, lowercase). */
+  tag?: string;
 }
 
 /**
@@ -31,10 +33,13 @@ export function parseCatalogQuery(input: {
   channel?: unknown;
   state?: unknown;
   governanceState?: unknown;
+  tag?: unknown;
 }): CatalogQuery {
   const query: CatalogQuery = {};
   const q = optionalString(input.q, "q");
   if (q !== undefined) query.q = q;
+  const tag = optionalString(input.tag, "tag");
+  if (tag !== undefined) query.tag = tag.toLowerCase();
   const channel = optionalChannel(input.channel);
   if (channel !== undefined) query.channel = channel;
   const fromState = optionalGovernanceState(input.state, "state");
@@ -60,6 +65,7 @@ export function applyCatalogQuery(
     if (query.governanceState && surface.governanceState !== query.governanceState) {
       return false;
     }
+    if (query.tag && !(surface.tags ?? []).includes(query.tag)) return false;
     if (!needle) return true;
     return [surface.id, surface.name, surface.description].some((field) =>
       field.toLowerCase().includes(needle)

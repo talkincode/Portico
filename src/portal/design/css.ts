@@ -210,6 +210,16 @@ hr { border: 0; border-top: 1px solid var(--tk-rule); margin: 0; }
   font-size: 0.66rem;
 }
 .tk-chip--pending { border-style: dashed; }
+/* Tags are the only classification below 发现 / 推荐; quieter than a state chip. */
+.tk-chip--tag {
+  background: transparent;
+  font-weight: 550;
+  font-family: var(--tk-font-mono);
+  font-size: 0.68rem;
+}
+a.tk-chip--tag:hover { color: var(--tk-accent); border-color: var(--tk-accent-line); }
+.tk-tags { margin-top: var(--tk-s3); }
+.tk-dl .tk-tags { margin-top: 0; }
 
 /* ── panel / card ──────────────────────────────────────────────────────── */
 .tk-panel {

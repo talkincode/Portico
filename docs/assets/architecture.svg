@@ -156,7 +156,7 @@
     <text x="53" y="24" class="badge-txt" fill="#38BDF8">Web Portal</text>
     <text x="100" y="24" class="mono">:8788</text>
     <text x="12" y="46" class="card-title">双平面 Web 发现与工作台</text>
-    <text x="12" y="64" class="card-desc">/internal 笔记台 · /public 目录 · 杂志风详情</text>
+    <text x="12" y="64" class="card-desc">/internal 笔记台 · /public 发现与推荐</text>
     <text x="12" y="78" class="card-desc">纯 CSS 语义主题 · 零 JS · CSP 锁死 (无写权限)</text>
   </g>
 

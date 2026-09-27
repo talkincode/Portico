@@ -100,6 +100,10 @@ export const TOOLS: readonly McpTool[] = [
           enum: [...CATALOG_GOVERNANCE_STATES],
           description: "只返回该治理状态的表面",
         },
+        tag: {
+          type: "string",
+          description: "只返回带该标签的表面（精确匹配，不区分大小写）",
+        },
       },
       additionalProperties: false,
     },

@@ -97,12 +97,9 @@ Deno.test("a deployment that serves no Review advertises none on any plane", asy
 
 Deno.test("the same-origin default does not keep a parallel Review entry", async () => {
   const context = await portalContext();
-  const home = await page("/", context);
-  assert(!home.includes('href="/review"'), "discovery does not jump to a second review UI");
-  assert(!home.includes(">审核<"), "the header does not offer 审核");
-  assert(home.includes("登出"), "a signed-in caller can leave");
   const public_ = await page("/public", context);
   assert(!public_.includes('href="/review"'), "the public plane does not offer review");
+  assert(!public_.includes(">审核<"), "the header does not offer 审核");
   assert(public_.includes("登出"), "the public plane shows logout when signed in");
 });
 
@@ -111,17 +108,15 @@ Deno.test("a declared origin is not advertised as primary chrome", async () => {
     kind: "origin",
     origin: "https://review.example.test/review",
   });
-  const home = await page("/", context);
-  assert(!home.includes("review.example.test"), "the magazine does not point at a review origin");
-  assert(!home.includes('href="/review'), "no relative review link survives");
   const public_ = await page("/public", context);
   assert(!public_.includes("review.example.test"), "the public plane does not point at review");
+  assert(!public_.includes('href="/review'), "no relative review link survives");
 });
 
 Deno.test("a signed-in reader has a way back to the workbench, an anonymous one does not", async () => {
   const context = await portalContext();
   const signedIn = { headers: roster.headersFor(AUDITOR) } as const;
-  const planes = ["/", "/public"];
+  const planes = ["/public", "/public/picks"];
 
   for (const path of planes) {
     const response = await handlePortalRequest(
@@ -130,8 +125,7 @@ Deno.test("a signed-in reader has a way back to the workbench, an anonymous one 
     );
     const body = await response.text();
     assert(
-      body.includes('<a class="auth-workbench" href="/internal">') ||
-        body.includes('<a class="pub-nav__link" href="/internal">'),
+      body.includes('<a class="pub-nav__link" href="/internal">'),
       `${path} must lead a signed-in reader back to /internal`,
     );
     assert(body.includes("内部工作台"), `${path} must name the workbench entrance`);

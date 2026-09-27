@@ -46,6 +46,7 @@ import {
   relativeAge,
   stat,
   stateChip,
+  tagChips,
 } from "../components.ts";
 import { renderShell, themeSwitch } from "../page.ts";
 import { CHANNEL_LABEL, STATE_LABEL } from "../tokens.ts";
@@ -204,7 +205,8 @@ function internalTabs(ctx: ViewContext, screen: InternalScreen): string {
   if (ctx.actor.kind === "human" && ctx.actor.role === "auditor") {
     items.push({ id: "audit", href: "/internal/audit", label: "审计" });
   }
-  const discovery = `<a class="tk-tab" href="/">发现</a>`;
+  // The one public plane, read-only from here: 发现 lists what is public now.
+  const discovery = `<a class="tk-tab" href="/public">公开面</a>`;
   return discovery +
     items.map((item) =>
       `<a class="tk-tab" href="${item.href}"${
@@ -426,6 +428,7 @@ function renderReader(
               ${dl("可见性", esc(surface.visibility === "public" ? "公开" : "内部"))}
               ${dl("渠道", channelChips(surface.channels))}
               ${dl("版本", `<span class="tk-num">${esc(surface.version)}</span>`)}
+              ${dl("标签", tagChips(surface.tags, { linked: false }) || "—")}
               ${dl("入口", entryValue(surface.entry, { linkable: publicReachable }))}
               ${dl("维护者", esc(maintainerChain(surface)) || "—")}
               ${

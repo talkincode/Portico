@@ -165,7 +165,6 @@ Deno.test("the schema doc lists exactly the fields the parser accepts", async ()
   assertEquals(
     Object.keys(payload).sort(),
     [
-      "category",
       "channels",
       "description",
       "entry",
