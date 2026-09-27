@@ -140,22 +140,29 @@ export function publicOnly(surfaces: readonly AgentSurface[]): AgentSurface[] {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-/** Bucket surfaces by first channel, in a stable CLI → MCP → Web order. */
-export function byChannel(
-  surfaces: readonly AgentSurface[],
-): Array<{ channel: Channel; items: AgentSurface[] }> {
-  const order: Channel[] = ["cli", "mcp", "web"];
-  return order
-    .map((channel) => ({
-      channel,
-      items: surfaces.filter((s) => s.channels.includes(channel)),
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
-/** Human sentence for a channel section: never a bare abbreviation. */
+/** Human sentence for a channel: never a bare abbreviation. */
 export function channelDescription(channel: Channel): string {
   return CHANNEL_NOTE[channel];
+}
+
+/** 发现 filtered to one tag. Tags are the only classification below 发现 / 推荐. */
+export function tagHref(tag: string): string {
+  return `/public?${new URLSearchParams({ tag }).toString()}`;
+}
+
+/**
+ * A record's tags as chips. Linked chips point into 发现 and belong only on
+ * the public plane, where every record shown is already public; the workbench
+ * renders them inert.
+ */
+export function tagChips(tags: readonly string[] | undefined, opts: { linked: boolean }): string {
+  if (!tags || tags.length === 0) return "";
+  const chips = tags.map((tag) =>
+    opts.linked
+      ? `<a class="tk-chip tk-chip--tag" href="${esc(tagHref(tag))}">#${esc(tag)}</a>`
+      : `<span class="tk-chip tk-chip--tag">#${esc(tag)}</span>`
+  ).join("");
+  return `<p class="tk-cluster tk-tags" aria-label="标签">${chips}</p>`;
 }
 
 /** Empty-state block. */

@@ -30,6 +30,7 @@ import {
   esc,
   prefersDark,
   type PublicContext,
+  publicOnly,
   renderApprovalsView,
   renderAuditView,
   renderCatalogView,
@@ -37,7 +38,8 @@ import {
   renderPendingView,
   renderPublicArticle,
   renderPublicIndex,
-  renderPublicTopic,
+  renderPublicNotFound,
+  renderPublicPicks,
   renderShell,
   renderTrashView,
   resolvePageTheme,
@@ -45,15 +47,6 @@ import {
   type Tone,
   type ViewContext,
 } from "./design/mod.ts";
-import {
-  type CategoryFilter,
-  parseCategory,
-  parseChannel,
-  parseTheme,
-  renderMagazinePage,
-  renderNotFoundPage,
-} from "./html.ts";
-import type { ContentCategory } from "../catalog/mod.ts";
 import type { ReviewEntry } from "./review-entry.ts";
 import { dashboardFrom } from "../catalog/dashboard.ts";
 import { audienceReport } from "../catalog/audience.ts";
@@ -132,6 +125,7 @@ export async function handlePortalRequest(
         q: url.searchParams.get("q"),
         channel: url.searchParams.get("channel"),
         state: url.searchParams.get("state"),
+        tag: url.searchParams.get("tag"),
       });
       return jsonOk(applyCatalogQuery(await context.catalog.list(actor), query));
     }
@@ -268,88 +262,12 @@ export async function handlePortalRequest(
       return await publicPage(request, url, actor, context);
     }
 
-    const theme = parseTheme(url.searchParams.get("theme"));
-    const channel = parseChannel(url.searchParams.get("channel"));
-    const category = parseCategory(url.searchParams.get("category"));
-    const surfacePage = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/);
-    const queryId = url.pathname === "/" ? url.searchParams.get("id") : null;
-    const selectedId = surfacePage?.[1] ??
-      (queryId && /^[a-z][a-z0-9-]{1,62}$/.test(queryId) ? queryId : null);
-    if (url.pathname === "/" || surfacePage) {
-      const query = parseCatalogQuery({ q: url.searchParams.get("q") });
-      if (channel) query.channel = channel;
-      const visible = await context.catalog.list(actor);
-      const filtered = applyCatalogQuery(visible, query);
-      const surfaces = filterByCategory(filtered, category);
-      const dash = dashboardFrom(surfaces);
-      const pendingPublic = actor.role === "anonymous"
-        ? undefined
-        : visible.filter((surface) => surface.governanceState === "pending_public").length;
-      const page = context.pages ? await context.pages.get(actor) : undefined;
-      const picks = (page?.components ?? []).flatMap((item) => {
-        if (item.kind !== "catalog_card") return [];
-        return [{
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          governanceState: item.governanceState,
-          channels: [...item.channels],
-          version: item.version,
-        }];
-      });
-      if (selectedId) {
-        try {
-          const selected = await context.catalog.get(actor, selectedId);
-          const canonical = canonicalMagazineReadingUrl(url, selected, category);
-          const location = magazineSelectionUrl(url, selected, canonical);
-          if (surfacePage || canonical) {
-            return new Response(null, {
-              status: 302,
-              headers: { location },
-            });
-          }
-          return html(renderMagazinePage({
-            theme,
-            channel,
-            category,
-            q: query.q,
-            view: dash,
-            selected,
-            picks,
-            path: url.pathname,
-            showInternal: actor.role !== "anonymous",
-            pendingPublic,
-            reviewEntry: context.reviewEntry,
-            signedInId: actor.role !== "anonymous" ? actor.id : undefined,
-          }));
-        } catch (error) {
-          if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-            return html(
-              renderNotFoundPage(theme, context.reviewEntry, {
-                signedInId: actor.role !== "anonymous" ? actor.id : undefined,
-                showInternal: actor.role !== "anonymous",
-                pendingPublic,
-              }),
-              404,
-            );
-          }
-          throw error;
-        }
-      }
-      return html(renderMagazinePage({
-        theme,
-        channel,
-        category,
-        q: query.q,
-        view: dash,
-        picks,
-        path: "/",
-        showInternal: actor.role !== "anonymous",
-        pendingPublic,
-        reviewEntry: context.reviewEntry,
-        signedInId: actor.role !== "anonymous" ? actor.id : undefined,
-      }));
-    }
+    // ── retired magazine addresses ───────────────────────────────────────
+    // The public plane is the only human-facing discovery page. `/` and the
+    // old magazine links move there by path alone — no catalog lookup happens
+    // here, so a redirect can never confirm that an id exists.
+    const legacy = legacyPublicLocation(url);
+    if (legacy) return new Response(null, { status: 302, headers: { location: legacy } });
     return jsonError(404, ErrorCode.NOT_FOUND, "not found");
   } catch (error) {
     return fail(error);
@@ -357,77 +275,25 @@ export async function handlePortalRequest(
 }
 
 /**
- * `/s/:id` may be opened with a `channel` / `category` / `q` that does not
- * include the selected record. That is a stale navigation state, not a
- * permission miss: rewrite the query so the filtered list contains the record
- * the caller can already see. Unknown or unauthorized ids still 404 before
- * this runs.
+ * Where a retired magazine address now lives: `/` → 发现 (keeping `q`, `tag`
+ * and `theme`), `/?id=x` and `/s/x` → the public article. The magazine's
+ * `category` / `channel` filters have no successor and are dropped.
  */
-/** Old `/s/:id` and a stale filter both land on `/?id=` so Back stays in the magazine. */
-function magazineSelectionUrl(url: URL, selected: AgentSurface, canonical: URL | null): string {
-  const next = canonical ?? new URL(url);
-  next.pathname = "/";
-  next.searchParams.set("id", selected.id);
-  return `${next.pathname}${next.search}`;
-}
-
-function canonicalMagazineReadingUrl(
-  url: URL,
-  selected: AgentSurface,
-  category: CategoryFilter,
-): URL | null {
-  const channel = parseChannel(url.searchParams.get("channel"));
-  const query = parseCatalogQuery({ q: url.searchParams.get("q") });
-  if (channel) query.channel = channel;
-
-  const matchesChannel = applyCatalogQuery([selected], query).length > 0;
-  const matchesCategory = categoryMatches(selected, category);
-
-  if (matchesChannel && matchesCategory) return null;
-
-  const next = new URL(url);
-
-  if (!matchesCategory && category !== null) {
-    const effectiveCategory = selected.category ?? "uncategorized";
-    next.searchParams.set("category", effectiveCategory);
+function legacyPublicLocation(url: URL): string | null {
+  const surface = url.pathname.match(/^\/s\/([a-z][a-z0-9-]{1,62})$/)?.[1] ??
+    (url.pathname === "/" ? url.searchParams.get("id") : null);
+  if (surface !== null && /^[a-z][a-z0-9-]{1,62}$/.test(surface)) {
+    const theme = url.searchParams.get("theme");
+    return `/public/s/${surface}${theme ? `?${new URLSearchParams({ theme })}` : ""}`;
   }
-
-  if (query.channel && !selected.channels.includes(query.channel)) {
-    const own = selected.channels[0];
-    if (own) next.searchParams.set("channel", own);
-    else next.searchParams.delete("channel");
+  if (url.pathname !== "/") return null;
+  const next = new URLSearchParams();
+  for (const key of ["q", "tag", "theme"]) {
+    const value = url.searchParams.get(key);
+    if (value) next.set(key, value);
   }
-
-  const remainingQ = parseCatalogQuery({ q: next.searchParams.get("q") }).q;
-  if (remainingQ && applyCatalogQuery([selected], { q: remainingQ }).length === 0) {
-    next.searchParams.delete("q");
-  }
-
-  if (next.search === url.search) return null;
-  return next;
-}
-
-/**
- * Filter surfaces by content category. When category is null, all surfaces
- * pass. Otherwise, a surface matches if its effective category (defaulting
- * to "uncategorized" when undefined) equals the filter.
- */
-function filterByCategory(
-  surfaces: AgentSurface[],
-  category: CategoryFilter,
-): AgentSurface[] {
-  if (category === null) return surfaces;
-  return surfaces.filter((surface) => categoryMatches(surface, category));
-}
-
-/**
- * Check if a surface matches a category filter. A null filter matches all.
- * Effective category = surface.category ?? "uncategorized".
- */
-function categoryMatches(surface: AgentSurface, category: CategoryFilter): boolean {
-  if (category === null) return true;
-  const effective: ContentCategory = surface.category ?? "uncategorized";
-  return effective === category;
+  const query = next.toString();
+  return query ? `/public?${query}` : "/public";
 }
 
 /**
@@ -535,6 +401,11 @@ function isAuditor(actor: Actor): boolean {
   return actor.kind === "human" && actor.role === "auditor";
 }
 
+/** `/internal/pending?channel=`: anything but a known channel means "all". */
+function parseChannel(raw: string | null): Channel | null {
+  return raw === "cli" || raw === "mcp" || raw === "web" ? raw : null;
+}
+
 function pageTheme(request: Request, url: URL, tone: Tone) {
   return resolvePageTheme(tone, url.searchParams.get("theme"), prefersDark(request.headers));
 }
@@ -612,7 +483,7 @@ async function internalPage(
   }
 
   if (url.pathname === "/internal/trash") {
-    if (!canSeeTrash) return htmlNotFound(request, context.reviewEntry);
+    if (!canSeeTrash) return htmlNotFound(request, actor, context.reviewEntry);
     return html(renderTrashView({ ctx: base, entries: trashed, notice: reviewNotice(url) }));
   }
 
@@ -644,7 +515,7 @@ async function internalPage(
   if (url.pathname === "/internal/audit") {
     // The trail is a privileged surface, not an empty screen for everyone
     // else: a non-auditor must not learn that the route exists at all.
-    if (!isAuditor(actor)) return htmlNotFound(request, context.reviewEntry);
+    if (!isAuditor(actor)) return htmlNotFound(request, actor, context.reviewEntry);
     const query = auditQueryFrom(url);
     const events = applyAuditQuery(await auditTrail(actor, context), query);
     // This page tells the auditor that the trail cannot be rewritten, so it has
@@ -675,7 +546,7 @@ async function internalPage(
     });
   }
 
-  return htmlNotFound(request, context.reviewEntry);
+  return htmlNotFound(request, actor, context.reviewEntry);
 }
 
 /* ── public editorial surface ─────────────────────────────────────────── */
@@ -694,14 +565,26 @@ async function publicPage(
   const surfaces = await context.catalog.list(actor);
 
   if (url.pathname === "/public") {
-    return html(renderPublicIndex({ ctx, surfaces }));
+    // Same parser as `catalog list` / `GET /api/catalog` / `portico_list`,
+    // so 发现 cannot disagree with the machine entrances about a filter.
+    const query = parseCatalogQuery({
+      q: url.searchParams.get("q"),
+      tag: url.searchParams.get("tag"),
+    });
+    return html(renderPublicIndex({
+      ctx,
+      surfaces,
+      filter: { q: query.q, tag: query.tag },
+      picks: await publicPicks(actor, context, surfaces),
+    }));
   }
 
-  const topicMatch = url.pathname.match(/^\/public\/t\/(cli|mcp|web)$/);
-  if (topicMatch) {
-    return html(
-      renderPublicTopic({ ctx, surfaces, channel: topicMatch[1] as Channel }),
-    );
+  if (url.pathname === "/public/picks") {
+    return html(renderPublicPicks({
+      ctx,
+      surfaces,
+      picks: await publicPicks(actor, context, surfaces),
+    }));
   }
 
   const storyMatch = url.pathname.match(/^\/public\/s\/([a-z][a-z0-9-]{1,62})$/);
@@ -710,17 +593,40 @@ async function publicPage(
       const surface = await context.catalog.get(actor, storyMatch[1]);
       const page = renderPublicArticle({ ctx, surface, others: surfaces });
       // A record that never crossed the boundary has no published page at all.
-      if (page === null) return htmlNotFound(request, context.reviewEntry);
+      if (page === null) return htmlNotFound(request, actor, context.reviewEntry);
       return html(page);
     } catch (error) {
       if (error instanceof CatalogError && error.code === ErrorCode.NOT_FOUND) {
-        return htmlNotFound(request, context.reviewEntry);
+        return htmlNotFound(request, actor, context.reviewEntry);
       }
       throw error;
     }
   }
 
-  return htmlNotFound(request, context.reviewEntry);
+  return htmlNotFound(request, actor, context.reviewEntry);
+}
+
+/**
+ * 推荐 is the maintainers' page (`page set`): its `catalog_card` components, in
+ * their order, narrowed to records on the public face. The page service
+ * already resolves through catalog visibility; `publicOnly` still applies,
+ * because a signed-in reader can see cards that are not public.
+ */
+async function publicPicks(
+  actor: Actor,
+  context: PortalContext,
+  surfaces: AgentSurface[],
+): Promise<AgentSurface[]> {
+  if (!context.pages) return [];
+  const page = await context.pages.get(actor);
+  const onFace = new Map(publicOnly(surfaces).map((surface) => [surface.id, surface]));
+  const picks: AgentSurface[] = [];
+  for (const item of page.components) {
+    if (item.kind !== "catalog_card") continue;
+    const surface = onFace.get(item.id);
+    if (surface && !picks.includes(surface)) picks.push(surface);
+  }
+  return picks;
 }
 
 function jsonOk(data: unknown): Response {
@@ -762,14 +668,15 @@ function html(body: string, status = 200): Response {
 }
 
 /**
- * Human-facing pages 404 as HTML. A JSON envelope would tell a browser this is
- * an API, and it would disagree with the magazine shell's missing `/s/:id`
- * page. API routes still use `jsonError`.
+ * Human-facing pages 404 as HTML, in the public shell, with the reader's own
+ * identity still in the header. A JSON envelope would tell a browser this is
+ * an API. API routes still use `jsonError`.
  */
-function htmlNotFound(request: Request, reviewEntry?: ReviewEntry): Response {
+function htmlNotFound(request: Request, actor: Actor, reviewEntry?: ReviewEntry): Response {
   const url = new URL(request.url);
+  const theme = pageTheme(request, url, "public");
   return html(
-    renderNotFoundPage(parseTheme(url.searchParams.get("theme")), reviewEntry),
+    renderPublicNotFound({ actor, path: url.pathname + url.search, theme, reviewEntry }),
     404,
   );
 }
@@ -907,7 +814,7 @@ async function handleLogout(request: Request, context: PortalContext): Promise<R
     }
   }
 
-  const headers = new Headers({ location: "/" });
+  const headers = new Headers({ location: "/public" });
   headers.append(
     "set-cookie",
     "portico_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
@@ -1025,7 +932,7 @@ function postLoginTarget(actor: Actor, next: string | null): string {
   if (actor.role === "reader" || actor.role === "maintainer" || actor.role === "auditor") {
     return "/internal";
   }
-  return "/";
+  return "/public";
 }
 
 function readCookie(request: Request, name: string): string | null {

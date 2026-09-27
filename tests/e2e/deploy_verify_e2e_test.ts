@@ -33,6 +33,7 @@ const CHECKS = [
   "entrance-address",
   "entrance-not-all-interfaces",
   "portal-product-page",
+  "portal-root-forwards",
   "portal-review-entry",
   "portal-public-plane",
   "portal-internal-fail-closed",
@@ -168,10 +169,11 @@ function headRevisionSync(): string {
  * the shell), so a gate that only looks for the title accepts an error page.
  */
 const PRODUCT_PAGE = '<!DOCTYPE html><html lang="zh-CN"><head>' +
-  "<title>Portico · Portico</title></head><body>" +
-  '<nav class="nav"><a href="/">全部</a></nav>' +
-  '<section class="hero"><h1 class="hero-title">受控接入与安全治理</h1></section>' +
-  "</div></body></html>";
+  "<title>Portico · Portico</title></head>" +
+  '<body data-tone="public" data-page="discover">' +
+  '<nav class="pub-nav"><a href="/public">发现</a><a href="/public/picks">推荐</a></nav>' +
+  '<section class="pub-band"><h1 class="pub-band__title">已通过审批的 Agent 表面</h1></section>' +
+  "</body></html>";
 
 const ERROR_PAGE = '<!DOCTYPE html><html lang="zh-CN"><head>' +
   "<title>Portico · Portico</title></head><body>" +
@@ -186,7 +188,7 @@ function withReviewEntry(href: string): string {
 }
 
 interface StubOptions {
-  /** Answer `/` with a 200 HTML page that is not the product shell. */
+  /** Answer `/public` with a 200 HTML page that is not the product shell. */
   errorPage?: boolean;
   /** Advertise this Review entry href in the product page chrome. */
   reviewHref?: string;
@@ -223,11 +225,14 @@ function portalStub(options: StubOptions): (request: Request) => Response {
       );
     }
     if (pathname === "/api/catalog") return jsonResponse({ ok: true, data: [] });
+    // The retired magazine address forwards; it never serves a page.
     if (pathname === "/") {
+      return new Response(null, { status: 302, headers: { location: "/public" } });
+    }
+    if (pathname === "/public") {
       if (options.errorPage) return htmlResponse(ERROR_PAGE);
       return htmlResponse(options.reviewHref ? withReviewEntry(options.reviewHref) : PRODUCT_PAGE);
     }
-    if (pathname === "/public") return htmlResponse(PRODUCT_PAGE);
     if (pathname === "/internal") {
       return options.failOpenInternal ? htmlResponse(PRODUCT_PAGE) : htmlResponse(ERROR_PAGE, 404);
     }

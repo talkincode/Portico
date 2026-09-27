@@ -20,15 +20,15 @@
 
 | | `internal` 内部笔记台 | `public` 公开发布 |
 | --- | --- | --- |
-| 路由 | `/internal`、`/internal/c`、`/internal/pending`、`/internal/approvals`、`/internal/audit`、`/internal/s/:id` | `/public`、`/public/t/:channel`、`/public/s/:id` |
+| 路由 | `/internal`、`/internal/c`、`/internal/pending`、`/internal/approvals`、`/internal/audit`、`/internal/s/:id` | `/public`（发现）、`/public/picks`（推荐）、`/public/s/:id` |
 | 读者 | 只读及以上（匿名 404） | 任何人（含匿名） |
 | 可见记录 | 当前身份可见的全部（含草稿、待审、已拒绝） | 仅 `approved_public` |
-| 布局 | 三栏器物面板：导航栏 + 记录列表 + 阅读区 | 报头 + 头条 + 分栏 + 右栏 |
+| 布局 | 三栏器物面板：导航栏 + 记录列表 + 阅读区 | 报头（发现 / 推荐 / 搜索）+ 头条 + 分栏 + 右栏（推荐与标签索引） |
 | 字体 | 全无衬线 + 等宽数字 | 衬线标题 + 无衬线正文 + 等宽元数据 |
 | 强调色 | 青绿（治理、工具） | 深绛红（出版物、署名） |
 | 语气 | 陈述治理事实、给状态、给路径 | 陈述它是什么、怎么访问、为何公开 |
 
-`/`（根路径）是社论杂志风发现索引（渠道过滤、明暗 `data-theme`、`/s/:id` 阅读栏），不是两个新平面的替代品。它映射同一目录，不是 CMS。跨面只做只读发现：杂志壳链到 `/public`；已登录身份才看到 `/internal`，并在顶栏把未过滤的 `pending_public` 计数链到 `/internal/pending`；公开发布面链回 `/`，公开详情可链到同一条 `/s/:id`。匿名访问 `/internal` 仍是 404，杂志壳也不出现待审入口。该链接不是批准入口。
+公开面只有两个栏目：**发现**（`/public`）与**推荐**（`/public/picks`）。没有第三层分类轴——渠道只是 chip，`category`（栏目）已从记录模型移除，更细的分类只用标签（`?tag=`，与 `?q=` 共用 `parseCatalogQuery`）。根路径 `/` 与旧杂志地址（`/?id=`、`/s/:id`）按路径 302 转发到公开面：`?q=`/`?tag=`/`?theme=` 随行，`?category=`/`?channel=` 丢弃，转发不做目录查找，因此不确认 id 是否存在。跨面只做只读发现：公开页眉对已登录身份链到 `/internal`，工作台链回 `/public`；匿名访问 `/internal` 仍是 303 登录重定向，公开页也不出现待审入口。该链接不是批准入口。
 
 ## 2. 颜色主题
 
@@ -127,10 +127,13 @@ URL 短名同样被接受：`internal`、`internal-dark`、`editorial`、`editor
 缩略图与插图由 `hash(id) % N` 选择 CSS 图案 + 渠道字形，**不使用图片、不引用网络、不接受
 维护者输入**。CSP 里只放开了 `img-src data:`，这条约束保证它长期成立。
 
-### 4.2 搜索框
+### 4.2 搜索
 
-`.tk-search` 是 `aria-hidden` 的装饰性占位，不是输入控件。Portal 是只读入口且不发送脚本，
-渲染一个假的可用搜索框会是对用户的误导。真正可用的检索入口是 `/api/catalog` 与 CLI。
+发现页报头的 `.pub-search` 是真实的 `GET /public` 表单（`q` + 保留的 `tag`），无脚本、无 fetch，因此
+可以是输入控件；它与 CLI `catalog list --q`、`GET /api/catalog`、MCP `portico_list` 共用
+`parseCatalogQuery`，只在 `publicOnly` 之后过滤——搜索永远不是绕过审批的观察窗。内部工作台页眉的
+`.tk-search` 仍是 `aria-hidden` 的装饰占位，不是输入控件：工作台没有无脚本的检索入口，渲染一个假的可用
+搜索框会是对用户的误导。真正可用的机器检索入口是 `/api/catalog` 与 CLI。
 
 ## 5. 无障碍
 

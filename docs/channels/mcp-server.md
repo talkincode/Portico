@@ -18,7 +18,7 @@ Portico MCP 服务端暴露了 24 个经过安全收敛的只读治理工具：
 
 | 工具名称 (Tool Name) | 参数说明 | 权限要求 | 功能描述 |
 | :--- | :--- | :--- | :--- |
-| **`portico_list`** | `{ channel?: string, state?: string }` | 匿名或持会话 | 查询当前可见的服务列表。匿名请求仅返回 `approved_public` 记录。 |
+| **`portico_list`** | `{ q?: string, tag?: string, channel?: string, state?: string, governanceState?: string }` | 匿名或持会话 | 查询当前可见的服务列表，按 id / 名称 / 说明子串（`q`）、标签（`tag`，精确匹配）、渠道与治理状态过滤；与 CLI `catalog list --q/--tag`、Portal `GET /api/catalog` 共用同一解析。匿名请求仅返回 `approved_public` 记录。 |
 | **`portico_describe`** | `{ id: string }` | 匿名或持会话 | 查询指定服务的元数据与连接信息。若无权访问返回 NOT_FOUND。 |
 | **`portico_entry`** | `{ id: string, channel?: string }` | 匿名或持会话 | 获取特定渠道的直连端点或包坐标。 |
 | **`portico_mcp`** | `{}` | 匿名或持会话 | 列出当前身份可见的 MCP 连接信息。与 CLI `mcp list`、Portal `GET /api/mcp` 同一载荷。CLI 包坐标不会出现。匿名只看到已审批公开记录。不代理、不执行。 |

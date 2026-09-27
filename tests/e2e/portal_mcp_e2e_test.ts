@@ -113,7 +113,8 @@ Deno.test("E2E: CLI MCP register is the same connection on Portal for a reader, 
     assertEquals(described.endpoint.value, "https://mcp.example.test/servers/docs");
     assertEquals(described.connect.mode, "direct");
 
-    const html = await fetch(`${base}/`, { headers: readerHeaders() });
+    // Internal records are read on the workbench; `/` is retired and forwards.
+    const html = await fetch(`${base}/internal?id=docs-mcp`, { headers: readerHeaders() });
     assertEquals(html.status, 200);
     const page = await html.text();
     assert(page.includes("Docs MCP"), "portal HTML should show the MCP surface name");
@@ -126,7 +127,10 @@ Deno.test("E2E: CLI MCP register is the same connection on Portal for a reader, 
     assertEquals(anonDescribe.status, 404);
     assertEquals(anonDescribe.body.ok, false);
     assertEquals(anonDescribe.body.error?.code, "NOT_FOUND");
-    const anonPage = await (await fetch(`${base}/`)).text();
+    const anonRoot = await fetch(`${base}/`, { redirect: "manual" });
+    assertEquals(anonRoot.status, 302, "the retired magazine address must forward");
+    assertEquals(anonRoot.headers.get("location"), "/public");
+    const anonPage = await (await fetch(`${base}/public`)).text();
     assert(!anonPage.includes("Docs MCP"), "anonymous portal must not leak internal MCP names");
   });
 });

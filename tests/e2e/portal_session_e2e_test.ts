@@ -107,7 +107,9 @@ Deno.test("E2E: CLI login session is visible on Portal Bearer and hidden from an
     assertEquals(data[0].id, cliBody.data[0].id);
     assertEquals(data[0].name, cliBody.data[0].name);
 
-    const html = await fetch(`${base}/`, {
+    // The session is proven on the workbench, which is where this internal
+    // record is readable; the public plane shows nothing unapproved to anyone.
+    const html = await fetch(`${base}/internal?id=docs-writer`, {
       headers: { "x-portico-session": sessionToken },
     });
     assertEquals(html.status, 200);

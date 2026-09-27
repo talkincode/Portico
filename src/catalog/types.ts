@@ -10,11 +10,6 @@ export type ActorKind = "human" | "agent";
 export type ActorRole = "reader" | "maintainer" | "auditor" | "anonymous";
 export type ApprovalDecision = "approved" | "rejected";
 
-/**
- * Content categories for portal navigation (栏目).
- * These are the primary navigation taxonomy; channels are demoted to filters/badges.
- */
-export type ContentCategory = "info-assassin" | "mira-radio" | "uncategorized";
 /** A public-boundary decision recorded in the approval trail. `withdrawn` ends
  * public reachability of an already approved surface; it is not an approval. */
 export type PublicDecision = ApprovalDecision | "withdrawn";
@@ -55,12 +50,8 @@ export interface AgentSurface {
   createdAt: string;
   updatedAt: string;
   /**
-   * Content category for portal navigation (栏目).
-   * Defaults to "uncategorized" when not specified.
-   */
-  category?: ContentCategory;
-  /**
-   * Tags for filtering and search. Distinct from categories.
+   * Tags: the only classification below the portal's 发现 / 推荐 split.
+   * Normalized to trimmed lowercase and de-duplicated on write.
    */
   tags?: string[];
   /**
@@ -164,12 +155,7 @@ export interface RegisterInput {
   entry: EntryRef;
   maintainers: MaintainerRef[];
   /**
-   * Content category for portal navigation (栏目).
-   * Defaults to "uncategorized" when not specified.
-   */
-  category?: ContentCategory;
-  /**
-   * Tags for filtering and search.
+   * Tags: the only classification below the portal's 发现 / 推荐 split.
    */
   tags?: string[];
   /**
@@ -191,11 +177,7 @@ export interface UpdateInput {
   version?: string;
   entry?: EntryRef;
   /**
-   * Content category for portal navigation (栏目).
-   */
-  category?: ContentCategory;
-  /**
-   * Tags for filtering and search.
+   * Tags: the only classification below the portal's 发现 / 推荐 split.
    */
   tags?: string[];
   /**

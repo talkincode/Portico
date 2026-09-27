@@ -1101,7 +1101,8 @@ Deno.test("published pages and consoles ship no script", async () => {
     const [path, actor] of [
       ["/public", undefined],
       ["/public/s/public-one", undefined],
-      ["/public/t/cli", undefined],
+      ["/public/picks", undefined],
+      ["/public?tag=web", undefined],
       ["/internal", maintainer],
       ["/internal/c", maintainer],
       ["/internal/audit", auditor],
@@ -1246,32 +1247,45 @@ Deno.test("an unknown theme name degrades to the surface default instead of fail
   );
 });
 
-Deno.test("the public channel topic lists only that channel's approved surfaces", async () => {
+Deno.test("发现 filters by tag and shows only that tag's approved surfaces", async () => {
   const context = await seeded();
-  await publishPublic(context, surface({ id: "cli-one", name: "Cli One", channels: ["cli"] }));
+  await publishPublic(
+    context,
+    surface({ id: "cli-one", name: "Cli One", channels: ["cli"], tags: ["工具"] }),
+  );
   await publishPublic(
     context,
     surface({
       id: "mcp-one",
       name: "Mcp One",
       channels: ["mcp"],
+      tags: ["情报"],
       entry: { kind: "mcp_endpoint", value: "https://mcp.example.test/servers/one" },
     }),
   );
+  // A tag only filters what is already on the public face.
+  await context.catalog.register(maintainer, surface({ id: "draft-tagged", tags: ["工具"] }));
 
-  const cli = await get(context, "/public/t/cli");
-  assertEquals(cli.status, 200);
-  assert(cli.html.includes("Cli One"), "the CLI topic must list the CLI surface");
-  assert(!cli.html.includes("Mcp One"), "the CLI topic must not list an MCP surface");
+  const tagged = await get(context, "/public?tag=" + encodeURIComponent("工具"));
+  assertEquals(tagged.status, 200);
+  assert(tagged.html.includes("Cli One"), "the tagged surface must be listed");
+  assert(!tagged.html.includes("Mcp One"), "an untagged surface must not be listed");
+  assert(!tagged.html.includes("draft-tagged"), "a draft with the same tag must not be listed");
 
-  const mcp = await get(context, "/public/t/mcp");
-  assert(mcp.html.includes("Mcp One"));
-  assert(!mcp.html.includes("Cli One"));
+  // Tags are matched the way they are stored: trimmed, lowercase.
+  const upper = await get(context, "/public?tag=" + encodeURIComponent("工具"));
+  assertEquals(upper.status, 200);
 
-  assertEquals((await get(context, "/public/t/nope")).status, 404);
+  const other = await get(context, "/public?tag=情报");
+  assert(other.html.includes("Mcp One"));
+  assert(!other.html.includes("Cli One"));
+
+  // The rail links every public tag into the filter.
+  const index = await get(context, "/public");
+  assert(index.html.includes('href="/public?tag=' + encodeURIComponent("工具") + '"'));
 });
 
-Deno.test("public and internal planes link back to magazine discovery without leaking /internal on the public page", async () => {
+Deno.test("the planes link to each other read-only without leaking /internal to anonymous", async () => {
   const context = await seeded();
   await publishPublic(
     context,
@@ -1286,8 +1300,8 @@ Deno.test("public and internal planes link back to magazine discovery without le
 
   const anonPublic = await get(context, "/public");
   assertEquals(anonPublic.status, 200);
-  assert(anonPublic.html.includes('href="/"'), "public index must reach magazine discovery");
   assert(anonPublic.html.includes(">发现</a>"));
+  assert(anonPublic.html.includes('href="/public/picks"'), "the nav offers 推荐");
   assert(
     !anonPublic.html.includes('href="/internal"'),
     "the public surface must not advertise the internal workbench",
@@ -1296,18 +1310,18 @@ Deno.test("public and internal planes link back to magazine discovery without le
   const article = await get(context, "/public/s/docs-web");
   assertEquals(article.status, 200);
   assert(
-    article.html.includes('href="/?id=docs-web"'),
-    "an approved public article points at the magazine workbench",
+    article.html.includes('href="/public"'),
+    "an approved article keeps its breadcrumb to 发现",
   );
   assert(!article.html.includes('href="/internal"'));
 
   const readerInternal = await get(context, "/internal", reader);
   assertEquals(readerInternal.status, 200);
   assert(
-    readerInternal.html.includes('href="/"'),
-    "internal console must reach magazine discovery",
+    readerInternal.html.includes('href="/public"'),
+    "the workbench reaches the public plane read-only",
   );
-  assert(readerInternal.html.includes(">发现</a>"));
+  assert(readerInternal.html.includes(">公开面</a>"));
 
   const anonInternalResponse = await handlePortalRequest(
     new Request("http://portico.local/internal"),

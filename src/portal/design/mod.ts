@@ -3,7 +3,7 @@
  *
  * Two surfaces share one token vocabulary:
  *   `internal` — 内部笔记台, the operator console at `/internal`
- *   `public`   — 公开发布, the editorial page at `/public`
+ *   `public`   — 公开发布, the editorial page at `/public` (`/` redirects there)
  *
  * See `docs/ui-spec.md` for the full specification. Nothing in this module
  * accepts author-supplied styling: maintenance can change catalog records, not
@@ -51,7 +51,6 @@ export { PUBLIC_CSS } from "./public.ts";
 
 export {
   boundaryNote,
-  byChannel,
   channelChip,
   channelChips,
   channelDescription,
@@ -69,6 +68,8 @@ export {
   readingMinutes,
   relativeAge,
   stateChip,
+  tagChips,
+  tagHref,
 } from "./components.ts";
 
 export {
@@ -91,11 +92,14 @@ export {
 } from "./views/internal.ts";
 
 export {
+  bodyParagraphs,
   type PublicArticleInput,
   type PublicContext,
+  type PublicFilter,
   type PublicIndexInput,
-  type PublicTopicInput,
+  type PublicPicksInput,
   renderPublicArticle,
   renderPublicIndex,
-  renderPublicTopic,
+  renderPublicNotFound,
+  renderPublicPicks,
 } from "./views/public.ts";

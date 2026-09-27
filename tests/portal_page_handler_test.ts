@@ -83,39 +83,53 @@ Deno.test("portal /api/page returns the same resolved card a reader would see", 
   assertEquals(data.components[0].name, "Docs Writer");
 });
 
-Deno.test("composed HTML shows the reader the card and hides it from anonymous", async () => {
+/** Register, submit, and have the independent auditor approve. */
+async function approvedCli(
+  context: Awaited<ReturnType<typeof seededContext>>,
+  input: RegisterInput,
+) {
+  await context.catalog.register(maintainer, input);
+  await context.catalog.publish(maintainer, { id: input.id, visibility: "public" });
+  await context.catalog.approve(roster.auditor, { id: input.id });
+}
+
+Deno.test("推荐 HTML shows an approved card to every role and an internal card to none", async () => {
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
+  await approvedCli(context, { ...internalCli(), id: "docs-public", name: "Docs Public" });
   await context.pages.set(maintainer, {
-    components: [{ kind: "catalog_card", id: "docs-writer" }],
+    components: [
+      { kind: "catalog_card", id: "docs-writer" },
+      { kind: "catalog_card", id: "docs-public" },
+    ],
   });
 
-  const readerPage = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
-    context,
-  );
-  const readerHtml = await readerPage.text();
-  assertEquals(readerPage.status, 200);
-  assert(readerHtml.includes("Docs Writer"));
-  assert(readerHtml.includes('data-kind="catalog_card"'));
-
-  const anonPage = await handlePortalRequest(new Request("http://portico.local/"), context);
-  const anonHtml = await anonPage.text();
-  assert(!anonHtml.includes("Docs Writer"), "anonymous HTML must not leak internal names");
-  assert(!anonHtml.includes("docs-writer"));
+  for (const headers of [actorHeaders(reader), {}]) {
+    const page = await handlePortalRequest(
+      new Request("http://portico.local/public/picks", { headers }),
+      context,
+    );
+    const html = await page.text();
+    assertEquals(page.status, 200);
+    assert(html.includes("Docs Public"), "an approved pick is a public pick");
+    assert(html.includes('href="/public/s/docs-public"'));
+    // The page is maintainer-curated, but curation is not approval: an
+    // internal record placed on the page stays off the public plane, even
+    // for a reader who can see it elsewhere.
+    assert(!html.includes("Docs Writer"), "an internal pick must not reach the public plane");
+    assert(!html.includes("docs-writer"));
+  }
 });
 
-Deno.test("composed HTML escapes names so the component box is not a CMS", async () => {
+Deno.test("推荐 HTML escapes names so the component box is not a CMS", async () => {
   const context = await seededContext();
-  const input = internalCli();
-  input.name = "<script>alert(1)</script>";
-  await context.catalog.register(maintainer, input);
+  await approvedCli(context, { ...internalCli(), name: "<script>alert(1)</script>" });
   await context.pages.set(maintainer, {
     components: [{ kind: "catalog_card", id: "docs-writer" }],
   });
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/public/picks"),
     context,
   );
   const html = await page.text();

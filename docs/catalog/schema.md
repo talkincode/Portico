@@ -24,8 +24,7 @@
   "maintainers": [                  // 必填，非空
     { "id": "agent:docs-bot", "kind": "agent" }   // kind: "agent" | "human"
   ],
-  "category": "info-assassin",      // 可选："info-assassin" | "mira-radio" | "uncategorized"
-  "tags": ["web", "Agent"],         // 可选，字符串数组
+  "tags": ["web", "Agent"],         // 可选，字符串数组；发布面「发现 / 推荐」之下只按标签细分
   "mediaUrl": "https://cdn.example.internal/brief.mp3"  // 可选，绝对 http(s) 音视频地址
 }
 ```

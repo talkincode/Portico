@@ -141,6 +141,15 @@ Deno.test("theme resolution honours an explicit preset, then the OS hint, then t
     mode: "dark",
     preset: "portico-editorial-dark",
   });
+  // A bare mode names no tone: it means "this page, in that mode", so the
+  // magazine's `?theme=dark` links keep working after they forward here.
+  assertEquals(resolveTheme("public", { requested: "dark" }), {
+    tone: "public",
+    mode: "dark",
+    preset: "portico-editorial-dark",
+  });
+  assertEquals(resolveTheme("internal", { requested: "dark" }).preset, "portico-internal-dark");
+  assertEquals(resolveTheme("public", { requested: "light" }).preset, "portico-editorial-light");
   assertEquals(resolveTheme("public", {}).preset, "portico-editorial-light");
   assertEquals(resolveTheme("internal", { prefersDark: true }).preset, "portico-internal-dark");
 });

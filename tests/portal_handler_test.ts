@@ -184,17 +184,19 @@ Deno.test("HTML discovery shows the reader the same name and hides it from anony
   const context = await seededContext();
   await context.catalog.register(maintainer, internalCli());
 
+  // A reader reads internal records in the workbench; the public plane is
+  // approved-only for everyone, so it is where anonymous must see nothing.
   const readerPage = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/internal?id=docs-writer", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(readerPage.status, 200);
   assertEquals(readerPage.headers.get("content-type"), "text/html; charset=utf-8");
   const readerHtml = await readerPage.text();
   assert(readerHtml.includes("Docs Writer"), "reader HTML should include the surface name");
-  assert(readerHtml.includes("internal"), "reader HTML should include governance state");
+  assert(readerHtml.includes("state-internal"), "reader HTML should include governance state");
 
-  const anonPage = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const anonPage = await handlePortalRequest(new Request("http://portico.local/public"), context);
   const anonHtml = await anonPage.text();
   assertEquals(anonPage.status, 200);
   assert(!anonHtml.includes("Docs Writer"), "anonymous HTML must not leak internal names");
@@ -207,7 +209,7 @@ Deno.test("HTML escapes surface names so portal pages are not a CMS", async () =
   await context.catalog.register(maintainer, input);
 
   const page = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/internal?id=docs-writer", { headers: actorHeaders(reader) }),
     context,
   );
   const html = await page.text();
@@ -350,13 +352,16 @@ Deno.test("reader sees the same web href on portal that catalog registered", asy
   assertEquals(record.connect.mode, "direct");
 
   const html = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/internal?id=docs-web", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(html.status, 200);
   const page = await html.text();
   assert(page.includes("Docs Web"));
-  assert(page.includes('href="https://docs.example.test/portals/docs-writer"'));
+  // Same href as the catalog, shown as text: an internal record never hands
+  // out a clickable target, even to a reader who may see it.
+  assert(page.includes("https://docs.example.test/portals/docs-writer"));
+  assert(!page.includes('href="https://docs.example.test/portals/docs-writer"'));
 });
 
 Deno.test("portal HTML escapes web hrefs so entries cannot inject markup", async () => {
@@ -369,7 +374,7 @@ Deno.test("portal HTML escapes web hrefs so entries cannot inject markup", async
   await context.catalog.register(maintainer, input);
 
   const html = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/internal?id=docs-web", { headers: actorHeaders(reader) }),
     context,
   );
   const page = await html.text();
@@ -395,7 +400,7 @@ Deno.test("anonymous cannot see an internal web href on the portal", async () =>
   assertEquals(described.body.ok, false);
   assertEquals(described.body.error?.code, "NOT_FOUND");
 
-  const html = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const html = await handlePortalRequest(new Request("http://portico.local/public"), context);
   const page = await html.text();
   assert(!page.includes("Docs Web"));
   assert(!page.includes("https://docs.example.test/portals/docs-writer"));
@@ -435,7 +440,7 @@ Deno.test("reader sees the same CLI package on portal that catalog registered", 
   assertEquals(record.connect.mode, "coordinate");
 
   const html = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/internal?id=docs-writer", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(html.status, 200);
@@ -462,7 +467,7 @@ Deno.test("anonymous cannot see an internal CLI package on the portal", async ()
   assertEquals(described.body.ok, false);
   assertEquals(described.body.error?.code, "NOT_FOUND");
 
-  const html = await handlePortalRequest(new Request("http://portico.local/"), context);
+  const html = await handlePortalRequest(new Request("http://portico.local/public"), context);
   const page = await html.text();
   assert(!page.includes("Docs Writer"));
   assert(!page.includes("jsr:@example/docs-writer"));
@@ -1482,17 +1487,17 @@ Deno.test("portal /logout clears session and redirects to home", async () => {
     context,
   );
   assertEquals(response.status, 303);
-  assertEquals(response.headers.get("location"), "/");
+  assertEquals(response.headers.get("location"), "/public");
   const setCookie = response.headers.get("set-cookie");
   assert(setCookie?.includes("portico_session=;"), "logout should clear session cookie");
   assert(setCookie?.includes("Max-Age=0"), "logout should expire cookie immediately");
 });
 
-Deno.test("portal magazine page shows login link for anonymous", async () => {
+Deno.test("public page shows login link for anonymous", async () => {
   const context = await seededContext();
 
   const response = await handlePortalRequest(
-    new Request("http://portico.local/"),
+    new Request("http://portico.local/public"),
     context,
   );
   assertEquals(response.status, 200);
@@ -1501,11 +1506,11 @@ Deno.test("portal magazine page shows login link for anonymous", async () => {
   assert(!html.includes("登出"), "anonymous user should not see logout button");
 });
 
-Deno.test("portal magazine page shows whoami and logout for signed-in user", async () => {
+Deno.test("public page shows whoami and logout for signed-in user", async () => {
   const context = await seededContext();
 
   const response = await handlePortalRequest(
-    new Request("http://portico.local/", { headers: actorHeaders(reader) }),
+    new Request("http://portico.local/public", { headers: actorHeaders(reader) }),
     context,
   );
   assertEquals(response.status, 200);

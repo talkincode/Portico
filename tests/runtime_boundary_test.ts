@@ -94,16 +94,24 @@ Deno.test("the scoped grants the product actually uses are not findings", () => 
 });
 
 Deno.test("a rendered command for a registered package is not a grant", () => {
-  // `src/portal/html.ts` prints the command a reader may run for a *registered
-  // third-party* package. Portico grants nothing and executes nothing there, so
-  // the permission rule does not apply to rendered text; the profiles this
-  // repository really applies are pinned by `tests/deploy_contract_test.ts`.
+  // The portal renders a *registered third-party* package as inert text
+  // (`src/portal/design/views/public.ts`), and a page may someday print the
+  // command a reader runs themselves. Portico grants nothing and executes
+  // nothing there, so the permission rule must not treat rendered text as a
+  // grant; the profiles this repository really applies are pinned by
+  // `tests/deploy_contract_test.ts`.
   assertEquals(
-    scanRuntimeText("src/portal/html.ts", "return escapeHtml(`deno run -A ${pkg}`);"),
+    scanRuntimeText(
+      "src/portal/design/views/public.ts",
+      "return escapeHtml(`deno run -A ${pkg}`);",
+    ),
     [],
   );
   assertEquals(
-    scanRuntimeText("src/portal/html.ts", 'usage: "deno run --allow-all jsr:@scope/tool",'),
+    scanRuntimeText(
+      "src/portal/design/views/public.ts",
+      'usage: "deno run --allow-all jsr:@scope/tool",',
+    ),
     [],
   );
 });
@@ -135,14 +143,20 @@ Deno.test("spawning a Node or Bun executable is a finding", () => {
 });
 
 Deno.test("naming a package coordinate for a reader is not spawning an executable", () => {
-  // `src/portal/html.ts` renders `npm:` coordinates as the command a reader may
-  // run themselves; Portico never executes it. The rule must stay on the spawn
-  // call, not on the word.
+  // A page that renders an `npm:` coordinate as the command a reader may run
+  // themselves (`src/portal/design/views/public.ts`) never executes it. The
+  // rule must stay on the spawn call, not on the word.
   assertEquals(
-    scanRuntimeText("src/portal/html.ts", "return escapeHtml(`npx ${pkg.slice(4)}`);"),
+    scanRuntimeText(
+      "src/portal/design/views/public.ts",
+      "return escapeHtml(`npx ${pkg.slice(4)}`);",
+    ),
     [],
   );
-  assertEquals(scanRuntimeText("src/portal/html.ts", 'value: "npx -y @example/docs-writer",'), []);
+  assertEquals(
+    scanRuntimeText("src/portal/design/views/public.ts", 'value: "npx -y @example/docs-writer",'),
+    [],
+  );
 });
 
 Deno.test("a CI job that sets up Node or Bun is a finding", () => {

@@ -17,7 +17,6 @@ import type {
   CatalogChangeRecord,
   Channel,
   CliPackageInfo,
-  ContentCategory,
   EntryKind,
   EntryRef,
   GovernanceState,
@@ -43,7 +42,6 @@ const ALLOWED_REGISTER_KEYS = new Set([
   "visibility",
   "entry",
   "maintainers",
-  "category",
   "tags",
   "mediaUrl",
 ]);
@@ -55,7 +53,6 @@ const ALLOWED_UPDATE_KEYS = new Set([
   "channels",
   "version",
   "entry",
-  "category",
   "tags",
   "mediaUrl",
 ]);
@@ -65,7 +62,6 @@ const UPDATE_MUTABLE_KEYS = new Set([
   "channels",
   "version",
   "entry",
-  "category",
   "tags",
   "mediaUrl",
 ]);
@@ -206,7 +202,6 @@ const ENTRY_KINDS = new Set<EntryKind>(["url", "package", "mcp_endpoint"]);
 const VISIBILITIES = new Set<Visibility>(["internal", "public"]);
 const ACTOR_KINDS = new Set<ActorKind>(["human", "agent"]);
 const ACTOR_ROLES = new Set<ActorRole>(["reader", "maintainer", "auditor", "anonymous"]);
-const CATEGORIES = new Set<ContentCategory>(["info-assassin", "mira-radio", "uncategorized"]);
 const MAX_TAGS = 20;
 const MAX_TAG_LENGTH = 50;
 
@@ -1281,10 +1276,7 @@ function parseUpdateInput(input: UpdateInput): { id: string; fields: Partial<Upd
       );
     }
     if (!ALLOWED_UPDATE_KEYS.has(key)) {
-      throw new CatalogError(
-        ErrorCode.INVALID_INPUT,
-        `unknown or forbidden field '${key}'`,
-      );
+      throw new CatalogError(ErrorCode.INVALID_INPUT, unknownFieldMessage(key));
     }
   }
 
@@ -1299,7 +1291,7 @@ function parseUpdateInput(input: UpdateInput): { id: string; fields: Partial<Upd
   if (mutableKeys.length === 0) {
     throw new CatalogError(
       ErrorCode.INVALID_INPUT,
-      "update requires at least one of: name, description, channels, version, entry, category, tags, mediaUrl",
+      "update requires at least one of: name, description, channels, version, entry, tags, mediaUrl",
     );
   }
 
@@ -1317,7 +1309,6 @@ function parseUpdateInput(input: UpdateInput): { id: string; fields: Partial<Upd
   }
   if ("channels" in input) fields.channels = parseChannels(input.channels);
   if ("entry" in input) fields.entry = parseEntry(input.entry);
-  if ("category" in input) fields.category = parseCategory(input.category);
   if ("tags" in input) fields.tags = parseTags(input.tags);
   if ("mediaUrl" in input) fields.mediaUrl = parseMediaUrl(input.mediaUrl);
 
@@ -1338,10 +1329,7 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
       );
     }
     if (!ALLOWED_REGISTER_KEYS.has(key)) {
-      throw new CatalogError(
-        ErrorCode.INVALID_INPUT,
-        `unknown or forbidden field '${key}'`,
-      );
+      throw new CatalogError(ErrorCode.INVALID_INPUT, unknownFieldMessage(key));
     }
   }
 
@@ -1368,7 +1356,6 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
   assertChannelEntry(channels, entry);
   assertWebEntryNotSelfPage(input.id, entry);
   const maintainers = parseMaintainers(input.maintainers);
-  const category = parseCategory(input.category);
   const tags = parseTags(input.tags);
   const mediaUrl = parseMediaUrl(input.mediaUrl);
 
@@ -1381,7 +1368,6 @@ function parseRegisterInput(input: RegisterInput): RegisterInput {
     visibility: input.visibility,
     entry,
     maintainers,
-    ...(category ? { category } : {}),
     ...(tags ? { tags } : {}),
     ...(mediaUrl ? { mediaUrl } : {}),
   };
@@ -1695,18 +1681,19 @@ function parseMaintainers(value: unknown): MaintainerRef[] {
   });
 }
 
-function parseCategory(value: unknown): ContentCategory | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") {
-    throw new CatalogError(ErrorCode.INVALID_INPUT, "category must be a string");
-  }
-  if (!CATEGORIES.has(value as ContentCategory)) {
-    throw new CatalogError(
-      ErrorCode.INVALID_INPUT,
-      `category must be one of: ${[...CATEGORIES].join(", ")}`,
-    );
-  }
-  return value as ContentCategory;
+/**
+ * Retired record fields, each with what replaced it. A publisher still sending
+ * one gets told where the meaning moved instead of a bare "unknown field".
+ */
+const RETIRED_FIELDS: Record<string, string> = {
+  category: "express finer classification with tags",
+};
+
+function unknownFieldMessage(key: string): string {
+  const replacement = Object.hasOwn(RETIRED_FIELDS, key) ? RETIRED_FIELDS[key] : undefined;
+  return replacement
+    ? `field '${key}' was removed; ${replacement}`
+    : `unknown or forbidden field '${key}'`;
 }
 
 function parseTags(value: unknown): string[] | undefined {

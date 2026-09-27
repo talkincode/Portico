@@ -94,7 +94,8 @@ Deno.test("E2E: CLI register is visible on Portal to a reader and hidden from an
     assertEquals(data[0].name, cliBody.data[0].name);
     assertEquals(data[0].governanceState, "internal");
 
-    const html = await fetch(`${base}/`, { headers: readerHeaders() });
+    // Internal records are read on the workbench; `/` is retired and forwards.
+    const html = await fetch(`${base}/internal?id=docs-writer`, { headers: readerHeaders() });
     assertEquals(html.status, 200);
     const page = await html.text();
     assert(page.includes("Docs Writer"), "portal HTML should match the CLI record name");
@@ -102,7 +103,10 @@ Deno.test("E2E: CLI register is visible on Portal to a reader and hidden from an
     const anon = await fetchJson(`${base}/api/catalog`);
     assertEquals(anon.status, 200);
     assertEquals(anon.body.data, []);
-    const anonPage = await (await fetch(`${base}/`)).text();
+    const anonRoot = await fetch(`${base}/`, { redirect: "manual" });
+    assertEquals(anonRoot.status, 302, "the retired magazine address must forward");
+    assertEquals(anonRoot.headers.get("location"), "/public");
+    const anonPage = await (await fetch(`${base}/public`)).text();
     assert(!anonPage.includes("Docs Writer"), "anonymous portal must not leak internal names");
   });
 });

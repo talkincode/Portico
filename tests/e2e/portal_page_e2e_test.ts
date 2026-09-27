@@ -130,16 +130,21 @@ Deno.test("E2E: CLI page set is the same card on Portal for a reader, hidden fro
     assertEquals(data.components[0].id, cliBody.data.components[0].id);
     assertEquals(data.components[0].name, cliBody.data.components[0].name);
 
-    const html = await fetch(`${base}/`, { headers: readerHeaders() });
+    // The reader resolves the card through /api/page (asserted above), but
+    // 推荐 is a public plane: curation is not approval, so an internal card
+    // stays off it for every role.
+    const html = await fetch(`${base}/public/picks`, { headers: readerHeaders() });
     assertEquals(html.status, 200);
     const text = await html.text();
-    assert(text.includes("Docs Writer"));
-    assert(text.includes('data-kind="catalog_card"'));
+    assert(!text.includes("Docs Writer"));
 
     const anon = await fetchJson(`${base}/api/page`);
     const anonData = anon.body.data as { components: Array<{ kind: string }> };
     assertEquals(anonData.components.some((item) => item.kind === "catalog_card"), false);
-    const anonHtml = await (await fetch(`${base}/`)).text();
+    const anonRoot = await fetch(`${base}/`, { redirect: "manual" });
+    assertEquals(anonRoot.status, 302, "the retired magazine address must forward");
+    assertEquals(anonRoot.headers.get("location"), "/public");
+    const anonHtml = await (await fetch(`${base}/public/picks`)).text();
     assert(!anonHtml.includes("Docs Writer"), "anonymous portal must not leak internal names");
   });
 });
