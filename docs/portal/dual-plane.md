@@ -10,27 +10,28 @@ Portico 的 Web 呈现分为面向人与面向机器两个截然不同的信任�
 
 Portico 在视图路由层实现了绝对的物理双平面隔离：
 
-```text
-                                  HTTP Request
-                                       │
-                      ┌────────────────┴────────────────┐
-                      ▼                                 ▼
-             /internal/*                               /public/*
-       [ 内部笔记台平面 (Internal) ]              [ 公开发布平面 (Public) ]
-                      │                                 │
-           校验有效会话 (Session)?                      无需任何会话 (完全匿名)
-           ├── 否 ──► 303 到 /login?next=<原路径>        │
-           │          (页面本身不泄漏内容)              │
-           └── 是 ──► 渲染内部视图                      │
-                      - draft 状态草稿                  │
-                      - internal 内部服务               │
-                      - pending_public 候选             │
-                      - 真实维护者主体 ID               ▼
-                      - 内部端点地址              仅读取 approved_public 服务
-                                                  - 剔除内部端点
-                                                  - 剔除维护者敏感信息
-                                                  - 渲染公开展现卡片
-```
+<figure class="doc-fig">
+<figcaption>同一条 HTTP 请求按路径进入两个平面，公开面不读取未批准记录。</figcaption>
+<div class="doc-board doc-board--2">
+<article class="doc-card">
+<h4><code>/internal/*</code></h4>
+<p class="doc-kicker">内部笔记台 · 必须有会话</p>
+<ul>
+<li>无有效会话：303 到 <code>/login?next=原路径</code>，页面不泄漏内容</li>
+<li>有会话：草稿、<code>internal</code>、<code>pending_public</code>、维护者主体 ID、内部端点</li>
+</ul>
+</article>
+<article class="doc-card doc-card--focus">
+<h4><code>/public/*</code></h4>
+<p class="doc-kicker">公开发布 · 匿名可读</p>
+<ul>
+<li>只读取 <code>approved_public</code></li>
+<li>剔除内部端点与维护者敏感信息</li>
+<li>渲染公开展现，不执行 Agent</li>
+</ul>
+</article>
+</div>
+</figure>
 
 ---
 

@@ -10,32 +10,44 @@ Portico 拒绝可被任意篡改或静默清空的传统日志。系统的核心
 
 系统的全局审计时间线（Timeline）由四类分散存储的底层记录归并排序生成：
 
-```text
-┌─────────────────────────────────────┐      ┌──────────────────────────────┐
-│           catalog.json              │      │       identities.json         │
-│  - records：登记本身（可变状态）     │      │  - identities：名册（可变状态）│
-│  - changes：服务创建 / 更新 /        │      │  - grants：身份授予            │
-│    内部发布 / 公开候选（追加写）     │      │  - revokes：身份注销           │
-│  - approvals：公开批准 / 驳回 /      │      │  - credentialRevokes：凭证作废 │
-│    撤回（追加写）                    │      │                               │
-└──────────────┬──────────────────────┘      └───────────────┬──────────────┘
-               │                                             │
-               └──────────────────┬──────────────────────────┘
-                                  ▼
-               ┌────────────────────────────────────────────┐
-               │      聚合审计时间线 (Audit Timeline)        │
-               │   - 按 at 升序、再按 id 排序                │
-               │   - 抹平不同存储源字段差异                  │
-               └──────────────────┬─────────────────────────┘
-                                  ▲
-               ┌──────────────────┴─────────────────────────┐
-               │                                            │
-┌──────────────┴──────────────────────┐      ┌──────────────┴──────────────┐
-│         gateway-audit.json          │      │       conclusions.json      │
-│  - records：MCP Gateway 准入授权与   │      │  - conclusions：人类审计者   │
-│    拒绝的流水（追加写）              │      │    的判定（追加写，独立存储）│
-└─────────────────────────────────────┘      └─────────────────────────────┘
-```
+<figure class="doc-fig">
+<figcaption>四份文件各自追加、各自封条，再归并成一条时间线。</figcaption>
+<div class="doc-board doc-board--2">
+<article class="doc-card">
+<h4><code>catalog.json</code></h4>
+<ul>
+<li><strong>records</strong>：登记本身（可变状态）</li>
+<li><strong>changes</strong>：创建、更新、内部发布、公开候选（追加写）</li>
+<li><strong>approvals</strong>：公开批准、驳回、撤回（追加写）</li>
+</ul>
+</article>
+<article class="doc-card">
+<h4><code>identities.json</code></h4>
+<ul>
+<li><strong>identities</strong>：名册（可变状态）</li>
+<li><strong>grants</strong>：身份授予</li>
+<li><strong>revokes</strong>：身份注销</li>
+<li><strong>credentialRevokes</strong>：凭证作废</li>
+</ul>
+</article>
+<article class="doc-card">
+<h4><code>gateway-audit.json</code></h4>
+<p>MCP Gateway 准入授权与拒绝的流水（追加写）。</p>
+</article>
+<article class="doc-card">
+<h4><code>conclusions.json</code></h4>
+<p>人类审计者的判定（追加写，独立存储）。</p>
+</article>
+</div>
+<p class="doc-join">汇入</p>
+<article class="doc-card doc-card--focus">
+<h4>聚合审计时间线</h4>
+<ul>
+<li>按 <code>at</code> 升序，再按 <code>id</code> 排序</li>
+<li>抹平不同存储源的字段差异</li>
+</ul>
+</article>
+</figure>
 
 四个支柱各占一个文件，各自带一条独立的封条链（见下文），因此不存在"把 A 文件的封条搬到 B 文件"这种伪造路径。
 

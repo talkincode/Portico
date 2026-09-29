@@ -1,6 +1,6 @@
 # 快速上手指南
 
-本指南将带您在 5 分钟内完成 Portico 的起动、首位审计者初始化、维护者授权、服务登记与公开审批流程。
+本指南将带您在 5 分钟内完成 Portico 的启动、首位审计者初始化、维护者授权、服务登记与公开审批流程。
 
 ---
 
@@ -18,18 +18,27 @@ deno --version
 
 ---
 
-## 2. 一键起动整套系统
+## 2. 一键启动整套系统
 
-Portico 内置 supervisor 管理脚本。只需指定数据存储目录，即可同时起动 Portal、Gateway、MCP 与 Review 服务：
+Portico 内置 supervisor 管理脚本。只需指定数据存储目录，即可同时启动 Portal、Gateway、MCP 与 Review 服务：
 
 ```bash
 PORTICO_DATA_DIR=./data deno task up
 ```
 
-起动成功后，标准输出将打印包含四个服务 URL 的 JSON：
+启动成功后，标准输出将打印包含四个服务 URL 的 JSON：
 
 ```json
-{"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"},"review":{"url":"http://127.0.0.1:8791"}}}
+{
+  "ok": true,
+  "data": {
+    "dataDir": "./data",
+    "portal": { "url": "http://127.0.0.1:8788" },
+    "gateway": { "url": "http://127.0.0.1:8789" },
+    "mcp": { "url": "http://127.0.0.1:8790" },
+    "review": { "url": "http://127.0.0.1:8791" }
+  }
+}
 ```
 
 > [!NOTE]

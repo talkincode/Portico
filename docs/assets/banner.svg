@@ -98,38 +98,23 @@
 
   <text x="282" y="142"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
-    font-size="22" font-weight="500" fill="#F1F5F9"
+    font-size="24" font-weight="600" fill="#F1F5F9"
     letter-spacing="1">Agent 的治理门户与准入网关</text>
 
   <text x="282" y="174"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
-    font-size="15" font-weight="400"
+    font-size="18" font-weight="500"
     fill="#94A3B8">Agent 在别处运行 · 在这里被发布、发现、授权与访问</text>
 
   <!-- Feature Pills / Badges -->
-  <g transform="translate(282, 204)">
-    <!-- Pill 1 -->
-    <rect x="0" y="0" width="102" height="28" rx="14" fill="#1E293B" stroke="#38BDF8"
-      stroke-width="1" />
-    <text x="51" y="18" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12"
-      font-weight="600" fill="#38BDF8" text-anchor="middle">Web Portal</text>
-
-    <!-- Pill 2 -->
-    <rect x="114" y="0" width="76" height="28" rx="14" fill="#1E293B" stroke="#34D399"
-      stroke-width="1" />
-    <text x="152" y="18" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12"
-      font-weight="600" fill="#34D399" text-anchor="middle">CLI 工具</text>
-
-    <!-- Pill 3 -->
-    <rect x="202" y="0" width="118" height="28" rx="14" fill="#1E293B" stroke="#FBBF24"
-      stroke-width="1" />
-    <text x="261" y="18" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12"
-      font-weight="600" fill="#FBBF24" text-anchor="middle">MCP Protocol</text>
-
-    <!-- Pill 4 -->
-    <rect x="332" y="0" width="128" height="28" rx="14" fill="#1E293B" stroke="#A78BFA"
-      stroke-width="1" />
-    <text x="396" y="18" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12"
-      font-weight="600" fill="#A78BFA" text-anchor="middle">Deno L0 默拒沙箱</text>
+  <g transform="translate(282, 198)">
+    <rect x="0" y="0" width="118" height="34" rx="17" fill="#1E293B" stroke="#38BDF8" stroke-width="1.5"/>
+    <text x="59" y="22" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans CJK SC', sans-serif" font-size="15" font-weight="600" fill="#38BDF8" text-anchor="middle">Web Portal</text>
+    <rect x="130" y="0" width="96" height="34" rx="17" fill="#1E293B" stroke="#34D399" stroke-width="1.5"/>
+    <text x="178" y="22" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans CJK SC', sans-serif" font-size="15" font-weight="600" fill="#34D399" text-anchor="middle">CLI 工具</text>
+    <rect x="238" y="0" width="148" height="34" rx="17" fill="#1E293B" stroke="#FBBF24" stroke-width="1.5"/>
+    <text x="312" y="22" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans CJK SC', sans-serif" font-size="15" font-weight="600" fill="#FBBF24" text-anchor="middle">MCP Protocol</text>
+    <rect x="398" y="0" width="168" height="34" rx="17" fill="#1E293B" stroke="#A78BFA" stroke-width="1.5"/>
+    <text x="482" y="22" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans CJK SC', sans-serif" font-size="15" font-weight="600" fill="#A78BFA" text-anchor="middle">Deno L0 默拒沙箱</text>
   </g>
 </svg>

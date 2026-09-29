@@ -17,20 +17,30 @@ Portico 专为解决上述痛点而设计。
 
 **Portico 像门廊，不像机房。**
 
-```text
-               ┌──────────────────────────────────────────────┐
-               │                   Portico                    │
-               │                                              │
- Humans (审计) │   Portal ────── 发现页 / 内部工作台 / 仪表盘   │
- Agents (维护) │   Registry ──── 目录、版本、可见性、引用      │
-       │       │   Approval ──── 跨越公开信任边界的审批       │
-       ▼       │   Access ────── 分级权限 + 会话防伪认证      │
-CLI / MCP / API│   Gateway ───── 鉴权、路由、不可篡改访问审计  │
-               └──────────────────────┬───────────────────────┘
-                                      │ 不运行 Agent
-                                      ▼
-                       外部 Agent / MCP / CLI 运行时
-```
+<figure class="doc-fig">
+<figcaption>人和 Agent 从 CLI / MCP / API 进入 Portico。Portico 登记与放行，不运行 Agent。</figcaption>
+<div class="doc-board doc-board--2">
+<article class="doc-card">
+<p class="doc-kicker">谁在用</p>
+<ul>
+<li>Humans — 审计</li>
+<li>Agents — 维护</li>
+<li>CLI / MCP / API — 同一本账</li>
+</ul>
+</article>
+<article class="doc-card doc-card--focus">
+<p class="doc-kicker">Portico 负责</p>
+<ul>
+<li>Portal — 发现页 / 内部工作台 / 仪表盘</li>
+<li>Registry — 目录、版本、可见性、引用</li>
+<li>Approval — 跨越公开信任边界的审批</li>
+<li>Access — 分级权限 + 会话防伪认证</li>
+<li>Gateway — 鉴权、路由、不可篡改访问审计</li>
+</ul>
+</article>
+</div>
+<p class="doc-join">不运行 Agent → 外部 Agent / MCP / CLI 运行时</p>
+</figure>
 
 Portico 明确拒绝成为 Agent 的执行循环（Execution Loop）或工作流编排器：
 1. **Agent 在别处运行**：Agent 可以运行在 Kubernetes、云函数、Docker 容器或开发者的本地机器上。

@@ -18,29 +18,16 @@ Portico 将服务的生命周期划分为 **5 种明确的状态**，状态流�
 
 ## 状态流转图解
 
-```text
-               ┌─────────────┐
-               │    draft    │ (草稿：维护者可见)
-               └──────┬──────┘
-                      │ publish internal
-                      ▼
-               ┌─────────────┐
-        ┌────► │  internal   │ (组织内部正式服务)
-        │      └──────┬──────┘
-        │             │ publish public
-        │             ▼
-        │      ┌──────────────┐
-        │      │pending_public│ (公开申请中：等待人类安全审计)
-        │      └───┬──────┬───┘
-withdraw│  approve │      │ reject
-(审计者)│  (审计者)│      │ (审计者)
-        │          ▼      ▼
-        │  ┌──────────────┐  ┌───────────┐
-        └──┤approved_public  │ rejected  │ (被驳回：可继续修改并重提)
-           └──────────────┘  └─────┬─────┘
-                                   │ update & publish public
-                                   └────────────► 回到 pending_public
-```
+| 从 | 动作 | 到 | 谁 |
+| --- | --- | --- | --- |
+| `draft` | `publish internal` | `internal` | 维护者 |
+| `internal` | `publish public` | `pending_public` | 维护者 |
+| `pending_public` | `approve` | `approved_public` | 人类审计者 |
+| `pending_public` | `reject` | `rejected` | 人类审计者 |
+| `approved_public` | `withdraw` | `internal` | 人类审计者 |
+| `rejected` | 修改后再次 `publish public` | `pending_public` | 维护者 |
+
+`rejected` 从未越过公开边界，维护者可以改完再提。`approved_public` 不能原地修改，必须先由审计者撤回。
 
 ---
 

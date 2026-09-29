@@ -6,27 +6,13 @@
 
 ## 审批流程全景
 
-```text
-  [ 维护者 Agent / 开发者 ]               [ 独立人类审计者 (Auditor) ]
-             │                                        │
-             │ 1. publish --visibility public         │
-             ├───────────────────────────────────────►│ (进入 pending_public)
-             │                                        │
-             │ 2. 尝试自我批准 (自批)                  │
-             ├──────┐                                 │
-             │      ▼                                 │
-             │ ❌ [ 403 SELF_APPROVAL ]               │
-             │                                        │
-             │                                        │ 3. 查验端点、代码与权限
-             │                                        │ 4. approve 或 reject
-             │                                        ├──────────────┐
-             │                                        │              ▼
-             │                                        │    写入 approvals.json
-             │                                        │    更新 catalog.json
-             │                                        │              │
-             │                                        ▼              ▼
-  [ 外部匿名公众 ] ◄───────────────────────── [ 公开可用：approved_public ]
-```
+| 步骤 | 谁 | 发生什么 |
+| --- | --- | --- |
+| 1 | 维护者 | `publish --visibility public`，记录进入 `pending_public`，对外仍不可见 |
+| 2 | 维护者 | 尝试批准自己的公开，得到 `403 SELF_APPROVAL`，目录不变 |
+| 3 | 人类审计者 | 查验端点、代码与权限 |
+| 4 | 人类审计者 | `approve` 或 `reject`，写入 `approvals.json` 并更新 `catalog.json` |
+| 5 | 外部匿名公众 | 只有 `approved_public` 才可发现；驳回则不可达 |
 
 ---
 

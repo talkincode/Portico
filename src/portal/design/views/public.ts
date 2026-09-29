@@ -189,7 +189,12 @@ export function renderPublicIndex(input: PublicIndexInput): string {
 
   let content: string;
   if (visible.length === 0) {
-    content = emptyState("公开发布尚无内容。", "内部记录必须经独立审批后才会出现在这里。");
+    content = `<div class="pub-well">
+        <div class="pub-main">
+          ${emptyState("公开发布尚无内容。", "内部记录必须经独立审批后才会出现在这里。")}
+        </div>
+        ${renderRail(visible, filter.tag, input.picks ?? [])}
+      </div>`;
   } else {
     const main = shown.length === 0
       ? emptyState("没有匹配的公开登记。", "换个关键词或标签，或清除筛选。")
