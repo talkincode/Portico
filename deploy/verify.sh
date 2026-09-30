@@ -62,7 +62,15 @@ expect_status() { # name url want [curl args...]
   if [ "$code" = "$want" ]; then ok "$name"; else bad "$name" "got HTTP $code, want $want"; fi
 }
 
-contains() { printf '%s' "$1" | grep -qF -- "$2"; }
+# `grep -q` exits at the first hit and closes the pipe. Under `pipefail` that
+# makes `printf` die with SIGPIPE (141) even though the needle was found, so a
+# real 发现 page — `<title>` sits in the first kilobyte — looks like a shell
+# that never rendered a title. 141 means the match happened; 1 means it did not.
+contains() {
+  local status=0
+  printf '%s' "$1" | grep -qF -- "$2" || status=$?
+  [ "$status" -eq 0 ] || [ "$status" -eq 141 ]
+}
 
 # --- which address each entrance serves on ---------------------------------
 
