@@ -1,22 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 640" role="img" aria-labelledby="topologyTitle topologyDesc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 640" role="img"
+  aria-labelledby="topologyTitle topologyDesc">
   <title id="topologyTitle">Portico 进程拓扑</title>
-  <desc id="topologyDesc">Supervisor 通过 fork/pipe 拉起 Portal、Gateway、MCP 三个进程。三者不共享内存，只通过本地信任根里的 JSON 文件协作。</desc>
+  <desc
+    id="topologyDesc">Supervisor 通过 fork/pipe 拉起 Portal、Gateway、MCP 三个进程。三者不共享内存，只通过本地信任根里的 JSON 文件协作。</desc>
   <style>
-    text { font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
-    .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace; }
+  text {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI",
+      sans-serif;
+  }
+  .mono {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  }
   </style>
-  <rect width="760" height="640" rx="14" fill="#faf8f5"/>
-  <rect x="200" y="18" width="360" height="58" rx="10" fill="#ffffff" stroke="#191713" stroke-width="1.5"/>
-  <rect x="200" y="18" width="6" height="58" rx="3" fill="#9e2b25"/>
-  <text x="380" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#191713">Supervisor</text>
+  <rect width="760" height="640" rx="14" fill="#faf8f5" />
+  <rect x="200" y="18" width="360" height="58" rx="10" fill="#ffffff" stroke="#191713"
+    stroke-width="1.5" />
+  <rect x="200" y="18" width="6" height="58" rx="3" fill="#9e2b25" />
+  <text x="380" y="42" text-anchor="middle" font-size="16" font-weight="700"
+    fill="#191713">Supervisor</text>
   <text x="380" y="62" text-anchor="middle" font-size="13" fill="#5c574e">deno task up</text>
-  <text x="380" y="104" text-anchor="middle" font-size="13" fill="#5c574e">fork / pipe · 任一退出则其余一起收走</text>
-  <path d="M380 76 V118 H130 V140 M380 118 H626 V140 M380 118 V140" fill="none" stroke="#191713" stroke-width="1.5"/>
-  <path d="M124 134 l6 8 l6 -8 M374 134 l6 8 l6 -8 M620 134 l6 8 l6 -8" fill="none" stroke="#191713" stroke-width="1.5" stroke-linejoin="round"/>
+  <text x="380" y="104" text-anchor="middle" font-size="13"
+    fill="#5c574e">fork / pipe · 任一退出则其余一起收走</text>
+  <path d="M380 76 V118 H130 V140 M380 118 H626 V140 M380 118 V140" fill="none" stroke="#191713"
+    stroke-width="1.5" />
+  <path d="M124 134 l6 8 l6 -8 M374 134 l6 8 l6 -8 M620 134 l6 8 l6 -8" fill="none" stroke="#191713"
+    stroke-width="1.5" stroke-linejoin="round" />
 
   <g id="portal">
-    <rect x="12" y="148" width="236" height="268" rx="10" fill="#ffffff" stroke="#191713" stroke-width="1.5"/>
-    <rect x="12" y="148" width="6" height="268" rx="3" fill="#9e2b25"/>
+    <rect x="12" y="148" width="236" height="268" rx="10" fill="#ffffff" stroke="#191713"
+      stroke-width="1.5" />
+    <rect x="12" y="148" width="6" height="268" rx="3" fill="#9e2b25" />
     <text x="32" y="178" font-size="16" font-weight="700" fill="#191713">Portal 进程</text>
     <text x="32" y="200" font-size="13" fill="#5c574e">HTTP :8788 · 只读</text>
     <text class="mono" x="32" y="232" font-size="13" fill="#191713">--allow-read</text>
@@ -27,8 +40,9 @@
     <text x="32" y="358" font-size="12" fill="#5c574e">src/portal/main.ts</text>
   </g>
   <g id="gateway">
-    <rect x="262" y="148" width="236" height="268" rx="10" fill="#ffffff" stroke="#191713" stroke-width="1.5"/>
-    <rect x="262" y="148" width="6" height="268" rx="3" fill="#9e2b25"/>
+    <rect x="262" y="148" width="236" height="268" rx="10" fill="#ffffff" stroke="#191713"
+      stroke-width="1.5" />
+    <rect x="262" y="148" width="6" height="268" rx="3" fill="#9e2b25" />
     <text x="282" y="178" font-size="16" font-weight="700" fill="#191713">Gateway 进程</text>
     <text x="282" y="200" font-size="13" fill="#5c574e">HTTP :8789 · 追加写</text>
     <text class="mono" x="282" y="232" font-size="13" fill="#191713">--allow-read</text>
@@ -40,27 +54,35 @@
     <text x="282" y="390" font-size="12" fill="#5c574e">src/gateway/main.ts</text>
   </g>
   <g id="mcp">
-    <rect x="512" y="148" width="236" height="268" rx="10" fill="#ffffff" stroke="#191713" stroke-width="1.5"/>
-    <rect x="512" y="148" width="6" height="268" rx="3" fill="#9e2b25"/>
+    <rect x="512" y="148" width="236" height="268" rx="10" fill="#ffffff" stroke="#191713"
+      stroke-width="1.5" />
+    <rect x="512" y="148" width="6" height="268" rx="3" fill="#9e2b25" />
     <text x="532" y="178" font-size="16" font-weight="700" fill="#191713">MCP 进程</text>
     <text x="532" y="200" font-size="13" fill="#5c574e">HTTP :8790 · 只读</text>
     <text class="mono" x="532" y="232" font-size="13" fill="#191713">--allow-read</text>
     <text class="mono" x="532" y="254" font-size="13" fill="#191713">--allow-env</text>
     <text class="mono" x="532" y="276" font-size="13" fill="#191713">--allow-net=127.0.0.1</text>
-    <text x="532" y="312" font-size="13" font-weight="700" fill="#9e2b25">严格无 --allow-write</text>
+    <text x="532" y="312" font-size="13" font-weight="700"
+      fill="#9e2b25">严格无 --allow-write</text>
     <text x="532" y="338" font-size="12" fill="#5c574e">JSON-RPC 发现投影</text>
     <text x="532" y="358" font-size="12" fill="#5c574e">src/mcp/main.ts</text>
   </g>
 
-  <text x="380" y="444" text-anchor="middle" font-size="13" fill="#5c574e">只通过文件协作 · 无共享内存</text>
-  <path d="M130 416 V462 H626 V416 M380 462 V478" fill="none" stroke="#191713" stroke-width="1.5"/>
-  <path d="M374 472 l6 8 l6 -8" fill="none" stroke="#191713" stroke-width="1.5" stroke-linejoin="round"/>
+  <text x="380" y="444" text-anchor="middle" font-size="13"
+    fill="#5c574e">只通过文件协作 · 无共享内存</text>
+  <path d="M130 416 V462 H626 V416 M380 462 V478" fill="none" stroke="#191713" stroke-width="1.5" />
+  <path d="M374 472 l6 8 l6 -8" fill="none" stroke="#191713" stroke-width="1.5"
+    stroke-linejoin="round" />
 
-  <rect x="150" y="486" width="460" height="134" rx="10" fill="#ffffff" stroke="#191713" stroke-width="1.5"/>
-  <rect x="150" y="486" width="6" height="134" rx="3" fill="#9e2b25"/>
+  <rect x="150" y="486" width="460" height="134" rx="10" fill="#ffffff" stroke="#191713"
+    stroke-width="1.5" />
+  <rect x="150" y="486" width="6" height="134" rx="3" fill="#9e2b25" />
   <text x="174" y="514" font-size="16" font-weight="700" fill="#191713">Local Trust Root</text>
-  <text x="174" y="534" font-size="13" fill="#5c574e">本地文件，原子写入（先 .tmp，再 rename）</text>
-  <text class="mono" x="174" y="562" font-size="13" fill="#191713">catalog.json · identities.json</text>
-  <text class="mono" x="174" y="584" font-size="13" fill="#191713">sessions.json · approvals.json</text>
+  <text x="174" y="534" font-size="13"
+    fill="#5c574e">本地文件，原子写入（先 .tmp，再 rename）</text>
+  <text class="mono" x="174" y="562" font-size="13"
+    fill="#191713">catalog.json · identities.json</text>
+  <text class="mono" x="174" y="584" font-size="13"
+    fill="#191713">sessions.json · approvals.json</text>
   <text class="mono" x="174" y="606" font-size="13" fill="#191713">gateway-audit.json</text>
 </svg>
