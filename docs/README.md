@@ -1,13 +1,13 @@
 # Portico 官方文档
 
-<p align="center">
+<p class="hero" align="center">
   <img src="assets/banner.svg" alt="Portico - Agent 的治理门户与准入网关" width="760"/>
 </p>
 
-> **一句话看懂 Portico：**  
-> 你的团队写了一堆 Agent 和 MCP 工具，散落在各处不知道谁在管、谁能用、安不安全？  
-> **Portico 就是团队所有 Agent 的“门卫与接待大厅”——登记造册、发工牌、办审批、对外展示。**  
-> *Agent 在你自己那儿跑，Portico 只管把好这道门。*
+> **一句话看懂 Portico：**
+> 你的团队写了一堆 Agent 和 MCP 工具，散落在各处不知道谁在管、谁能用、安不安全？
+> **Portico 就是团队所有 Agent 的“门卫与接待大厅”——登记造册、发工牌、办审批、对外展示。**
+> Agent 在你自己那儿跑，Portico 只管把好这道门。
 
 ---
 
@@ -36,10 +36,18 @@ Portico **不是**执行循环，不跑大模型，也不代调工具。
 PORTICO_DATA_DIR=./data deno task up
 ```
 
-起动成功后，终端会打印出三个本地地址：
+启动成功后，终端会打印出三个本地地址：
 
 ```json
-{"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"}}}
+{
+  "ok": true,
+  "data": {
+    "dataDir": "./data",
+    "portal": { "url": "http://127.0.0.1:8788" },
+    "gateway": { "url": "http://127.0.0.1:8789" },
+    "mcp": { "url": "http://127.0.0.1:8790" }
+  }
+}
 ```
 
 打开浏览器访问 `http://127.0.0.1:8788/public`，立刻就能看到公开发布页！
@@ -48,7 +56,7 @@ PORTICO_DATA_DIR=./data deno task up
 
 ## 接下来看什么
 
-- **想马上动手实践？** 👉 查看 [快速上手指南](intro/quickstart.md)
-- **想搞懂发工牌与登录会话？** 👉 查看 [身份与访问控制](access/README.md)
-- **想知道服务怎么登记、修改与审批？** 👉 查看 [目录与生命周期治理](catalog/README.md)
-- **想查所有 CLI 命令行用法？** 👉 查看 [CLI 命令行完整参考](reference/cli.md)
+- [快速上手指南](intro/quickstart.md) — 本地把系统拉起来
+- [身份与访问控制](access/README.md) — 工牌、会话与角色
+- [目录与生命周期治理](catalog/README.md) — 登记、修改与审批
+- [CLI 命令行完整参考](reference/cli.md) — 命令与机读输出

@@ -1,0 +1,244 @@
+/* Portico docs theme.
+   Loaded after the mdBook theme. System fonts only; no remote assets.
+   Aimed at Chinese reading: a steady measure, tighter headings, wrapping
+   code, and a sidebar that stays visually quieter than the page. */
+
+:root {
+  --content-max-width: 44rem;
+  --sidebar-width: 22.5rem;
+}
+
+html {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+}
+
+.content {
+  line-height: 1.75;
+  font-size: 16.5px;
+}
+
+.content main {
+  overflow-wrap: break-word;
+}
+
+.content h1 {
+  margin-top: 0.2em;
+  margin-bottom: 0.45em;
+  line-height: 1.25;
+  font-size: 1.85em;
+}
+
+.content h2 {
+  margin-top: 1.35em;
+  margin-bottom: 0.4em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--table-border-color);
+  line-height: 1.35;
+  font-size: 1.35em;
+}
+
+.content h3 {
+  margin-top: 1.15em;
+  margin-bottom: 0.35em;
+  line-height: 1.4;
+  font-size: 1.12em;
+}
+
+.content h2 + h3 {
+  margin-top: 0.85em;
+}
+
+.content p,
+.content ul,
+.content ol {
+  margin-top: 0.45em;
+  margin-bottom: 0.45em;
+}
+
+.content li + li {
+  margin-top: 0.2em;
+}
+
+.content li {
+  text-wrap: pretty;
+}
+
+/* Lead callout on the homepage, and admonitions generally. */
+.content blockquote {
+  margin: 0.65em 0 1em;
+  padding: 0.7em 1em;
+  line-height: 1.65;
+}
+
+.content blockquote p {
+  margin: 0.2em 0;
+}
+
+.content .hero {
+  margin: 0 0 0.65rem;
+}
+
+.content .hero img {
+  margin: 0 auto;
+}
+
+.content img {
+  margin: 0.35rem auto 0.85rem;
+}
+
+/* Long JSON and paths stay inside the column. Wrapping beats a scrollbar
+   for a single logical line; intentional newlines are preserved. */
+.content pre {
+  position: relative;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  padding-top: 2.15em;
+  padding-right: 0.9em;
+  line-height: 1.55;
+}
+
+.content pre code,
+.content pre .hljs,
+.content code.hljs {
+  white-space: pre-wrap;
+}
+
+.content pre > .buttons {
+  top: 0.35rem;
+  right: 0.35rem;
+  opacity: 0;
+}
+
+.content pre:hover > .buttons,
+.content pre:focus-within > .buttons {
+  opacity: 1;
+}
+
+.content :not(pre) > code {
+  overflow-wrap: anywhere;
+}
+
+/* Sidebar is an index, not a second set of page headings. */
+.chapter {
+  font-size: 0.92rem;
+}
+
+.chapter li a {
+  line-height: 1.45;
+  padding-top: 0.28rem;
+  padding-bottom: 0.28rem;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+.chapter > li > a {
+  font-weight: 650;
+}
+
+.chapter li .section {
+  margin-left: 0.15rem;
+}
+
+.chapter li .section a {
+  font-weight: 450;
+  font-size: 0.92em;
+  opacity: 0.9;
+}
+
+.chapter li a.active {
+  font-weight: 650;
+  opacity: 1;
+  border-left: 3px solid var(--links);
+  padding-left: 0.45rem;
+  margin-left: -0.45rem;
+}
+
+/* Structured figures that replace CJK-hostile box drawings. */
+.doc-fig {
+  margin: 0.75rem 0 1.15rem;
+  padding: 0;
+}
+
+.doc-fig figcaption {
+  margin-bottom: 0.55rem;
+  color: var(--fg);
+  font-size: 0.95em;
+  line-height: 1.6;
+}
+
+.doc-board {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.doc-board--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.doc-board--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.doc-card {
+  border: 1px solid var(--table-border-color);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem 0.85rem;
+  min-width: 0;
+}
+
+.doc-card h4 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  line-height: 1.35;
+  border: 0;
+}
+
+.doc-card p,
+.doc-card ul {
+  margin: 0.25rem 0 0;
+}
+
+.doc-card ul {
+  padding-left: 1.1rem;
+}
+
+.doc-card li + li {
+  margin-top: 0.15rem;
+}
+
+.doc-card--focus {
+  border-color: var(--links);
+}
+
+.doc-kicker {
+  margin: 0 0 0.2rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+.doc-join {
+  margin: 0.15rem 0;
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+.doc-steps {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.doc-steps li + li {
+  margin-top: 0.45rem;
+}
+
+@media (max-width: 720px) {
+  .doc-board--2,
+  .doc-board--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -8,23 +8,33 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 - 架构图
 
-```text
-                    ┌─────────────────────────────────────────┐
-  Humans (审计)     │                 Portico                  │
-  Agents (维护)     │                                         │
-                    │  Portal ── Dashboard / 发现 / 门户页     │
-        publish     │  Registry ── 目录、版本、可见性、引用     │
-   CLI / MCP / API ─►  Publisher ── 内部发布 / 公开提交        │
-                    │  Approval ── 跨越公开边界的审批          │
-                    │  Access Control ── 分级权限 + Agent 身份 │
-                    │  UI Components ── 受约束的门户组件       │
-                    │  MCP Gateway ── 鉴权、路由、访问审计     │
-                    │  CLI ── 发布、查询、状态机读输出         │
-                    └─────────────┬───────────────────────────┘
-                                  │ 不运行 Agent
-                                  ▼
-                    外部 Agent 运行时 / MCP Server / CLI 制品
-```
+<figure class="doc-fig">
+<figcaption>维护者经 CLI / MCP / API 提交登记与发布。公开必须经过 Approval。Portico 不运行 Agent。</figcaption>
+<div class="doc-board doc-board--2">
+<article class="doc-card">
+<p class="doc-kicker">进入</p>
+<ul>
+<li>Humans — 审计</li>
+<li>Agents — 维护</li>
+<li>CLI / MCP / API — publish</li>
+</ul>
+</article>
+<article class="doc-card doc-card--focus">
+<p class="doc-kicker">Portico</p>
+<ul>
+<li>Portal — Dashboard / 发现 / 门户页</li>
+<li>Registry — 目录、版本、可见性、引用</li>
+<li>Publisher — 内部发布 / 公开提交</li>
+<li>Approval — 跨越公开边界的审批</li>
+<li>Access Control — 分级权限 + Agent 身份</li>
+<li>UI Components — 受约束的门户组件</li>
+<li>MCP Gateway — 鉴权、路由、访问审计</li>
+<li>CLI — 发布、查询、状态机读输出</li>
+</ul>
+</article>
+</div>
+<p class="doc-join">不运行 Agent → 外部 Agent 运行时 / MCP Server / CLI 制品</p>
+</figure>
 
 数据流：维护者（人或 Agent）提交登记与发布 → Registry 成为唯一事实来源 → 内部立即按权限可见 → 公开进入 Approval → 通过后 Portal / CLI / MCP Gateway 才对外暴露入口。Portico 保存元数据、权限、审批与审计记录，不托管推理循环，不执行 Agent 工具。进程运行时见「运行时边界（L0）」。
 
@@ -83,9 +93,9 @@ Portico 是组织的 Agent **门户与治理层**：Agent 在别处运行，通�
 
 L0 从散文变成会红的检查。`tests/runtime_boundary.ts` + `tests/runtime_boundary_test.ts`（`deno task check:runtime-boundary`，并随 `deno task test` 在 CI 执行）扫描 `git ls-files` 的 tracked 树：不得有 Node/Bun 依赖根与锁文件（`package.json`、`package-lock.json`、`npm-shrinkwrap.json`、`yarn.lock`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`bun.lock`、`bun.lockb`、`bunfig.toml`、`.nvmrc`、`.node-version`），不得有 vendored `node_modules`，CI 不得安装 Node/Bun 或调用其包管理器，`src/` 不得有 `node:` 导入、不得把 `node`/`npm`/`npx`/`bun` 当子进程启动，任务、脚本与 CI 不得出现 `--allow-all`/`-A`/裸 `--allow-net`/裸 `--allow-ffi`。真实违规已验证会红：tracked `package.json` 报 `node-manifest`，CI 加 `actions/setup-node@v5` 报 `node-toolchain-in-ci`。刻意不判失败的三类：`npm:` 适配导入、裸 `--allow-read`/`--allow-write`/`--allow-env`/`--allow-run`（部署合同负责收窄），以及门户页渲染给读者的第三方包运行命令（Portico 不执行、不授权）。失败输出只给 `文件:行:规则:命中内容`；tracked 树读不出来时 fail closed。
 
-- 一键起动与可分发产物
+- 一键启动与可分发产物
 
-`src/up/main.ts`（`deno task up`）用一条 `PORTICO_DATA_DIR` 起动整套系统：Portal、Gateway、MCP 与独立 Review 是**四个子进程**，各自带自己的权限集（Portal 与 MCP 仍无 `--allow-write`，Review 只能写 catalog 与 sessions 的原子文件），任一退出则其余一起收走，不留半死系统；stdout 为一行机读 JSON，给出 `portal` / `gateway` / `mcp` / `review` 四个入口 URL。`src/build/main.ts`（`deno task build`）用 `deno compile` 产出 `dist/` 下五个产物（`portico` / `portico-portal` / `portico-gateway` / `portico-mcp` / `portico-review`），各自内嵌权限集，启动不依赖 `node`。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份，不会各写一套。内网测试部署的三份 `deploy/run-*.sh` 与三份 `deploy/portico-*.service` 版本化：systemd 必须 ExecStart 仓库脚本，仓库默认绑定 `127.0.0.1:8788/8789/8790`，真实 RFC1918 地址只在安装现场注入，不得指向未审查的额外副本；macOS LaunchDaemon 模板另见 `deploy/macos/`。这是测试环境，不是生产上线。
+`src/up/main.ts`（`deno task up`）用一条 `PORTICO_DATA_DIR` 启动整套系统：Portal、Gateway、MCP 与独立 Review 是**四个子进程**，各自带自己的权限集（Portal 与 MCP 仍无 `--allow-write`，Review 只能写 catalog 与 sessions 的原子文件），任一退出则其余一起收走，不留半死系统；stdout 为一行机读 JSON，给出 `portal` / `gateway` / `mcp` / `review` 四个入口 URL。`src/build/main.ts`（`deno task build`）用 `deno compile` 产出 `dist/` 下五个产物（`portico` / `portico-portal` / `portico-gateway` / `portico-mcp` / `portico-review`），各自内嵌权限集，启动不依赖 `node`。权限集集中声明在 `src/perms.ts`，`up`、`build` 与进程测试读同一份，不会各写一套。内网测试部署的三份 `deploy/run-*.sh` 与三份 `deploy/portico-*.service` 版本化：systemd 必须 ExecStart 仓库脚本，仓库默认绑定 `127.0.0.1:8788/8789/8790`，真实 RFC1918 地址只在安装现场注入，不得指向未审查的额外副本；macOS LaunchDaemon 模板另见 `deploy/macos/`。这是测试环境，不是生产上线。
 
 - 独立人类审核服务
 
@@ -370,7 +380,7 @@ Registry 内部登记、Publisher 草稿/内部发布/公开候选、Approval �
 
 缺口的最低期望：每行至少先有一条跨入口的 Happy Path（发布或发现能在 CLI 与 Portal 对上）；所有高风险行必须再有失败路径（未审批公开、越权、自批）；权限行必须打两种身份；写操作必须证明失败后公开面与目录不被脏写。
 
-三个入口各有**进程级**启动烟测（`tests/e2e/entrypoint_boot_e2e_test.ts`）：spawn 真实的 `src/portal/main.ts` / `src/gateway/main.ts` / `src/cli/main.ts`，读它播报的那行 JSON，再打一次请求。`up` 整机起动另有系统级 E2E（`tests/e2e/system_up_e2e_test.ts`）：空数据目录 → `up` → 治理动作 → 重启 → 断言状态仍在，并断言停下后端口真的关闭。这两条覆盖的是**产物进程本身**，不是直接 import 的 `listen*` 函数——`src/gateway/main.ts` 曾经在 275 个测试全绿的情况下完全无法启动，原因就是当时没有任何用例执行过它。
+三个入口各有**进程级**启动烟测（`tests/e2e/entrypoint_boot_e2e_test.ts`）：spawn 真实的 `src/portal/main.ts` / `src/gateway/main.ts` / `src/cli/main.ts`，读它播报的那行 JSON，再打一次请求。`up` 整机启动另有系统级 E2E（`tests/e2e/system_up_e2e_test.ts`）：空数据目录 → `up` → 治理动作 → 重启 → 断言状态仍在，并断言停下后端口真的关闭。这两条覆盖的是**产物进程本身**，不是直接 import 的 `listen*` 函数——`src/gateway/main.ts` 曾经在 275 个测试全绿的情况下完全无法启动，原因就是当时没有任何用例执行过它。
 
 `deploy/verify.sh` 接着管**已经在跑的那一套**：部署之后先只读地回答「验证的是哪个地址」（`PORTICO_DEPLOY_BIND` 声明，未声明时取监听表里唯一的那个地址；同一端口有两个监听地址就 FAIL 而不猜，绑在所有接口上的入口同样 FAIL），再打三个入口，按名字断言发现页 `/public`（不是同 `<title>` 的错误壳）、`/` 的 302 转发、`/internal` 的 404、目录信封、Portal 写方法 405、Gateway 不执行工具与审计 403、MCP `initialize`，最后读回每个入口启动时记录的修订（`running-revision`：`run-*.sh` 把 `-e PORTICO_REVISION=<自己检出的 HEAD>` 交给入口，门禁从运行进程的启动环境里取回这一个变量，只取这一个——同一份输出里还有部署导出的其它环境值，环境文件里有凭证，回显就把只读检查变成日志泄漏）、比较每个监听进程的启动时间与它服务的树、以及 `PORTICO_EXPECT_SHA`——进程也按地址匹配，免得多出来的那个监听者替真正的入口回答。启动记录是这里唯一直接等于「重启」的证据：值在 `exec` 时就固定，恢复、`touch` 或时钟都挪不动它，而没被替换的旧进程会如实报出旧修订。修订这条是**必须点名**的：只证明行为，而行为恰好是那个从没被替换的进程照样给出的回答，所以没钉修订就报 `FAIL`（要显式接受才会降级成 `skip`）。之所以要单独一条：`systemctl restart` 的 sudo 被拒时命令非零退出，而旧容器仍在同一批端口上照常服务，于是「端口有回答」看起来和「新修订在服务」一样——上一轮部署就是这么绕过验证的；地址这条同理：内网入口绑在单播地址上，门禁若拿回环默认值去探，会把一份健康的部署报成十条「got HTTP 000」，让人分不清是部署坏了还是门禁问错了地址。macOS 侧的同名门禁在 `deploy/macos/verify.sh`。
 

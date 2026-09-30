@@ -97,8 +97,8 @@ URL 短名同样被接受：`internal`、`internal-dark`、`editorial`、`editor
 
 ## 3. 间距、字体与密度
 
-- 基础字号 15px，行高 1.6；正文行长上限 `--tk-read`（42rem）。
-- 页面栅格上限 `--tk-shell`（1440px）。
+- 基础字号 16px，行高 1.65；正文行长上限 `--tk-read`（42rem）。公开页标题下的导语（`.pub-band__lede`）使用同一行长，避免导语被收成一条窄栏。
+- 页面栅格上限 `--tk-shell`（1440px）。双栏版式（头条 + 右栏、主栏 + 右栏）仍在桌面宽度保持两列。
 - 字体栈**只用系统字体**：CSP 不允许引用远程字体，也不嵌入 base64 字体。
   - 正文 / 界面：`ui-sans-serif` + PingFang SC / Noto Sans CJK SC 回退
   - 公开展示字体：`Iowan Old Style` / Palatino / Georgia + Songti SC / Noto Serif CJK SC 回退

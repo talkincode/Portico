@@ -15,21 +15,14 @@ Portico 的 **MCP Gateway** 运行在 `8789` 端口，它充当 MCP 服务访问
 
 ## 鉴权与路由工作流
 
-```text
-[ 客户端 Agent ]                                     [ MCP Gateway :8789 ]                [ 外部 MCP Server ]
-       │                                                       │                                    │
-       │ 1. POST /gateway/mcp/:id/authorize                    │                                    │
-       │    Header: Authorization: Bearer <session>            │                                    │
-       ├──────────────────────────────────────────────────────►│                                    │
-       │                                                       │ 2. 验证 session 合法性             │
-       │                                                       │ 3. 校验该主体是否有权访问该服务     │
-       │                                                       │ 4. 向 gateway-audit.json 追加流水   │
-       │ 5. 返回直连路由:                                       │                                    │
-       │    { ok: true, data: { endpoint: "https://..." } }    │                                    │
-       │◄──────────────────────────────────────────────────────┤                                    │
-       │                                                                                            │
-       │ 6. 客户端使用获取到的 endpoint 直接发起 MCP 调用 ──────────────────────────────────────────►│
-```
+| 步骤 | 谁 | 做什么 |
+| --- | --- | --- |
+| 1 | 客户端 Agent | `POST /gateway/mcp/:id/authorize`，头为 `Authorization: Bearer <session>` |
+| 2 | Gateway :8789 | 验证 session |
+| 3 | Gateway :8789 | 校验该主体是否有权访问该服务 |
+| 4 | Gateway :8789 | 向 `gateway-audit.json` 追加一条流水 |
+| 5 | Gateway :8789 | 返回直连路由 `{ ok: true, data: { endpoint } }`，不转发流量 |
+| 6 | 客户端 Agent | 用返回的 endpoint 自己调用外部 MCP Server |
 
 ---
 

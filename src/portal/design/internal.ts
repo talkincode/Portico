@@ -309,7 +309,7 @@ export const INTERNAL_CSS = `
   font-family: var(--tk-font-mono);
 }
 .int-pipe__name { font-size: 0.82rem; font-weight: 650; }
-.int-pipe__note { font-size: 0.7rem; color: var(--tk-faint); margin-top: 2px; }
+.int-pipe__note { font-size: 0.8rem; color: var(--tk-muted); margin-top: 2px; }
 
 /* ── catalogue table page ──────────────────────────────────────────────── */
 .int-page { padding: var(--tk-s6) var(--tk-s7) var(--tk-s9); min-width: 0; }

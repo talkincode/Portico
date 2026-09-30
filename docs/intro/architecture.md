@@ -12,33 +12,7 @@ Portico 的系统架构围绕**信任边界划分**与**严格权限隔离**构�
 
 Portico 运行时包含三个相互独立的常驻服务进程，由 Supervisor（`src/up/main.ts`）统一监控。进程间不存在共享内存或可执行代码交叉引用，各自遵循最严苛的操作系统级权限沙箱：
 
-```text
-                               ┌─────────────────────────────┐
-                               │   Supervisor (deno task up) │
-                               └──────────────┬──────────────┘
-                    ┌─────────────────────────┼─────────────────────────┐
-                    │ (fork/pipe)             │ (fork/pipe)             │ (fork/pipe)
-                    ▼                         ▼                         ▼
-      ┌──────────────────────────┐┌──────────────────────────┐┌──────────────────────────┐
-      │      Portal Process      ││     Gateway Process      ││       MCP Process        │
-      │   (HTTP :8788, Read-Only)││   (HTTP :8789, Append)   ││   (HTTP :8790, Read-Only)│
-      │ 权限: --allow-read        ││ 权限: --allow-read       ││ 权限: --allow-read        │
-      │       --allow-env        ││       --allow-write      ││       --allow-env        │
-      │       --allow-net=127... ││       --allow-env        ││       --allow-net=127... │
-      │ 严格无 --allow-write     ││       --allow-net=127... ││ 严格无 --allow-write     │
-      └─────────────┬────────────┘└─────────────┬────────────┘└─────────────┬────────────┘
-                    │                           │                           │
-                    └───────────────────────────┼───────────────────────────┘
-                                                ▼
-                               ┌─────────────────────────────┐
-                               │  Local Trust Root (Files)   │
-                               │  - catalog.json             │
-                               │  - identities.json          │
-                               │  - sessions.json            │
-                               │  - approvals.json           │
-                               │  - gateway-audit.json       │
-                               └─────────────────────────────┘
-```
+![Supervisor 拉起 Portal、Gateway、MCP，三者只通过本地信任根文件协作](../assets/topology.svg)
 
 ### 1. Portal 进程 (`src/portal/main.ts`)
 - **端口**：默认 `8788`。
@@ -61,32 +35,7 @@ Portico 运行时包含三个相互独立的常驻服务进程，由 Supervisor�
 
 Portico 将整个系统严格划分为两个不可妥协的信任区域：
 
-```text
-               [ 组织内部信任区 (Internal) ]              │     [ 外部公网不可信区 (Public) ]
-                                                        │
-┌──────────────┐         ┌──────────────┐               │
-│ Agent 维护者  │ ───►   │ Catalog 内核  │               │
-│ (Maintainer) │ register│ (记录状态为   │               │
-└──────────────┘         │  internal)   │               │
-                         └──────┬───────┘               │
-                                │                       │
-                                │ publish public        │
-                                ▼                       │
-                         ┌──────────────┐               │
-                         │ pending_public│               │
-                         │ (公开候选)    │               │
-                         └──────┬───────┘               │
-                                │                       │
-                     approve    ▼                       │
-               ┌────────────────────────┐               │
-               │ 人类审计者 (Auditor)    │ ──────────────┼──────────────► [ 批准公开 ]
-               │ 签署审批记录至 approvals │   通过审批     │                │
-               └────────────────────────┘               │                ▼
-                                                        │         ┌──────────────┐
-                                                        │         │approved_public│
-                                                        │         │ 全网匿名可达  │
-                                                        │         └──────────────┘
-```
+![维护者在内部提交公开候选，人类审计者批准后才进入公网可达的 approved_public](../assets/trust-boundary.svg)
 
 ### 信任边界 A：内部与公开边界
 - **内部登记（Internal）**：仅对组织内已鉴权身份（具有登录会话的 Reader / Maintainer / Auditor）可见。未通过鉴权的匿名访客完全无法感知内部服务的存在。

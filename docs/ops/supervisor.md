@@ -1,6 +1,6 @@
 # Supervisor 进程管理 (up)
 
-为了让开发者与运维人员在单机部署或本地开发时免除“开三个窗口分别起动三个进程”的繁琐步骤，Portico 提供了内置的监管脚本 `src/up/main.ts`（通过 `deno task up` 触发）。
+为了让开发者与运维人员在单机部署或本地开发时免除“开三个窗口分别启动三个进程”的繁琐步骤，Portico 提供了内置的监管脚本 `src/up/main.ts`（通过 `deno task up` 触发）。
 
 ---
 
@@ -25,9 +25,17 @@
 PORTICO_DATA_DIR=./data deno task up
 ```
 
-起动成功后，标准输出将输出唯一一行标准机读 JSON：
+启动成功后，标准输出将输出唯一一行标准机读 JSON：
 ```json
-{"ok":true,"data":{"dataDir":"./data","portal":{"url":"http://127.0.0.1:8788"},"gateway":{"url":"http://127.0.0.1:8789"},"mcp":{"url":"http://127.0.0.1:8790"}}}
+{
+  "ok": true,
+  "data": {
+    "dataDir": "./data",
+    "portal": { "url": "http://127.0.0.1:8788" },
+    "gateway": { "url": "http://127.0.0.1:8789" },
+    "mcp": { "url": "http://127.0.0.1:8790" }
+  }
+}
 ```
 
 自动化部署脚本或外部进程管理器可直接解析该行 JSON 获取各入口的实际服务地址。

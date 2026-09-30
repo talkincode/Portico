@@ -9,4 +9,4 @@
 - **[什么是 Portico](overview.md)**：深入理解 Portico 解决的问题与“门廊而非机房”的设计定位。
 - **[核心架构与信任边界](architecture.md)**：系统拓扑划分、三大独立进程沙箱与双重信任边界。
 - **[产品铁律与非目标](iron-rules.md)**：开发与运维不可触碰的安全红线。
-- **[快速上手指南](quickstart.md)**：本地一键起动、Bootstrap 初始化与首个服务登记实战。
+- **[快速上手指南](quickstart.md)**：本地一键启动、Bootstrap 初始化与首个服务登记实战。
